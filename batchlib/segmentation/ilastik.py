@@ -22,7 +22,7 @@ class IlastikPrediction(BatchJob):
         self.bin = ilastik_bin
         self.project = ilastik_project
 
-        self.runners = {'local': self.run,
+        self.runners = {'default': self.run,
                         'slurm': self.run_slurm}
 
     def predict_images(self, input_files):

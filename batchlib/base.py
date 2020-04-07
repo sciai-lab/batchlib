@@ -3,6 +3,7 @@ import json
 
 from abc import ABC
 from glob import glob
+from warnings import warn
 
 from .util import open_file
 
@@ -167,7 +168,7 @@ class BatchJob(ABC):
         # we had failed outputs, we also need to rerun those
         # NOTE that check_output might pass, but validate_output not
         if state == 'failed_outputs':
-            failed_outputs = state['failed_outputs']
+            failed_outputs = status['failed_outputs']
             additional_inputs = set(self.to_inputs(failed_outputs, input_folder))
             input_files = list(set(input_files).union(additional_inputs))
 
@@ -196,11 +197,11 @@ class BatchJob(ABC):
         if _run is None:
             raise RuntimeError("%s does not implement a runner for %s" % (self.name, self.target))
 
-        # TODO better exception handling
         try:
             _run(input_files, output_files, **kwargs)
-        except Exception:
-            pass
+        except Exception as e:
+            # TODO not all Exceptions implement message, need to generalize
+            warn("Run failed with: %s" % e.message)
 
         # TODO output validation can be expensive, so we might want to parallelize
         # validate the outputs and update the status
