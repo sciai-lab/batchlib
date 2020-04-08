@@ -13,6 +13,7 @@ from ..util import open_file
 # - implement multi gpu support, would probably need to do IPC through files or
 #    call this script with inputs / outputs in subprocess, it Deadlocked when running
 #    from one process pool
+# - or is there something like torch.data_parallel one could use?
 class StardistPrediction(BatchJobOnContainer):
     """
     """
@@ -37,7 +38,7 @@ class StardistPrediction(BatchJobOnContainer):
                 im = f[self.input_key][self.input_channel]
 
         im = normalize(im, 1, 99.8)
-        labels, _ = model.predict_instances(im)
+        labels, _ = model.predict_instances(im).astype('uint32')
         with open_file(out_path, 'a') as f:
             ds = f.require_dataset(self.output_key, shape=labels.shape, compression='gzip',
                                    dtype=labels.dtype)

@@ -59,7 +59,6 @@ class SeededSegmentation(BatchJobOnContainer):
         return pmap
 
     def segment_image(self, in_path, out_path, invert_pmap, sigma, erode_mask, dilate_seeds, **kwargs):
-        print(in_path, out_path)
         with open_file(in_path, 'r') as f:
             pmap = f[self.pmap_key][:]
             seeds = f[self.seed_key][:]
