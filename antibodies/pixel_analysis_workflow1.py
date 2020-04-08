@@ -1,26 +1,39 @@
-#! /bin/usr/python
-# TODO proper shebang
+#! /home/covid19/software/miniconda3/envs/antibodies/bin/python
 
 import argparse
 import os
 from batchlib import run_workflow
 from batchlib.preprocessing import Preprocess
+from batchlib.segmentation import IlastikPrediction
 
 
-def run_pixel_analysis(input_folder, n_jobs, reorder):
+def run_pixel_analysis(input_folder, folder, n_jobs, reorder):
 
     input_folder = os.path.abspath(input_folder)
     folder = input_folder.replace('covid-data-vibor', 'data-processed')
 
-    job_dict = {Preprocess: {'run': {'reorder': reorder, 'n_jobs': n_jobs}}}
+    ilastik_bin = '/home/covid19/software/ilastik-1.4.0b1-Linux/run_ilastik.sh'
+    ilastik_project = '/home/covid19/antibodies-nuclei/ilastik/local_infection.ilp'
 
-    run_workflow(name, folder, job_dict, input_folder=in_folder)
+    n_threads_il = 8 if n_jobs == 1 else 4
+
+    # TODO add analysis job
+    job_dict = {
+        Preprocess: {'run': {'reorder': reorder, 'n_jobs': n_jobs}},
+        IlastikPrediction: {'build': {'ilastik_bin': ilastik_bin,
+                                      'ilastik_project': ilastik_project},
+                            'run': {'n_jobs': n_jobs, 'n_threads': n_threads_il}}
+    }
+
+    name = 'PixelAnalysisworkflow'
+    run_workflow(name, folder, job_dict, input_folder=input_folder)
 
 
 if __name__ == '__name__':
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('input_folder', type=str, help='')
-    parser.add_argument('--n_jobs', type=int, help='')
+    parser.add_argument('--folder', type=str, default=None)
+    parser.add_argument('--n_jobs', type=int, help='', default=1)
     parser.add_argument('--reorder', type=int, default=0, help='')
 
     args = parser.parse_args()
