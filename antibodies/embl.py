@@ -14,10 +14,10 @@ def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id):
     if folder is None:
         folder = input_folder.replace('covid-data-vibor', 'data-processed')
 
-    ilastik_bin = '/home/covid19/software/ilastik-1.4.0b1-Linux/run_ilastik.sh'
-    ilastik_project = '/home/covid19/antibodies-nuclei/ilastik/boundaries_and_foreground.ilp'
+    ilastik_bin = '/g/kreshuk/pape/Work/software/src/ilastik/ilastik-1.4.0b1-Linux/run_ilastik.sh'
+    ilastik_project = '/g/kreshuk/pape/Work/covid/antibodies-nuclei/ilastik/boundaries_and_foreground.ilp'
 
-    model_root = '/home/covid19/antibodies-nuclei/stardist/models/pretrained'
+    model_root = '/g/kreshuk/pape/Work/covid/antibodies-nuclei/stardist/models/pretrained'
     model_name = '2D_dsb2018'
 
     in_key = 'raw'
@@ -65,4 +65,5 @@ if __name__ == '__main__':
     parser.add_argument('--gpu_id', type=int, default=None)
 
     args = parser.parse_args()
-    run_instance_analysis(args.input_folder, args.folder, args.n_jobs, bool(args.reorder), args.gpu_id)
+    run_instance_analysis(args.input_folder, args.folder, args.n_jobs,
+                          bool(args.reorder), args.gpu_id)

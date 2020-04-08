@@ -59,6 +59,7 @@ class SeededSegmentation(BatchJobOnContainer):
         return pmap
 
     def segment_image(self, in_path, out_path, invert_pmap, sigma, erode_mask, dilate_seeds, **kwargs):
+        print(in_path, out_path)
         with open_file(in_path, 'r') as f:
             pmap = f[self.pmap_key][:]
             seeds = f[self.seed_key][:]
@@ -87,4 +88,4 @@ class SeededSegmentation(BatchJobOnContainer):
         _segment = partial(self.segment_image, invert_pmap=invert_pmap, sigma=sigma,
                            erode_mask=erode_mask, dilate_seeds=dilate_seeds, **kwargs)
         with futures.ThreadPoolExecutor(n_jobs) as tp:
-            tqdm(tp.map(_segment, input_files, output_files), total=len(input_files))
+            list(tqdm(tp.map(_segment, input_files, output_files), total=len(input_files)))

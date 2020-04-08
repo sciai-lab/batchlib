@@ -30,11 +30,11 @@ class Preprocess(BatchJob):
         # for new iteration of the data, we need to reorder the channels
         # and we don't have the garbage channel
         if reorder:
-            assert im.shape[0] == 3
+            assert im.shape[0] == 3, "Expect inputs to have 3 channels, got %i" % im.shape[0]
             im = self._reorder(im)
         else:
             # get rid of garbage channels
-            assert im.shape[0] == 4
+            assert im.shape[0] == 4, "Expect inputs to have 4 channels, got %i" % im.shape[0]
             im = im[:3]
 
         # apply barrel correction
