@@ -3,21 +3,26 @@ import subprocess
 from concurrent import futures
 from tqdm import tqdm
 
-from ..base import BatchJob
+from ..base import BatchJobOnContainer
 from ..util import open_file, files_to_jobs
 
 
 # TODO
 # - ilastik saves files with 'w'. this should be changed to 'a', and then we can write directly
 # - subprocess doesn't seem to lift gil fully, could use ProcessPool, but this gets stuck
-class IlastikPrediction(BatchJob):
+# - make work with both h5 and n5 (zarr?) inputs!
+# - does ilastik support zarr files?
+# - how do I run batch processing with n5/zarr files
+# - consider changing default to n5
+class IlastikPrediction(BatchJobOnContainer):
     """
     """
-
     def __init__(self, ilastik_bin, ilastik_project,
-                 input_key, output_key,
+                 input_key, output_key, input_pattern='*.h5',
                  input_ndim=None, output_ndim=None):
-        super().__init__(input_key, output_key, input_ndim, output_ndim)
+        super().__init__(input_pattern,
+                         input_key=input_key, output_key=output_key,
+                         input_ndim=input_ndim, output_ndim=output_ndim)
 
         self.bin = ilastik_bin
         self.project = ilastik_project

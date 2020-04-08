@@ -9,10 +9,11 @@ from ..base import BatchJob
 from ..util import barrel_correction, open_file
 
 
+# TODO consider changing default to n5
 class Preprocess(BatchJob):
-    def __init__(self):
-        super().__init__(output_key='raw', output_ndim=3,
-                         input_pattern='*.tiff', output_ext='.h5')
+    def __init__(self, output_ext='.h5'):
+        super().__init__(input_pattern='*.tiff', output_ext=output_ext,
+                         output_key='raw', output_ndim=3)
         self.runners = {'default': self.run}
 
     def _reorder(im):

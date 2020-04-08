@@ -1,9 +1,16 @@
 import unittest
+from shutil import rmtree
 
 
 class TestPreprocess(unittest.TestCase):
     in_folder = '../../data/test_inputs'
     folder = './out'
+
+    def tearDown(self):
+        try:
+            rmtree(self.folder)
+        except OSError:
+            pass
 
     def test_preprocess(self):
         from batchlib.preprocessing import Preprocess

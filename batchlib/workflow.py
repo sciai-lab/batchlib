@@ -7,6 +7,7 @@ def _dump_status(status_file, status):
         json.dump(status, f, indent=2)
 
 
+# TODO implement non-streaming mode, that does not start a job again, once it has status 'processed'
 # TODO also accept 'ignore_invalid_inputs' and 'ignore_failed_outputs'
 # keywords once this is implemented
 def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None):

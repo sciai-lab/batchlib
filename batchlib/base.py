@@ -61,10 +61,9 @@ class BatchJob(ABC):
             exp_ndim = [ndim] * len(keys)
         return ndim, exp_ndim
 
-    # TODO consider changing default file format to n5
-    def __init__(self, input_key=None, output_key=None,
+    def __init__(self, input_pattern, output_ext=None,
+                 input_key=None, output_key=None,
                  input_ndim=None, output_ndim=None,
-                 input_pattern='*.h5', output_ext=None,
                  target='default'):
         # the input and output keys (= internal datasets)
         # the _exp_ variables are the normalized versions we need in the checks
@@ -279,3 +278,22 @@ class BatchJob(ABC):
 
     def get_invalid_outputs(self, outputs):
         return [path for path in outputs if not self.validate_output(path)]
+
+
+# TODO this should still be abstract, how do we do this?
+# maybe move the h5/n5 specific functionality from BatchJob here?
+class BatchJobOnContainer(BatchJob):
+    """ Base class for batch jobs operating on single container (= h5/n5/zarr file).
+    """
+    supported_extensions = {'.h5', '.hdf5', '.zarr', '.zr', '.n5'}
+
+    def __init__(self, input_pattern, input_key, output_key,
+                 input_ndim=None, output_ndim=None,
+                 target='default'):
+        ext = os.path.splitext(input_pattern)[1]
+        if ext.lower() not in self.supported_extensions:
+            raise ValueError("Invalid extension %s in input pattern" % ext)
+        super().__init__(input_pattern=input_pattern, output_ext=None,
+                         input_key=input_key, output_key=output_key,
+                         input_ndim=input_ndim, output_ndim=output_ndim,
+                         target=target)
