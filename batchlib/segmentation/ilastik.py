@@ -65,6 +65,7 @@ class IlastikPrediction(BatchJobOnContainer):
         if n_jobs > 1:
 
             job_files = files_to_jobs(n_jobs, input_files)
+
             # TODO would be better to run with a process pool
             # but somehow this gets stuck
             # with futures.ProcessPoolExecutor(n_jobs) as pp:

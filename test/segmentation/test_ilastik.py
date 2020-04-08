@@ -12,7 +12,7 @@ class TestIlastik(unittest.TestCase):
         except OSError:
             pass
 
-    def _run_test(self, n_jobs):
+    def _run_test(self, n_jobs, n_threads=None):
         from batchlib.segmentation import IlastikPrediction
 
         ilastik_bin = '/home/pape/Work/covid/antibodies-nuclei/ilastik/run_ilastik.sh'
@@ -22,14 +22,13 @@ class TestIlastik(unittest.TestCase):
         out_key = 'pred'
 
         job = IlastikPrediction(ilastik_bin, ilastik_project, in_key, out_key)
-        job(self.folder, self.in_folder, n_jobs=n_jobs)
+        job(self.folder, self.in_folder, n_jobs=n_jobs, n_threads=n_threads)
 
     def test_ilastik_single_job(self):
         self._run_test(1)
 
-    @unittest.skip("Broken")
     def test_ilastik_multiple_job(self):
-        self._run_test(4)
+        self._run_test(4, n_threads=1)
 
 
 if __name__ == '__main__':
