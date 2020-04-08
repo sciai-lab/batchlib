@@ -42,8 +42,9 @@ class SeededSegmentation(BatchJobOnContainer):
             bg_id = None
         # process without mask
         else:
+            mask = np.logical_not(mask)
             if erode_mask > 0:
-                mask = erosion(1 - mask, disk(erode_mask))
+                mask = erosion(mask, disk(erode_mask))
             x, y = np.where(mask)
             bg_id = seeds.max() + 1
             seeds[x, y] = bg_id
