@@ -4,9 +4,14 @@ Batch processing for image-analysis on high-throughput screening data; developed
 
 ## Run Analysis Workflows
 
-The analysis for antibody screening are in `antibodies`. To run them on the IALGPU03, give the path to the input folder and pass optional paramers, e.g.:
+The analysis for antibody screening are in `antibodies`. To run them on IALGPU03, give the path to the input folder and pass optional parameters.
+To run the pixel based analysis workflow (set `n_jobs` to control the number of worker threads):
 ```sh
-./pixel_analysis_workflow1.py /path/to/input-folder
+./pixel_analysis_workflow1.py /path/to/input-folder --n_jobs 8
+```
+To run the instance segmentation based analysis workflow:
+```sh
+./instance_analysis_workflow1.py /path/to/input-folder --n_jobs 8
 ```
 
 ## Installation
