@@ -9,7 +9,7 @@ from ..util import open_file, files_to_jobs
 
 # TODO
 # - ilastik saves files with 'w'. this should be changed to 'a', and then we can write directly
-# - subprocess doesn't seem to lift gil fully, could use ProcessPool, but this doesn't work for some reason
+# - subprocess doesn't seem to lift gil fully, could use ProcessPool, but this gets stuck
 class IlastikPrediction(BatchJob):
     """
     """

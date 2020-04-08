@@ -5,7 +5,7 @@ from abc import ABC
 from glob import glob
 from warnings import warn
 
-from .util import open_file
+from .util import open_file, FileLock
 
 
 class BatchJob(ABC):
@@ -30,7 +30,7 @@ class BatchJob(ABC):
     Important: validate_input and check_output should be fast
 
     Status layout:
-    {'state': <'continue', 'invalid_inputs', 'failed_outputs'>,
+    {'state': <'processed', 'errored', 'invalid_inputs', 'failed_outputs'>,
      'invalid_inputs': [],  # list of inputs that are not available or have an issue
      'failed_outputs': []}  # list of outputs that were not computed or have an issue
     """
@@ -95,7 +95,11 @@ class BatchJob(ABC):
             return name_
 
     def status_file(self, folder):
-        return os.path.join(folder, self.name + '.status')
+        return os.path.join(folder, 'batchlib', self.name + '.status')
+
+    def lock(self, folder):
+        lock_path = os.path.join(folder, 'batchlib', self.name + '.lock')
+        return FileLock(lock_path)
 
     def get_status(self, folder):
         stat_file = self.status_file(folder)
@@ -107,7 +111,7 @@ class BatchJob(ABC):
         return status
 
     def update_status(self, folder, status,
-                      invalid_inputs=None, failed_outputs=None, continue_=None):
+                      invalid_inputs=None, failed_outputs=None, processed=None):
         # TODO check that only one of the three last inputs is not None
         path = self.status_file(folder)
 
@@ -119,11 +123,12 @@ class BatchJob(ABC):
             status['state'] = 'failed_outputs'
             status['failed_outputs'] = failed_outputs
 
-        if continue_ is not None:
-            status['state'] = 'continue'
+        if processed is not None:
+            status['state'] = 'processed'
 
         with open(path, 'w') as f:
             json.dump(status, f, indent=2, sort_keys=True)
+        return status
 
     def to_inputs(self, outputs, input_folder):
         names = [os.path.splitext(os.path.split(out)[1])[0] for out in outputs]
@@ -136,7 +141,7 @@ class BatchJob(ABC):
         return outputs
 
     def get_inputs(self, folder, input_folder, status, force_recompute):
-        state = status.get('state', 'continue')
+        state = status.get('state', 'processed')
 
         in_pattern = os.path.join(input_folder, self.input_pattern)
         input_files = glob(in_pattern)
@@ -146,7 +151,8 @@ class BatchJob(ABC):
         if len(invalid_inputs) > 0:
             if state == 'invalid_inputs':
                 prev_invalid = len(status['invalid_inputs'])
-                msg = "%i inputs are invalid from %i in previous call" % (len(invalid_inputs), prev_invalid)
+                msg = "%i inputs are invalid from %i in previous call" % (len(invalid_inputs),
+                                                                          prev_invalid)
             else:
                 msg = "%i inputs are invalid, fix them and rerun this task" % len(invalid_inputs)
             self.update_status(folder, status, invalid_inputs=invalid_inputs)
@@ -174,51 +180,70 @@ class BatchJob(ABC):
 
         return input_files
 
+    # TODO add the arguments:
+    # - ignore_invalid_inputs (default: False) to run computation with invalid inputs
+    #   present (and skippoing these)
+    # - ignore_failed_outputs (default: False) to continue pipeline with failed outputs
     def __call__(self, folder, input_folder=None, force_recompute=False, **kwargs):
-        os.makedirs(folder, exist_ok=True)
-        status = self.get_status(folder)
 
-        # the actual input folder we use
-        input_folder_ = folder if input_folder is None else input_folder
+        # make the work dir, that stores all batchlib status and log files
+        work_dir = os.path.join(folder, 'batchlib')
+        os.makedirs(work_dir, exist_ok=True)
 
-        # validate and get the input files to be processed
-        input_files = self.get_inputs(folder, input_folder_, status, force_recompute)
-        if len(input_files) == 0:
-            return
+        # we lock the execution, so that a job with the same name cannot run on
+        # this folder at the same time. this allows to start multiple workflows
+        # using the same processing step without inteference
+        # (this only works properly for n5/zarr files though, because hdf5 doesn't
+        # like opening the same file multiple times)
+        with self.lock(folder):
+            status = self.get_status(folder)
 
-        output_files = self.to_outputs(input_files, folder)
+            # the actual input folder we use
+            input_folder_ = folder if input_folder is None else input_folder
 
-        # get the function to run the actual job
-        # runners is a dict mapping the computation target (e.g. 'default', 'slurm')
-        # to the correct run  function.
-        # if the target is not available, it defaults to the default run implementation,
-        # but throws a warning
-        _run = self.runners.get(self.target, None)
-        if _run is None:
-            raise RuntimeError("%s does not implement a runner for %s" % (self.name, self.target))
+            # validate and get the input files to be processed
+            input_files = self.get_inputs(folder, input_folder_, status, force_recompute)
+            if len(input_files) == 0:
+                return status.get('state', 'processed')
 
-        try:
-            _run(input_files, output_files, **kwargs)
-        except Exception as e:
-            # TODO not all Exceptions implement message, need to generalize
-            warn("Run failed with: %s" % e.message)
+            output_files = self.to_outputs(input_files, folder)
 
-        # TODO output validation can be expensive, so we might want to parallelize
-        # validate the outputs and update the status
-        failed_outputs = self.get_invalid_outputs(output_files)
-        if len(failed_outputs) > 0:
-            state = status.get('state', 'continue')
-            if state == 'failed_outputs':
-                prev_failed = len(status['failed_outputs'])
-                msg = "%i outpus have failed from %i in previous call" % (len(failed_outputs), prev_failed)
-            else:
-                msg = "%i outputs have failed" % len(failed_outputs)
-            self.update_status(folder, status, failed_outputs=failed_outputs)
-            raise RuntimeError(msg)
+            # get the function to run the actual job
+            # runners is a dict mapping the computation target (e.g. 'default', 'slurm')
+            # to the correct run  function.
+            # if the target is not available, it defaults to the default run implementation,
+            # but throws a warning
+            _run = self.runners.get(self.target, None)
+            if _run is None:
+                raise RuntimeError("%s does not implement a runner for %s" % (self.name,
+                                                                              self.target))
 
-        # if everything went through, we set the state to 'continue'
-        # which means we accept more data
-        self.update_status(folder, status, continue_=True)
+            # we cactch all exceptions and just issue a warning. if anything really went wrong
+            # we will catch this when validating outputs
+            try:
+                _run(input_files, output_files, **kwargs)
+            except Exception as e:
+                warn("Run failed with: %s" % str(e))
+
+            # TODO output validation can be expensive, so we might want to parallelize
+            # validate the outputs and update the status
+            failed_outputs = self.get_invalid_outputs(output_files)
+            if len(failed_outputs) > 0:
+                state = status.get('state', 'processed')
+                if state == 'failed_outputs':
+                    n_failed = len(failed_outputs)
+                    prev_failed = len(status['failed_outputs'])
+                    msg = "%i outpus have failed from %i in previous call" % (n_failed,
+                                                                              prev_failed)
+                else:
+                    msg = "%i outputs have failed" % len(failed_outputs)
+
+                self.update_status(folder, status, failed_outputs=failed_outputs)
+                raise RuntimeError(msg)
+
+            # if everything went through, we set the state to 'processed'
+            status = self.update_status(folder, status, processed=True)
+            return status['state']
 
     @staticmethod
     def _check_impl(path, exp_keys, exp_ndims):

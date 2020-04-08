@@ -1,3 +1,5 @@
+import os
+import time
 
 
 # FIXME this does not do the right thing yet
@@ -14,3 +16,24 @@ def files_to_jobs(n_jobs, *file_lists):
         job_file_lists.append(this_job_list)
 
     return job_file_lists
+
+
+class FileLock:
+    def __init__(self, path, timeout=10):
+        self.path = path
+        self.timeout = timeout
+
+    def wait_for_unlock(self):
+        while True:
+            time.sleep(self.timeout)
+            if not os.path.exists(self.path):
+                break
+
+    def __enter__(self):
+        if os.path.exists(self.path):
+            self.wait_for_unlock()
+        with open(self.path, 'w'):
+            pass
+
+    def __exit__(self, type, value, traceback):
+        os.remove(self.path)
