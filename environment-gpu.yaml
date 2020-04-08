@@ -1,0 +1,20 @@
+channels:
+    - pytorch
+    - conda-forge
+    - defaults
+name:
+    antibodies-gpu
+dependencies:
+    - cudatoolkit=10.1
+    - imageio
+    - h5py
+    - napari
+    - pip
+    - pytorch
+    - scikit-image
+    - tensorflow-gpu 1.14
+    - torchvision
+    - tqdm
+    - vigra
+    - pip:
+        - stardist
