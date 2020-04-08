@@ -1,1 +1,2 @@
 from .ilastik import IlastikPrediction
+from .boundary_and_mask_prediction import BoundaryAndMaskPrediction

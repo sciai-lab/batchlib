@@ -40,7 +40,7 @@ class IlastikPrediction(BatchJobOnContainer):
         tmp_path = in_path[:-3] + '-raw_Probabilities.h5'
         tmp_key = 'exported_data'
 
-        # load the back-ground and boundary channels
+        # load and resave the data
         with open_file(tmp_path, 'r') as f:
             ds = f[tmp_key]
             data = ds[:]
