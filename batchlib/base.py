@@ -233,6 +233,7 @@ class BatchJob(ABC):
                 _run(input_files, output_files, **kwargs)
             except Exception as e:
                 warn("Run failed with: %s" % str(e))
+                status['error_mesage'] = str(e)
 
             # TODO output validation can be expensive, so we might want to parallelize
             # validate the outputs and update the status

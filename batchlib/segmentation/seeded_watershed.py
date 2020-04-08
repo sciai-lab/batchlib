@@ -1,0 +1,27 @@
+import numpy as np
+
+# if available use vigra watershed, because it's faster and lifts the gil
+# if not available, fall back to skimage
+try:
+    import vigra
+
+    def watershed(pmap, seeds):
+        return vigra.analysis.watershedsNew(np.require(pmap, requirements='float32'),
+                                            seeds=np.require(seeds, requirements='uint32'))[0]
+
+except ImportError:
+    from skimage.segmentation import watershed
+
+from .seeded_segmentation import SeededSegmentation
+
+
+class SeededWatershed(SeededSegmentation):
+    """
+    """
+    def __init__(self, pmap_key, seed_key, output_key,
+                 mask_key=None, input_pattern='*.h5'):
+        super().__init__(pmap_key, seed_key, output_key,
+                         mask_key=mask_key, input_pattern=input_pattern)
+
+    def segment(self, pmap, seeds):
+        return watershed(pmap, seeds)

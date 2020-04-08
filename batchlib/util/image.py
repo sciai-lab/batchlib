@@ -1,3 +1,11 @@
+import numpy as np
+
+
+def normalize(input_, eps=1e-6):
+    input_ = input_.astype(np.float32)
+    input_ -= input_.min()
+    input_ /= (input_.max() + eps)
+    return input_
 
 
 # maybe improve barrel correction using: https://github.com/marrlab/BaSiC
