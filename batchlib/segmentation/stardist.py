@@ -47,7 +47,7 @@ class StardistPrediction(BatchJobOnContainer):
     def run(self, input_files, output_files, gpu_id):
 
         if gpu_id is None:
-            # need to do this for the conda tensorflow gpu verion
+            # need to do this for the conda tensorflow cpu verion
             os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
         else:
             os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
