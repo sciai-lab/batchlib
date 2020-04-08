@@ -186,7 +186,7 @@ class BatchJob(ABC):
         return input_files
 
     def __call__(self, folder, input_folder=None,
-                 force_recompute=False, ignore_invalid_inputs=False, ignore_failed_inputs=False
+                 force_recompute=False, ignore_invalid_inputs=False, ignore_failed_outputs=False,
                  **kwargs):
 
         # TODO implement this
