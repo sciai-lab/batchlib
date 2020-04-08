@@ -1,4 +1,5 @@
 import os
+from concurrent import futures
 
 from csbdeep.utils import normalize
 from stardist.models import StarDist2D
@@ -8,8 +9,10 @@ from ..base import BatchJobOnContainer
 from ..util import open_file
 
 
-# TODO
-# - implement on gpu
+# TODO (or rather to premature optimize, this is fast enough on single gpu for now!)
+# - implement multi gpu support, would probably need to do IPC through files or
+#    call this script with inputs / outputs in subprocess, it Deadlocked when running
+#    from one process pool
 class StardistPrediction(BatchJobOnContainer):
     """
     """
@@ -40,20 +43,14 @@ class StardistPrediction(BatchJobOnContainer):
                                    dtype=labels.dtype)
             ds[:] = labels
 
-    def _run_gpu(self, input_files, output_files, gpu_ids):
-        raise NotImplementedError
+    def run(self, input_files, output_files, gpu_id):
 
-    def _run_cpu(self, input_files, output_files):
-        # need to do this for the conda tensorflow version
-        os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+        if gpu_id is None:
+            # need to do this for the conda tensorflow gpu verion
+            os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+        else:
+            os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
+
         model = StarDist2D(None, name=self.model_name, basedir=self.model_root)
         for in_path, out_path in tqdm(zip(input_files, output_files), total=len(input_files)):
             self.segment_image(in_path, out_path, model)
-
-    def run(self, input_files, output_files, gpu_ids=None):
-        # gpu-ids is None -> run on the cpu
-        if gpu_ids is None:
-            self._run_cpu(input_files, output_files)
-        # otherwise, run on gpu
-        else:
-            self._run_gpu(input_files, output_files, gpu_ids)

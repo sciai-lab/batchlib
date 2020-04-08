@@ -16,6 +16,8 @@ To run the instance segmentation based analysis workflow:
 
 ## Installation
 
+Note: stardist does not work with newer GCC versions (GCC 9 fails, GCC 7 works)
+
 ## Usage & Development
 
 `batchlib` operates on a single folder containing the data to process in this batch.
