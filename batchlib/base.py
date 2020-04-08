@@ -14,6 +14,12 @@ class BatchJob(ABC):
     Batch jobs process all files in an input directory. A batch job can be
     called repeatedly on the same directory and will only process the files for which
     output has not been computed yet.
+    Advanced execution modes (enabled by passing the corresponding flags to __call__)
+    - force_recompute - recompute all outputs, even if they are present already
+    - ignore_invalid_inputs - run computation for the valid inputs if there are invalid ones
+                              (in default mode the job will raise a RuntimeError in this case)
+    - ignore_failed_outputs - continue running even if some outputs were not computed properly
+                              (in default mode the job will raise a RuntimeError in this case)
 
     Deriving classes must have the member `runners` dict[str, function].
     This dictionary maps computation target (e.g. local execution, slurm cluster) to
@@ -179,11 +185,15 @@ class BatchJob(ABC):
 
         return input_files
 
-    # TODO add the arguments:
-    # - ignore_invalid_inputs (default: False) to run computation with invalid inputs
-    #   present (and skippoing these)
-    # - ignore_failed_outputs (default: False) to continue pipeline with failed outputs
-    def __call__(self, folder, input_folder=None, force_recompute=False, **kwargs):
+    def __call__(self, folder, input_folder=None,
+                 force_recompute=False, ignore_invalid_inputs=False, ignore_failed_inputs=False
+                 **kwargs):
+
+        # TODO implement this
+        if ignore_invalid_inputs:
+            raise NotImplementedError
+        if ignore_failed_outputs:
+            raise NotImplementedError
 
         # make the work dir, that stores all batchlib status and log files
         work_dir = os.path.join(folder, 'batchlib')
