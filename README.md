@@ -18,7 +18,9 @@ Its workflows consist of indvidual jobs that apply an operation to files matchin
 In the default execution mode, jobs can be rerun on a folder once more data has been added and will only
 apply the operation to files that were not processed yet.
 
-TODO advanced stuff: multiple workflow sharing job on same folder (locking, but needs n5)
+TODO advanced stuff:
+- multiple workflow sharing job on same folder (locking, but needs n5)
+- different execution modes
 
 ### Implementing a batch job
 
