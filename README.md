@@ -26,8 +26,9 @@ TODO advanced stuff:
 
 - Inherit from `batchlib.BatchJob` or batchlib.BatchJobOnContainer`
 - Initialize member `self.runners = {"default": self.run}`
-- Implement `self.run` with function signature ...
+- Implement `self.run` with function signature `run(self, input_files, output_files, **kwargs)`
 - Constraints:
     - Output should be a single file, if you need multiple files make a sub-directory and store them in there
     - For image data, intermediate formats are either `h5` or `n5`. If you want to run multiple 
     - Use `batchlib.io.open_file` in your job instead of `h5py.File` to support both `h5` and `n5`
+    - Jobs should always be runnable with cpu only and should default to running on the cpu. gpu support should be activated via kwarg in run method.
