@@ -42,9 +42,13 @@ class TorchPrediction(BatchJobOnContainer):
                     im = f[self.input_key][self.input_channel]
 
                 assert im.ndim == 2
+                # TODO this should not be hard-coded to the model class, but passed as an extra parameter.
+                # for now, we only run UNet2D anyways, so it doesn't matter
+                squeeze_z = False
                 if isinstance(model, UNet2D):
                     # add batch, channel and Z axes required fo UNet2d
                     im = im[None, None, None]
+                    squeeze_z = True
                 else:
                     # add batch and channel axis
                     im = im[None, None]
@@ -57,6 +61,8 @@ class TorchPrediction(BatchJobOnContainer):
         inputs = torch.from_numpy(inputs).float().to(device)
         prediction = model(inputs)
         prediction = prediction.cpu().numpy()
+        if squeeze_z:
+            prediction = prediction.squeeze(2)
 
         for out_path, pred in zip(out_batch, prediction):
             assert pred.shape[0] == len(self._output_exp_key)
@@ -81,7 +87,7 @@ class TorchPrediction(BatchJobOnContainer):
 
         with torch.no_grad():
             if gpu_id is not None:
-                os.environ['CUDA_VISIBLE_DEVICES'] = gpu_id
+                os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
                 device = torch.device(0)
             else:
                 device = torch.device('cpu')
