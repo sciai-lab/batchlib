@@ -7,8 +7,7 @@ from tqdm import tqdm
 
 from batchlib.base import BatchJobOnContainer
 from batchlib.segmentation.unet import UNet2D
-from batchlib.util import open_file, files_to_jobs
-from batchlib.util.image import standardize as default_normalize
+from batchlib.util import open_file, files_to_jobs, write_viewer_attributes, standardize
 
 
 # TODO
@@ -32,7 +31,8 @@ class TorchPrediction(BatchJobOnContainer):
         self.model_kwargs = model_kwargs
         self.runners = {'default': self.run}
 
-    def predict_images(self, in_batch, out_batch, model, default_normalize, device):
+    def predict_images(self, in_batch, out_batch, model,
+                       default_normalize, device, threshold_channels):
         inputs = []
         for in_path in in_batch:
             with open_file(in_path, 'r') as f:
@@ -67,10 +67,14 @@ class TorchPrediction(BatchJobOnContainer):
         for out_path, pred in zip(out_batch, prediction):
             assert pred.shape[0] == len(self._output_exp_key)
             with open_file(out_path, 'a') as f:
-                for key, channel in zip(self._output_exp_key, pred):
+                for channel_id, (key, channel) in enumerate(zip(self._output_exp_key, pred)):
+                    threshold = threshold_channels.get(channel_id, None)
+                    if threshold is not None:
+                        channel = (channel > threshold).astype('uint8')
                     ds = f.require_dataset(key, shape=channel.shape, compression='gzip',
                                            dtype=channel.dtype)
                     ds[:] = channel
+                    write_viewer_attributes(ds, channel, 'Gray')
 
     # load from pickled model or from state dict
     def load_model(self, device):
@@ -83,7 +87,9 @@ class TorchPrediction(BatchJobOnContainer):
         model.eval()
         return model
 
-    def run(self, input_files, output_files, gpu_id=None, batch_size=1, normalize=default_normalize):
+    # threshold channels is a dict mapping channel ids that should be thresholded to the threshold value
+    def run(self, input_files, output_files, gpu_id=None, batch_size=1,
+            normalize=standardize, threshold_channels={}):
 
         with torch.no_grad():
             if gpu_id is not None:
@@ -99,4 +105,4 @@ class TorchPrediction(BatchJobOnContainer):
             output_batches = files_to_jobs(n_batches, output_files)
 
             for in_batch, out_batch in tqdm(zip(input_batches, output_batches), total=len(input_batches)):
-                self.predict_images(in_batch, out_batch, model, normalize, device)
+                self.predict_images(in_batch, out_batch, model, normalize, device, threshold_channels)

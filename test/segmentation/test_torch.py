@@ -7,13 +7,13 @@ class TestStardist(unittest.TestCase):
     in_folder = '../../data/test_preprocessed'
     folder = './out'
 
-    def _tearDown(self):
+    def tearDown(self):
         try:
             rmtree(self.folder)
         except OSError:
             pass
 
-    def test_stardist_prediction(self):
+    def _test_prediction(self, gpu_id, batch_size, threshold_channels={}):
         from batchlib.segmentation.torch_prediction import TorchPrediction
         from batchlib.segmentation.unet import UNet2D
 
@@ -32,7 +32,17 @@ class TestStardist(unittest.TestCase):
 
         job = TorchPrediction(in_key, out_key, model_path, model_class, model_kwargs,
                               input_channel=2)
-        job(self.folder, self.in_folder, gpu_id=0, batch_size=4)
+        job(self.folder, self.in_folder, gpu_id=gpu_id, batch_size=batch_size,
+            threshold_channels={})
+
+    def test_gpu(self):
+        self._test_prediction(0, batch_size=4)
+
+    def test_cpu(self):
+        self._test_prediction(None, batch_size=1)
+
+    def test_threshold(self):
+        self._test_prediction(0, batch_size=4, threshold_channels={0: .5})
 
 
 if __name__ == '__main__':
