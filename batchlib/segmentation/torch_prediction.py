@@ -71,7 +71,7 @@ class TorchPrediction(BatchJobOnContainer):
             model = torch.load(self.model_path, map_location=device)
         else:
             model = self.model_class(**self.model_kwargs)
-            state = torch.load(self.model_path, map_location='cpu')
+            state = torch.load(self.model_path, map_location=device)
             model.load_state_dict(state)
         model.eval()
         return model
