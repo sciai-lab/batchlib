@@ -199,7 +199,7 @@ class BatchJob(ABC):
         _run(input_files, output_files, **kwargs)
 
     # run in environment
-    def run_in_env(self, input_files, output_files, executable, **kwargs):
+    def _run_in_env(self, input_files, output_files, executable, **kwargs):
         print("Run in subprocess with executable", executable)
         build_kwargs = json.dumps(self.build_kwargs)
 
