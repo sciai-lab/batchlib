@@ -1,4 +1,6 @@
+import errno
 import os
+import sys
 import time
 
 
@@ -36,7 +38,8 @@ class FileLock(object):
     def locked(self):
         """
         Returns True iff the file is owned by THIS FileLock instance.
-        (Even if this returns false, the file could be owned by another FileLock instance, possibly in a different thread or process).
+        (Even if this returns false, the file could be owned by another FileLock instance,
+         possibly in a different thread or process).
         """
         return self.is_locked
 
