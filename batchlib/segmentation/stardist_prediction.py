@@ -3,12 +3,10 @@ import json
 import subprocess
 import sys
 
-from csbdeep.utils import normalize
-from stardist.models import StarDist2D
 from tqdm import tqdm
 
 from batchlib.base import BatchJobOnContainer
-from batchlib.util import open_file, write_viewer_attributes
+from batchlib.util import open_file, write_viewer_attributes, normalize_percentile
 
 
 # TODO (or rather to premature optimize, this is fast enough on single gpu for now!)
@@ -39,7 +37,7 @@ class StardistPrediction(BatchJobOnContainer):
             else:
                 im = f[self.input_key][self.input_channel]
 
-        im = normalize(im, 1, 99.8)
+        im = normalize_percentile(im, 1, 99.8)
         labels, _ = model.predict_instances(im)
         labels = labels.astype('uint32')
         with open_file(out_path, 'a') as f:
@@ -62,6 +60,7 @@ class StardistPrediction(BatchJobOnContainer):
 
             cmd = [pybin, __file__, build_kwargs, run_kwargs]
             subprocess.run(cmd)
+            return
 
         if gpu_id is None:
             # need to do this for the conda tensorflow cpu version
@@ -69,6 +68,8 @@ class StardistPrediction(BatchJobOnContainer):
         else:
             os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
 
+        # we only import this when necessary, it pulls in tf with all it's ugliness ...
+        from stardist.models import StarDist2D
         model = StarDist2D(None, name=self.model_name, basedir=self.model_root)
         for in_path, out_path in tqdm(zip(input_files, output_files), total=len(input_files)):
             self.segment_image(in_path, out_path, model)
