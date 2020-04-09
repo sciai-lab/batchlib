@@ -1,9 +1,9 @@
 import os
 import json
+import subprocess
 
 from abc import ABC
 from glob import glob
-from warnings import warn
 
 from .util import open_file, FileLock
 
@@ -185,9 +185,33 @@ class BatchJob(ABC):
 
         return input_files
 
-    def __call__(self, folder, input_folder=None,
-                 force_recompute=False, ignore_invalid_inputs=False, ignore_failed_outputs=False,
-                 **kwargs):
+    def _run_in_main(self, input_files, output_files, **kwargs):
+        # get the function to run the actual job
+        # runners is a dict mapping the computation target (e.g. 'default', 'slurm')
+        # to the correct run  function.
+        # if the target is not available, it defaults to the default run implementation,
+        # but throws a warning
+        _run = self.runners.get(self.target, None)
+        if _run is None:
+            raise RuntimeError("%s does not implement a runner for %s" % (self.name,
+                                                                          self.target))
+
+        _run(input_files, output_files, **kwargs)
+
+    # run in environment
+    def run_in_env(self, input_files, output_files, executable, **kwargs):
+        print("Run in subprocess with executable", executable)
+        build_kwargs = json.dumps(self.build_kwargs)
+
+        run_kwargs = {'input_files': input_files, 'output_files': output_files, **kwargs}
+        run_kwargs = json.dumps(run_kwargs)
+
+        cmd = [executable, self.script, build_kwargs, run_kwargs, self.target]
+        subprocess.run(cmd)
+
+    def __call__(self, folder, input_folder=None, force_recompute=False,
+                 ignore_invalid_inputs=False, ignore_failed_outputs=False,
+                 executable=None, **kwargs):
 
         # TODO implement this
         if ignore_invalid_inputs:
@@ -216,26 +240,10 @@ class BatchJob(ABC):
                 return status.get('state', 'processed')
 
             output_files = self.to_outputs(input_files, folder)
-
-            # get the function to run the actual job
-            # runners is a dict mapping the computation target (e.g. 'default', 'slurm')
-            # to the correct run  function.
-            # if the target is not available, it defaults to the default run implementation,
-            # but throws a warning
-            _run = self.runners.get(self.target, None)
-            if _run is None:
-                raise RuntimeError("%s does not implement a runner for %s" % (self.name,
-                                                                              self.target))
-
-            _run(input_files, output_files, **kwargs)
-            # NOTE this was a nice idea, but it makes debugging super annoying, so not doing
-            # we cactch all exceptions and just issue a warning. if anything really went wrong
-            # we will catch this when validating outputs
-            # try:
-            #     _run(input_files, output_files, **kwargs)
-            # except Exception as e:
-            #     warn("Run failed with: %s" % str(e))
-            #     status['error_mesage'] = str(e)
+            if executable is None:
+                self._run_in_main(input_files, output_files, **kwargs)
+            else:
+                self._run_in_env(input_files, output_files, executable, **kwargs)
 
             # TODO output validation can be expensive, so we might want to parallelize
             # validate the outputs and update the status

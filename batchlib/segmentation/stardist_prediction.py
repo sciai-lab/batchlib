@@ -1,6 +1,5 @@
 import os
 import json
-import subprocess
 import sys
 
 from tqdm import tqdm
@@ -17,6 +16,8 @@ from batchlib.util import open_file, write_viewer_attributes, normalize_percenti
 class StardistPrediction(BatchJobOnContainer):
     """
     """
+    script = __file__
+
     def __init__(self, model_root, model_name,
                  input_key, output_key,
                  input_channel=None, input_pattern='*.h5'):
@@ -29,6 +30,10 @@ class StardistPrediction(BatchJobOnContainer):
         self.model_root = model_root
         self.model_name = model_name
         self.runners = {'default': self.run}
+
+        self.build_kwargs = {'model_root': self.model_root, 'model_name': self.model_name,
+                             'input_key': self.input_key, 'output_key': self.output_key,
+                             'input_channel': self.input_channel, 'input_pattern': self.input_pattern}
 
     def segment_image(self, in_path, out_path, model):
         with open_file(in_path, 'r') as f:
@@ -46,21 +51,7 @@ class StardistPrediction(BatchJobOnContainer):
             ds[:] = labels
             write_viewer_attributes(ds, labels, 'Glasbey')
 
-    def run(self, input_files, output_files, gpu_id=None, pybin=None):
-
-        if pybin is not None:
-            print("Run stardist prediction in subprocess with bin", pybin)
-            build_kwargs = {'model_root': self.model_root, 'model_name': self.model_name,
-                            'input_key': self.input_key, 'output_key': self.output_key,
-                            'input_channel': self.input_channel, 'input_pattern': self.input_pattern}
-            build_kwargs = json.dumps(build_kwargs)
-
-            run_kwargs = {'input_files': input_files, 'output_files': output_files, 'gpu_id': gpu_id}
-            run_kwargs = json.dumps(run_kwargs)
-
-            cmd = [pybin, __file__, build_kwargs, run_kwargs]
-            subprocess.run(cmd)
-            return
+    def run(self, input_files, output_files, gpu_id=None):
 
         if gpu_id is None:
             # need to do this for the conda tensorflow cpu version
@@ -77,9 +68,10 @@ class StardistPrediction(BatchJobOnContainer):
 
 if __name__ == '__main__':
     build_kwargs, run_kwargs = sys.argv[1], sys.argv[2]
+    target = sys.argv[3]
 
     build_kwargs = json.loads(build_kwargs)
     run_kwargs = json.loads(run_kwargs)
 
     job = StardistPrediction(**build_kwargs)
-    job.run(**run_kwargs)
+    job.runners[target](**run_kwargs)

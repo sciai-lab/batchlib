@@ -45,7 +45,7 @@ def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id, force_r
         'f_maps': [32, 64, 128, 256, 512],
         'testing': True
     }
-    batch_size = 8
+    batch_size = 6
 
     # TODO add analysis job
     job_dict = {
@@ -67,7 +67,7 @@ def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id, force_r
                                        'output_key': nuc_key,
                                        'input_channel': 0},
                              'run': {'gpu_id': gpu_id,
-                                     'pybin': tf_gpu}},
+                                     'executable': tf_gpu}},
         SeededWatershed: {'build': {'pmap_key': bd_key,
                                     'seed_key': nuc_key,
                                     'output_key': seg_key,
