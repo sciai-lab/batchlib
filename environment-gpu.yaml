@@ -3,7 +3,7 @@ channels:
     - conda-forge
     - defaults
 name:
-    antibodies-gpu-torch
+    antibodies-gpu
 dependencies:
     - cudatoolkit=10.1
     - imageio
@@ -12,9 +12,9 @@ dependencies:
     - pip
     - pytorch
     - scikit-image
-    - tensorflow-gpu 1.14
     - torchvision
     - tqdm
     - vigra
     - pip:
+        - tensorflow==1.15
         - stardist

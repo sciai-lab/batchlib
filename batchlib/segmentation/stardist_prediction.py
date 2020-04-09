@@ -1,7 +1,4 @@
 import os
-import json
-import sys
-
 from tqdm import tqdm
 
 from batchlib.base import BatchJobOnContainer
@@ -30,10 +27,6 @@ class StardistPrediction(BatchJobOnContainer):
         self.model_root = model_root
         self.model_name = model_name
         self.runners = {'default': self.run}
-
-        self.build_kwargs = {'model_root': self.model_root, 'model_name': self.model_name,
-                             'input_key': self.input_key, 'output_key': self.output_key,
-                             'input_channel': self.input_channel, 'input_pattern': self.input_pattern}
 
     def segment_image(self, in_path, out_path, model):
         with open_file(in_path, 'r') as f:
@@ -64,14 +57,3 @@ class StardistPrediction(BatchJobOnContainer):
         model = StarDist2D(None, name=self.model_name, basedir=self.model_root)
         for in_path, out_path in tqdm(zip(input_files, output_files), total=len(input_files)):
             self.segment_image(in_path, out_path, model)
-
-
-if __name__ == '__main__':
-    build_kwargs, run_kwargs = sys.argv[1], sys.argv[2]
-    target = sys.argv[3]
-
-    build_kwargs = json.loads(build_kwargs)
-    run_kwargs = json.loads(run_kwargs)
-
-    job = StardistPrediction(**build_kwargs)
-    job.runners[target](**run_kwargs)

@@ -24,7 +24,6 @@ def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id, force_r
 
     model_root = os.path.join(ROOT, 'stardist/models/pretrained')
     model_name = '2D_dsb2018'
-    tf_gpu = '/home/covid19/software/miniconda3/envs/antibodies-gpu-tf/bin/python'
 
     barrel_corrector_path = os.path.join(ROOT, 'barrel_correction/barrel_corrector.h5')
     with h5py.File(barrel_corrector_path, 'r') as f:
@@ -66,8 +65,7 @@ def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id, force_r
                                        'input_key': in_key,
                                        'output_key': nuc_key,
                                        'input_channel': 0},
-                             'run': {'gpu_id': gpu_id,
-                                     'executable': tf_gpu}},
+                             'run': {'gpu_id': gpu_id}},
         SeededWatershed: {'build': {'pmap_key': bd_key,
                                     'seed_key': nuc_key,
                                     'output_key': seg_key,

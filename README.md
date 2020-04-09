@@ -17,7 +17,6 @@ To run the instance segmentation based analysis workflow:
 ## Installation
 
 Note: stardist does not work with newer GCC versions (GCC 9 fails, GCC 7 works)
-Note: tensorflow with gpu and pytorch with gpu in same env are problematic, so we use two different envs and run tf in a subprocess
 
 ## Usage & Development
 
