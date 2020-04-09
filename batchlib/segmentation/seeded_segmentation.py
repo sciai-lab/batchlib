@@ -80,7 +80,7 @@ class SeededSegmentation(BatchJobOnContainer):
             ds = f.require_dataset(self.output_key, shape=labels.shape, compression='gzip',
                                    dtype=labels.dtype)
             ds[:] = labels
-            write_viewer_attributes(ds, labels, 'segmentation')
+            write_viewer_attributes(ds, labels, 'Glasbey')
 
     def run(self, input_files, output_files, invert_pmap=False, sigma=2.,
             erode_mask=0, dilate_seeds=0, n_jobs=1, **kwargs):

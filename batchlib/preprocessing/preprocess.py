@@ -50,16 +50,18 @@ class Preprocess(BatchJob):
         if barrel_corrector is not None:
             im = barrel_correction(im, barrel_corrector)
 
+        colors = ['Red', 'Green', 'Blue']
         with open_file(out_path, 'a') as f:
             # TODO try to have the raw data as region references to the individual channels
             ds = f.require_dataset('raw', shape=im.shape, dtype=im.dtype,
                                    compression='gzip')
             ds[:] = im
-            for key, chan in zip(self.channel_names, im):
+
+            for key, chan, color in zip(self.channel_names, im, colors):
                 ds = f.require_dataset(key, shape=chan.shape, dtype=chan.dtype,
                                        compression='gzip')
                 ds[:] = chan
-                write_viewer_attributes(ds, chan, 'raw')
+                write_viewer_attributes(ds, chan, color)
 
     def run(self, input_files, output_files,
             reorder=True, barrel_corrector_path=None, barrel_corrector_key='data',

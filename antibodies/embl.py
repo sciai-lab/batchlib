@@ -10,7 +10,7 @@ from batchlib.segmentation import BoundaryAndMaskPrediction, SeededWatershed
 from batchlib.segmentation.stardist import StardistPrediction
 
 
-def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id):
+def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id, force_recompute):
 
     input_folder = os.path.abspath(input_folder)
     if folder is None:
@@ -56,7 +56,7 @@ def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id):
 
     name = 'InstanceAnalysisWorkflow'
     t0 = time.time()
-    run_workflow(name, folder, job_dict, input_folder=input_folder)
+    run_workflow(name, folder, job_dict, input_folder=input_folder, force_recompute=force_recompute)
     t0 = time.time() - t0
 
     print("Some more convenient format ...")
@@ -70,7 +70,8 @@ if __name__ == '__main__':
     parser.add_argument('--n_jobs', type=int, help='', default=1)
     parser.add_argument('--reorder', type=int, default=1, help='')
     parser.add_argument('--gpu_id', type=int, default=None)
+    parser.add_argument('--force_recompute', type=int, default=0)
 
     args = parser.parse_args()
     run_instance_analysis(args.input_folder, args.folder, args.n_jobs,
-                          bool(args.reorder), args.gpu_id)
+                          bool(args.reorder), args.gpu_id, bool(args.force_recompute))

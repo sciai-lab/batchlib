@@ -32,14 +32,16 @@ def open_file(path, mode='r', h5_timeout=5, h5_retry=10):
     raise ValueError("Invalid file extensions %s" % ext)
 
 
-def write_viewer_attributes(ds, image, image_type, visible=True, skip=False):
-    assert image_type in ('raw', 'mask', 'segmentation')
-    if image_type in ('raw', 'mask'):
+def write_viewer_attributes(ds, image, color, alpha=1., visible=True, skip=False):
+    colors = ['Gray', 'Red', 'Green', 'Blue']
+    color_maps = ['Glasbey']
+    all_colors = colors + color_maps
+    assert color in all_colors
+
+    attrs = {'color': color, 'visible': visible, 'skip': skip, 'alpha': alpha}
+
+    if color in colors:
         mi, ma = image.min(), image.max()
-        attrs = {'lutMinMax': [mi, ma], 'visible': visible, 'skip': skip,
-                 'colorMap': 'GrayScale'}
-    elif image_type == 'segmentation':
-        # TODO what is lutMinMax for random colors?
-        attrs = {'lutMinMax': [0., 1000.], 'visible': visible, 'skip': skip,
-                 'colorMap': 'RandomColors'}
+        attrs.update({'lutMinMax': [mi, ma]})
+
     ds.attrs.update(attrs)

@@ -43,7 +43,7 @@ class StardistPrediction(BatchJobOnContainer):
             ds = f.require_dataset(self.output_key, shape=labels.shape, compression='gzip',
                                    dtype=labels.dtype)
             ds[:] = labels
-            write_viewer_attributes(ds, labels, 'segmentation')
+            write_viewer_attributes(ds, labels, 'Glasbey')
 
     def run(self, input_files, output_files, gpu_id):
 
