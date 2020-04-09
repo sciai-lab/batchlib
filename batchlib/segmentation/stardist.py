@@ -1,12 +1,11 @@
 import os
-from concurrent import futures
 
 from csbdeep.utils import normalize
 from stardist.models import StarDist2D
 from tqdm import tqdm
 
 from ..base import BatchJobOnContainer
-from ..util import open_file
+from ..util import open_file, write_viewer_attributes
 
 
 # TODO (or rather to premature optimize, this is fast enough on single gpu for now!)
@@ -38,11 +37,13 @@ class StardistPrediction(BatchJobOnContainer):
                 im = f[self.input_key][self.input_channel]
 
         im = normalize(im, 1, 99.8)
-        labels, _ = model.predict_instances(im).astype('uint32')
+        labels, _ = model.predict_instances(im)
+        labels = labels.astype('uint32')
         with open_file(out_path, 'a') as f:
             ds = f.require_dataset(self.output_key, shape=labels.shape, compression='gzip',
                                    dtype=labels.dtype)
             ds[:] = labels
+            write_viewer_attributes(ds, labels, 'segmentation')
 
     def run(self, input_files, output_files, gpu_id):
 

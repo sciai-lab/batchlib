@@ -30,3 +30,16 @@ def open_file(path, mode='r', h5_timeout=5, h5_retry=10):
         return z5py.File(path, mode=mode)
 
     raise ValueError("Invalid file extensions %s" % ext)
+
+
+def write_viewer_attributes(ds, image, image_type, visible=True, skip=False):
+    assert image_type in ('raw', 'mask', 'segmentation')
+    if image_type in ('raw', 'mask'):
+        mi, ma = image.min(), image.max()
+        attrs = {'lutMinMax': [mi, ma], 'visible': visible, 'skip': skip,
+                 'colorMap': 'GrayScale'}
+    elif image_type == 'segmentation':
+        # TODO what is lutMinMax for random colors?
+        attrs = {'lutMinMax': [0., 1000.], 'visible': visible, 'skip': skip,
+                 'colorMap': 'RandomColors'}
+    ds.attrs.update(attrs)

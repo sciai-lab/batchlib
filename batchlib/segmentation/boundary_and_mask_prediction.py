@@ -2,7 +2,7 @@ import os
 from scipy.ndimage.morphology import binary_opening, binary_closing
 
 from .ilastik import IlastikPrediction
-from ..util import open_file
+from ..util import open_file, write_viewer_attributes
 
 
 # TODO
@@ -49,11 +49,13 @@ class BoundaryAndMaskPrediction(IlastikPrediction):
             ds = f.require_dataset(self.mask_key, shape=fg_mask.shape,
                                    dtype='uint8', compression='gzip')
             ds[:] = fg_mask
+            write_viewer_attributes(ds, fg_mask, 'mask')
 
             # save the boundaries
             ds = f.require_dataset(self.boundary_key, shape=bd.shape, compression='gzip',
                                    dtype='float32')
             ds[:] = bd
+            write_viewer_attributes(ds, fg_mask, 'raw')
 
         # clean up
         os.remove(tmp_path)

@@ -2,6 +2,8 @@
 
 import argparse
 import os
+import time
+
 from batchlib import run_workflow
 from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import BoundaryAndMaskPrediction, SeededWatershed
@@ -53,7 +55,12 @@ def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id):
     }
 
     name = 'InstanceAnalysisWorkflow'
+    t0 = time.time()
     run_workflow(name, folder, job_dict, input_folder=input_folder)
+    t0 = time.time() - t0
+
+    print("Some more convenient format ...")
+    print("Run analysis pipeline in", t0, "s")
 
 
 if __name__ == '__main__':

@@ -7,7 +7,7 @@ from skimage.filters import gaussian
 from skimage.morphology import dilation, erosion, disk
 
 from ..base import BatchJobOnContainer
-from ..util import open_file, normalize
+from ..util import open_file, normalize, write_viewer_attributes
 
 
 # TODO
@@ -80,6 +80,7 @@ class SeededSegmentation(BatchJobOnContainer):
             ds = f.require_dataset(self.output_key, shape=labels.shape, compression='gzip',
                                    dtype=labels.dtype)
             ds[:] = labels
+            write_viewer_attributes(ds, labels, 'segmentation')
 
     def run(self, input_files, output_files, invert_pmap=False, sigma=2.,
             erode_mask=0, dilate_seeds=0, n_jobs=1, **kwargs):
