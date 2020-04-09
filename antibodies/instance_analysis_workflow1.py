@@ -2,6 +2,10 @@
 
 import argparse
 import os
+import time
+
+import h5py
+
 from batchlib import run_workflow
 from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import BoundaryAndMaskPrediction, SeededWatershed
@@ -20,6 +24,10 @@ def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id):
     model_root = '/home/covid19/antibodies-nuclei/stardist/models/pretrained'
     model_name = '2D_dsb2018'
 
+    barrel_corrector_path = '/home/covid19/antibodies-nuclei/barrel_correction/barrel_corrector.h5'
+    with h5py.File(barrel_corrector_path, 'r') as f:
+        barrel_corrector = f['data'][:]
+
     in_key = 'raw'
     bd_key = 'pmap_tritc'
     mask_key = 'mask'
@@ -30,7 +38,9 @@ def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id):
 
     # TODO add analysis job
     job_dict = {
-        Preprocess: {'run': {'reorder': reorder, 'n_jobs': n_jobs}},
+        Preprocess: {'run': {'reorder': reorder,
+                             'n_jobs': n_jobs,
+                             'barrel_corrector': barrel_corrector}},
         BoundaryAndMaskPrediction: {'build': {'ilastik_bin': ilastik_bin,
                                               'ilastik_project': ilastik_project,
                                               'input_key': in_key,
@@ -53,7 +63,10 @@ def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id):
     }
 
     name = 'InstanceAnalysisWorkflow'
+    t0 = time.time()
     run_workflow(name, folder, job_dict, input_folder=input_folder)
+    t0 = time.time() - t0
+    print("Run", name, "in", t0, "s")
 
 
 if __name__ == '__main__':

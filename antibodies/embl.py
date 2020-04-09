@@ -3,6 +3,7 @@
 import argparse
 import os
 import time
+import h5py
 
 from batchlib import run_workflow
 from batchlib.preprocessing import Preprocess
@@ -22,6 +23,10 @@ def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id, force_r
     model_root = '/g/kreshuk/pape/Work/covid/antibodies-nuclei/stardist/models/pretrained'
     model_name = '2D_dsb2018'
 
+    barrel_corrector_path = '/g/kreshuk/pape/Work/covid/antibodies-nuclei/barrel_correction/barrel_corrector.h5'
+    with h5py.File(barrel_corrector_path, 'r') as f:
+        barrel_corrector = f['data'][:]
+
     in_key = 'raw'
     bd_key = 'pmap_tritc'
     mask_key = 'mask'
@@ -32,7 +37,9 @@ def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id, force_r
 
     # TODO add analysis job
     job_dict = {
-        Preprocess: {'run': {'reorder': reorder, 'n_jobs': n_jobs}},
+        Preprocess: {'run': {'reorder': reorder,
+                             'n_jobs': n_jobs,
+                             'barrel_corrector': barrel_corrector}},
         BoundaryAndMaskPrediction: {'build': {'ilastik_bin': ilastik_bin,
                                               'ilastik_project': ilastik_project,
                                               'input_key': in_key,
@@ -58,8 +65,6 @@ def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id, force_r
     t0 = time.time()
     run_workflow(name, folder, job_dict, input_folder=input_folder, force_recompute=force_recompute)
     t0 = time.time() - t0
-
-    print("Some more convenient format ...")
     print("Run analysis pipeline in", t0, "s")
 
 
