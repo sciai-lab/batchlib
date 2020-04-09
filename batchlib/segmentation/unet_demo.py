@@ -3,12 +3,13 @@ from batchlib.segmentation.unet import UNet2D
 from batchlib.util.image import standardize
 
 if __name__ == '__main__':
-    model_path = '/home/adrian/workspace/pytorch-3dunet/pytorch3dunet/covid19-unet/best_checkpoint.pytorch'
+    model_path = '/home/adrian/workspace/antibodies-nuclei/unet_segmentation/sample_models/fg_boundaries_best_checkpoint.pytorch'
     model_class = UNet2D
     model_kwargs = {
         'in_channels': 1,
         'out_channels': 2,
-        'f_maps': [16, 32, 64, 128, 256]
+        'f_maps': [32, 64, 128, 256, 512],
+        'testing': True
     }
     tp = TorchPrediction('raw', ['foreground', 'boundaries'], model_path, model_class, model_kwargs)
 

@@ -71,11 +71,7 @@ class TorchPrediction(BatchJobOnContainer):
             model = torch.load(self.model_path, map_location=device)
         else:
             model = self.model_class(**self.model_kwargs)
-            state = torch.load(self.model_path)
-            # TODO: UNet2D checkpoints contain model state and additional info
-            # I could re-save the checkpoint, so it's model state only
-            if 'model_state_dict' in state:
-                state = state['model_state_dict']
+            state = torch.load(self.model_path, map_location='cpu')
             model.load_state_dict(state)
         model.eval()
         return model
