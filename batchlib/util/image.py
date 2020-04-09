@@ -14,10 +14,9 @@ def normalize(input_, eps=1e-6):
     return input_
 
 
-# maybe improve barrel correction using: https://github.com/marrlab/BaSiC
-def barrel_correction(image, barrel_corrector):
+def barrel_correction(image, barrel_corrector, offset=550):
     if image.shape != barrel_corrector.shape:
         raise ValueError(f'Shape mismatch: {image.shape} != {barrel_corrector.shape}')
     # cast back to uint16 to keep the same datatype
-    corrected = (image / barrel_corrector).astype(image.dtype)
+    corrected = ((image - offset) / barrel_corrector).astype(image.dtype)
     return corrected
