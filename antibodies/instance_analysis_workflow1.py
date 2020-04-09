@@ -1,4 +1,4 @@
-#! /home/covid19/software/miniconda3/envs/antibodies/bin/python
+#! /home/covid19/software/miniconda3/envs/antibodies-gpu/bin/python
 
 import argparse
 import os
@@ -16,7 +16,7 @@ def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id):
 
     input_folder = os.path.abspath(input_folder)
     if folder is None:
-        folder = input_folder.replace('covid-data-vibor', 'data-processed')
+        folder = input_folder.replace('covid-data-vibor', 'data-processed-new')
 
     ilastik_bin = '/home/covid19/software/ilastik-1.4.0b1-Linux/run_ilastik.sh'
     ilastik_project = '/home/covid19/antibodies-nuclei/ilastik/boundaries_and_foreground.ilp'
