@@ -227,13 +227,15 @@ class BatchJob(ABC):
                 raise RuntimeError("%s does not implement a runner for %s" % (self.name,
                                                                               self.target))
 
+            _run(input_files, output_files, **kwargs)
+            # NOTE this was a nice idea, but it makes debugging super annoying, so not doing
             # we cactch all exceptions and just issue a warning. if anything really went wrong
             # we will catch this when validating outputs
-            try:
-                _run(input_files, output_files, **kwargs)
-            except Exception as e:
-                warn("Run failed with: %s" % str(e))
-                status['error_mesage'] = str(e)
+            # try:
+            #     _run(input_files, output_files, **kwargs)
+            # except Exception as e:
+            #     warn("Run failed with: %s" % str(e))
+            #     status['error_mesage'] = str(e)
 
             # TODO output validation can be expensive, so we might want to parallelize
             # validate the outputs and update the status
