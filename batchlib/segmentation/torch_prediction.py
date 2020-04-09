@@ -4,9 +4,10 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from ..base import BatchJobOnContainer
-from ..util import open_file, files_to_jobs
-from ..util import normalize as default_normalize
+from batchlib.base import BatchJobOnContainer
+from batchlib.segmentation.unet import UNet2D
+from batchlib.util import open_file, files_to_jobs
+from batchlib.util.image import normalize as default_normalize
 
 
 # TODO
@@ -15,6 +16,7 @@ from ..util import normalize as default_normalize
 class TorchPrediction(BatchJobOnContainer):
     """
     """
+
     def __init__(self, input_key, output_key, model_path,
                  model_class=None, model_kwargs={},
                  input_channel=None, input_pattern='*.h5'):
@@ -39,12 +41,19 @@ class TorchPrediction(BatchJobOnContainer):
                     im = f[self.input_key][self.input_channel]
 
                 assert im.ndim == 2
-                # add batch and channel axis
-                im = default_normalize(im[None, None])
+                if isinstance(model, UNet2D):
+                    # add batch, channel and Z axes required fo UNet2d
+                    im = im[None, None, None]
+                else:
+                    # add batch and channel axis
+                    im = im[None, None]
+
+                # normalize the image
+                im = default_normalize(im)
                 inputs.append(im)
 
         inputs = np.concatenate(inputs, axis=0)
-        inputs = torch.from_numpy(inputs).to(device)
+        inputs = torch.from_numpy(inputs).float().to(device)
         prediction = model(inputs)
         prediction = prediction.cpu().numpy()
 
@@ -58,11 +67,16 @@ class TorchPrediction(BatchJobOnContainer):
 
     # load from pickled model or from state dict
     def load_model(self, device):
-        if self.class_name is None:
+        if self.model_class is None:
             model = torch.load(self.model_path, map_location=device)
         else:
             model = self.model_class(**self.model_kwargs)
-            model.load_state_dict(torch.load(self.model_path))
+            state = torch.load(self.model_path)
+            # TODO: UNet2D checkpoints contain model state and additional info
+            # I could re-save the checkpoint, so it's model state only
+            if 'model_state_dict' in state:
+                state = state['model_state_dict']
+            model.load_state_dict(state)
         model.eval()
         return model
 
@@ -77,6 +91,9 @@ class TorchPrediction(BatchJobOnContainer):
             model = self.load_model(device)
             model.to(device)
 
-        input_batches, output_batches = files_to_jobs()
-        for in_batch, out_batch in tqdm(zip(input_batches, output_batches), total=len(input_files)):
-            self.predict_images(in_batch, out_batch, model, normalize, device)
+            #input_batches, output_batches = files_to_jobs()
+            # TODO: just for testing, use files_to_jobs() semantics when it's ready
+            input_batches, output_batches = input_files, output_files
+
+            for in_batch, out_batch in tqdm(zip(input_batches, output_batches), total=len(input_files)):
+                self.predict_images(in_batch, out_batch, model, normalize, device)
