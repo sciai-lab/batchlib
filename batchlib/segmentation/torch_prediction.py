@@ -1,13 +1,14 @@
 import os
-import numpy as np
+from math import ceil
 
+import numpy as np
 import torch
 from tqdm import tqdm
 
 from batchlib.base import BatchJobOnContainer
 from batchlib.segmentation.unet import UNet2D
 from batchlib.util import open_file, files_to_jobs
-from batchlib.util.image import normalize as default_normalize
+from batchlib.util.image import standardize as default_normalize
 
 
 # TODO
@@ -87,9 +88,9 @@ class TorchPrediction(BatchJobOnContainer):
             model = self.load_model(device)
             model.to(device)
 
-            #input_batches, output_batches = files_to_jobs()
-            # TODO: just for testing, use files_to_jobs() semantics when it's ready
-            input_batches, output_batches = input_files, output_files
+            n_batches = int(ceil(len(input_files) / float(batch_size)))
+            input_batches = files_to_jobs(n_batches, input_files)
+            output_batches = files_to_jobs(n_batches, output_files)
 
-            for in_batch, out_batch in tqdm(zip(input_batches, output_batches), total=len(input_files)):
+            for in_batch, out_batch in tqdm(zip(input_batches, output_batches), total=len(input_batches)):
                 self.predict_images(in_batch, out_batch, model, normalize, device)

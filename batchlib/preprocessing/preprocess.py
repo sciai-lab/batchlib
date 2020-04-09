@@ -6,11 +6,13 @@ import numpy as np
 from tqdm import tqdm
 
 from ..base import BatchJob
-from ..util import barrel_correction, open_file, write_viewer_attributes
+from ..util import barrel_correction, open_file, write_viewer_attributes, set_skip
 
 DEFAULT_CHANNEL_NAMES = ['DAPI', 'WF_GFP', 'TRITC']
 
 
+# TODO
+# - something still locks gil, probably h5py. should try processs pool
 class Preprocess(BatchJob):
 
     def __init__(self, channel_names=DEFAULT_CHANNEL_NAMES, output_ext='.h5'):
@@ -30,7 +32,7 @@ class Preprocess(BatchJob):
         im_new[2] = im[1]
         return im_new
 
-    def preprocess_image(self, in_path, out_path, barrel_corrector, reorder):
+    def preprocess_image(self, in_path, out_path, barrel_corrector, reorder, keep_raw):
         im = imageio.volread(in_path)
         im = np.asarray(im)
 
@@ -44,10 +46,12 @@ class Preprocess(BatchJob):
             assert im.shape[0] == 4, "Expect inputs to have 4 channels, got %i" % im.shape[0]
             im = im[:3]
 
-        # TODO save the corrected and the not-corrected version
-        # TODO use the proper flat-field-correction
+        # TODO use the proper flat-field-correction (we will need add. offset parameter for that)
         # apply barrel correction
+        im_raw = None
         if barrel_corrector is not None:
+            if keep_raw:
+                im_raw = im.copy()
             im = barrel_correction(im, barrel_corrector)
 
         colors = ['Red', 'Green', 'Blue']
@@ -56,23 +60,29 @@ class Preprocess(BatchJob):
             ds = f.require_dataset('raw', shape=im.shape, dtype=im.dtype,
                                    compression='gzip')
             ds[:] = im
+            set_skip(ds)
 
-            for key, chan, color in zip(self.channel_names, im, colors):
+            for chan_id, (color, key) in enumerate(zip(colors, self.channel_names)):
+                chan = im[chan_id]
                 ds = f.require_dataset(key, shape=chan.shape, dtype=chan.dtype,
                                        compression='gzip')
-                ds[:] = chan
+                ds[:] = im[chan_id]
                 write_viewer_attributes(ds, chan, color)
 
-    def run(self, input_files, output_files,
-            reorder=True, barrel_corrector_path=None, barrel_corrector_key='data',
-            n_jobs=1):
+                if im_raw is not None:
+                    chan = im_raw[chan_id]
+                    ds = f.require_dataset(key + '_raw', shape=chan.shape, dtype=chan.dtype,
+                                           compression='gzip')
+                    ds[:] = chan
+                    write_viewer_attributes(ds, chan, color, visible=False)
 
-        if barrel_corrector_path is None:
-            barrel_corrector = None
-        else:
-            with open_file(barrel_corrector_path, 'r') as f:
-                barrel_corrector = f[barrel_corrector_key][:]
+    def run(self, input_files, output_files, reorder=True, barrel_corrector=None,
+            keep_raw=True, n_jobs=1):
 
-        _preprocess = partial(self.preprocess_image, barrel_corrector=barrel_corrector, reorder=reorder)
+        _preprocess = partial(self.preprocess_image,
+                              barrel_corrector=barrel_corrector,
+                              reorder=reorder,
+                              keep_raw=keep_raw)
+
         with futures.ThreadPoolExecutor(n_jobs) as tp:
             list(tqdm(tp.map(_preprocess, input_files, output_files), total=len(input_files)))

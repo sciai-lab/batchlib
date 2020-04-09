@@ -1,4 +1,5 @@
 import os
+import numpy as np
 from time import sleep
 
 import h5py
@@ -38,10 +39,14 @@ def write_viewer_attributes(ds, image, color, alpha=1., visible=True, skip=False
     all_colors = colors + color_maps
     assert color in all_colors
 
-    attrs = {'color': color, 'visible': visible, 'skip': skip, 'alpha': alpha}
+    attrs = {'Color': color, 'Visible': visible, 'Skip': skip, 'Alpha': alpha}
 
     if color in colors:
-        mi, ma = image.min(), image.max()
-        attrs.update({'lutMinMax': [mi, ma]})
+        mi, ma = np.float64(image.min()), np.float64(image.max())
+        attrs.update({'ContrastLimits': [mi, ma]})
 
     ds.attrs.update(attrs)
+
+
+def set_skip(ds):
+    ds.attrs['Skip'] = True

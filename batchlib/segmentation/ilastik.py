@@ -4,7 +4,7 @@ from concurrent import futures
 from tqdm import tqdm
 
 from ..base import BatchJobOnContainer
-from ..util import open_file, files_to_jobs
+from ..util import open_file, files_to_jobs, set_skip
 
 
 # TODO
@@ -49,6 +49,7 @@ class IlastikPrediction(BatchJobOnContainer):
             ds = f.require_dataset(self.output_key, shape=data.shape,
                                    dtype='float32', compression='gzip')
             ds[:] = data
+            set_skip(ds)
 
         # clean up
         os.remove(tmp_path)
