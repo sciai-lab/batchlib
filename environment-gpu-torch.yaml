@@ -3,7 +3,7 @@ channels:
     - conda-forge
     - defaults
 name:
-    antibodies-gpu
+    antibodies-gpu-torch
 dependencies:
     - cudatoolkit=10.1
     - imageio

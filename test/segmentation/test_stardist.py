@@ -13,7 +13,7 @@ class TestStardist(unittest.TestCase):
             pass
 
     def test_stardist_prediction(self):
-        from batchlib.segmentation.stardist import StardistPrediction
+        from batchlib.segmentation.stardist_prediction import StardistPrediction
 
         model_root = '/home/pape/Work/covid/antibodies-nuclei/stardist/models/pretrained'
         model_name = '2D_dsb2018'

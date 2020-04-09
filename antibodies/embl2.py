@@ -8,7 +8,7 @@ import h5py
 from batchlib import run_workflow
 from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import SeededWatershed
-from batchlib.segmentation.stardist import StardistPrediction
+from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
 
@@ -19,6 +19,7 @@ def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id, force_r
     if folder is None:
         folder = input_folder.replace('covid-data-vibor', 'data-processed-test')
 
+    tf_gpu = '/g/kreshuk/pape/Work/software/conda/miniconda3/envs/antibodies-gpu-tf/bin/python'
     model_root = '/g/kreshuk/pape/Work/covid/antibodies-nuclei/stardist/models/pretrained'
     model_name = '2D_dsb2018'
 
@@ -62,7 +63,8 @@ def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id, force_r
                                        'input_key': in_key,
                                        'output_key': nuc_key,
                                        'input_channel': 0},
-                             'run': {'gpu_id': gpu_id}},
+                             'run': {'gpu_id': gpu_id,
+                                     'pybin': tf_gpu}},
         SeededWatershed: {'build': {'pmap_key': bd_key,
                                     'seed_key': nuc_key,
                                     'output_key': seg_key,

@@ -1,11 +1,14 @@
 import os
+import json
+import subprocess
+import sys
 
 from csbdeep.utils import normalize
 from stardist.models import StarDist2D
 from tqdm import tqdm
 
-from ..base import BatchJobOnContainer
-from ..util import open_file, write_viewer_attributes
+from batchlib.base import BatchJobOnContainer
+from batchlib.util import open_file, write_viewer_attributes
 
 
 # TODO (or rather to premature optimize, this is fast enough on single gpu for now!)
@@ -45,7 +48,20 @@ class StardistPrediction(BatchJobOnContainer):
             ds[:] = labels
             write_viewer_attributes(ds, labels, 'Glasbey')
 
-    def run(self, input_files, output_files, gpu_id):
+    def run(self, input_files, output_files, gpu_id=None, pybin=None):
+
+        if pybin is not None:
+            print("Run stardist prediction in subprocess with bin", pybin)
+            build_kwargs = {'model_root': self.model_root, 'model_name': self.model_name,
+                            'input_key': self.input_key, 'output_key': self.output_key,
+                            'input_channel': self.input_channel, 'input_pattern': self.input_pattern}
+            build_kwargs = json.dumps(build_kwargs)
+
+            run_kwargs = {'input_files': input_files, 'output_files': output_files, 'gpu_id': gpu_id}
+            run_kwargs = json.dumps(run_kwargs)
+
+            cmd = [pybin, __file__, build_kwargs, run_kwargs]
+            subprocess.run(cmd)
 
         if gpu_id is None:
             # need to do this for the conda tensorflow cpu version
@@ -56,3 +72,13 @@ class StardistPrediction(BatchJobOnContainer):
         model = StarDist2D(None, name=self.model_name, basedir=self.model_root)
         for in_path, out_path in tqdm(zip(input_files, output_files), total=len(input_files)):
             self.segment_image(in_path, out_path, model)
+
+
+if __name__ == '__main__':
+    build_kwargs, run_kwargs = sys.argv[1], sys.argv[2]
+
+    build_kwargs = json.loads(build_kwargs)
+    run_kwargs = json.loads(run_kwargs)
+
+    job = StardistPrediction(**build_kwargs)
+    job.run(**run_kwargs)

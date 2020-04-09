@@ -8,7 +8,7 @@ class TestWorkflow(unittest.TestCase):
     def test_instance_segmentation(self):
         from batchlib.preprocessing import Preprocess
         from batchlib.segmentation import BoundaryAndMaskPrediction, SeededWatershed
-        from batchlib.segmentation.stardist import StardistPrediction
+        from batchlib.segmentation.stardist_prediction import StardistPrediction
         from batchlib.workflow import run_workflow
 
         ilastik_bin = '/home/pape/Work/covid/antibodies-nuclei/ilastik/run_ilastik.sh'

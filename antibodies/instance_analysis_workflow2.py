@@ -8,7 +8,7 @@ import h5py
 from batchlib import run_workflow
 from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import SeededWatershed
-from batchlib.segmentation.stardist import StardistPrediction
+from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
 

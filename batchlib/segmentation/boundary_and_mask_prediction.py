@@ -1,7 +1,7 @@
 import os
 from scipy.ndimage.morphology import binary_opening, binary_closing
 
-from .ilastik import IlastikPrediction
+from .ilastik_prediction import IlastikPrediction
 from ..util import open_file, write_viewer_attributes
 
 

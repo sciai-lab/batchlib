@@ -9,7 +9,7 @@ import h5py
 from batchlib import run_workflow
 from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import BoundaryAndMaskPrediction, SeededWatershed
-from batchlib.segmentation.stardist import StardistPrediction
+from batchlib.segmentation.stardist_prediction import StardistPrediction
 
 
 def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id):
