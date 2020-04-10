@@ -34,7 +34,7 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
     """
 
     work_dir = os.path.join(folder, 'batchlib')
-    os.makedirs(folder, exist_ok=True)
+    os.makedirs(work_dir, exist_ok=True)
     lock_file = os.path.join(work_dir, 'batchlib.lock')
     with get_file_lock(lock_file, lock_folder):
 
