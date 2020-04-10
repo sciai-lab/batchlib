@@ -1,6 +1,6 @@
 import argparse
 import json
-from pixel_analysis_workflow1 import run_pixel_analysis
+from pixel_analysis_workflow1 import run_pixel_analysis1
 from instance_analysis_workflow1 import run_instance_analysis1
 from instance_analysis_workflow2 import run_instance_analysis2
 
@@ -16,9 +16,9 @@ def run_all(input_folder, gpu, n_cpus,
 
     times = {}
 
-    name, rt = run_pixel_analysis(input_folder, None, n_cpus,
-                                  output_root_name=output_root_name,
-                                  use_unique_output_folder=use_unique_output_folder)
+    name, rt = run_pixel_analysis1(input_folder, None, n_cpus,
+                                   output_root_name=output_root_name,
+                                   use_unique_output_folder=use_unique_output_folder)
     times[name] = rt
     dump_times(times)
 

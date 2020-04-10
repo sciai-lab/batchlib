@@ -74,7 +74,7 @@ def run_instance_analysis1(input_folder, folder, gpu, n_cpus,
     run_workflow(name, folder, job_dict, input_folder=input_folder)
     t0 = time.time() - t0
     print("Run", name, "in", t0, "s")
-    return t0
+    return name, t0
 
 
 if __name__ == '__main__':
