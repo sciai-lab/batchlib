@@ -13,19 +13,24 @@ from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
 
 
-ROOT = '/home/covid19/antibodies-nuclei'
-
-
-def run_instance_analysis2(input_folder, folder, n_jobs, reorder, gpu_id, force_recompute):
+# TODO all kwargs should go into config file
+# NOTE ignore_nvalid_inputs / ignore_failed_outputs are not used yet in the function but will be eventually
+def run_instance_analysis2(input_folder, folder, gpu, n_cpus, batch_size=4,
+                           root='/home/covid19/antibodies-nuclei', output_root_name='data-processed',
+                           use_unique_output_folder=False,
+                           force_recompute=False, ignore_invalid_inputs=None, ignore_failed_outputs=None):
+    name = 'InstanceAnalysisWorkflow2'
 
     input_folder = os.path.abspath(input_folder)
     if folder is None:
-        folder = input_folder.replace('covid-data-vibor', 'data-processed-new') + '_instance_analysis2'
+        folder = input_folder.replace('covid-data-vibor', output_root_name)
+        if use_unique_output_folder:
+            folder += '_' + name
 
-    model_root = os.path.join(ROOT, 'stardist/models/pretrained')
+    model_root = os.path.join(root, 'stardist/models/pretrained')
     model_name = '2D_dsb2018'
 
-    barrel_corrector_path = os.path.join(ROOT, 'barrel_correction/barrel_corrector.h5')
+    barrel_corrector_path = os.path.join(root, 'barrel_correction/barrel_corrector.h5')
     with h5py.File(barrel_corrector_path, 'r') as f:
         barrel_corrector = f['data'][:]
 
@@ -35,7 +40,7 @@ def run_instance_analysis2(input_folder, folder, n_jobs, reorder, gpu_id, force_
     nuc_key = 'nucleus_segmentation'
     seg_key = 'cell_segmentation'
 
-    torch_model_path = os.path.join(ROOT,
+    torch_model_path = os.path.join(root,
                                     'unet_segmentation/sample_models/fg_boundaries_best_checkpoint.pytorch')
     torch_model_class = UNet2D
     torch_model_kwargs = {
@@ -44,12 +49,10 @@ def run_instance_analysis2(input_folder, folder, n_jobs, reorder, gpu_id, force_
         'f_maps': [32, 64, 128, 256, 512],
         'testing': True
     }
-    batch_size = 6
 
     # TODO add analysis job
     job_dict = {
-        Preprocess: {'run': {'reorder': reorder,
-                             'n_jobs': n_jobs,
+        Preprocess: {'run': {'n_jobs': n_cpus,
                              'barrel_corrector': barrel_corrector}},
         TorchPrediction: {'build': {'input_key': in_key,
                                     'output_key': [mask_key, bd_key],
@@ -57,7 +60,7 @@ def run_instance_analysis2(input_folder, folder, n_jobs, reorder, gpu_id, force_
                                     'model_class': torch_model_class,
                                     'model_kwargs': torch_model_kwargs,
                                     'input_channel': 2},
-                          'run': {'gpu_id': gpu_id,
+                          'run': {'gpu_id': gpu,
                                   'batch_size': batch_size,
                                   'threshold_channels': {0: 0.5}}},
         StardistPrediction: {'build': {'model_root': model_root,
@@ -65,17 +68,16 @@ def run_instance_analysis2(input_folder, folder, n_jobs, reorder, gpu_id, force_
                                        'input_key': in_key,
                                        'output_key': nuc_key,
                                        'input_channel': 0},
-                             'run': {'gpu_id': gpu_id}},
+                             'run': {'gpu_id': gpu}},
         SeededWatershed: {'build': {'pmap_key': bd_key,
                                     'seed_key': nuc_key,
                                     'output_key': seg_key,
                                     'mask_key': mask_key},
                           'run': {'erode_mask': 3,
                                   'dilate_seeds': 3,
-                                  'n_jobs': n_jobs}}
+                                  'n_jobs': n_cpus}}
     }
 
-    name = 'InstanceAnalysisWorkflow2'
     t0 = time.time()
     run_workflow(name, folder, job_dict, input_folder=input_folder, force_recompute=force_recompute)
     t0 = time.time() - t0
@@ -84,14 +86,19 @@ def run_instance_analysis2(input_folder, folder, n_jobs, reorder, gpu_id, force_
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Run instance analysis workflow')
-    parser.add_argument('input_folder', type=str, help='')
-    parser.add_argument('--folder', type=str, default=None)
-    parser.add_argument('--n_jobs', type=int, help='', default=1)
-    parser.add_argument('--reorder', type=int, default=1, help='')
-    parser.add_argument('--gpu_id', type=int, default=None)
-    parser.add_argument('--force_recompute', type=int, default=0)
+    doc = """Run instance analysis workflow
+    Based on ilastik pixel prediction, stardist nucleus prediction
+    and watershed segmentation.
+    """
+    fhelp = """Folder to store the results. will default to
+    /home/covid19/data/data-processed/<INPUT_FOLDER_NAME>, which will be
+    overriden if this parameter is specified
+    """
+    parser = argparse.ArgumentParser(description=doc)
+    parser.add_argument('input_folder', type=str, help='folder with input files as tifs')
+    parser.add_argument('gpu', type=int, help='id of gpu for this job')
+    parser.add_argument('n_cpus', type=int, help='number of cpus')
+    parser.add_argument('--folder', type=str, default=None, help=fhelp)
 
     args = parser.parse_args()
-    run_instance_analysis2(args.input_folder, args.folder, args.n_jobs,
-                           bool(args.reorder), args.gpu_id, bool(args.force_recompute))
+    run_instance_analysis2(args.input_folder, args.folder, args.gpu, args.n_cpus)

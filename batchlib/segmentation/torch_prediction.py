@@ -74,7 +74,7 @@ class TorchPrediction(BatchJobOnContainer):
                     ds = f.require_dataset(key, shape=channel.shape, compression='gzip',
                                            dtype=channel.dtype)
                     ds[:] = channel
-                    write_viewer_attributes(ds, channel, 'Gray')
+                    write_viewer_attributes(ds, channel, 'White')
 
     # load from pickled model or from state dict
     def load_model(self, device):

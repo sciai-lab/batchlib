@@ -49,13 +49,13 @@ class BoundaryAndMaskPrediction(IlastikPrediction):
             ds = f.require_dataset(self.mask_key, shape=fg_mask.shape,
                                    dtype='uint8', compression='gzip')
             ds[:] = fg_mask
-            write_viewer_attributes(ds, fg_mask, 'Gray')
+            write_viewer_attributes(ds, fg_mask, 'White')
 
             # save the boundaries
             ds = f.require_dataset(self.boundary_key, shape=bd.shape, compression='gzip',
                                    dtype='float32')
             ds[:] = bd
-            write_viewer_attributes(ds, fg_mask, 'Gray')
+            write_viewer_attributes(ds, fg_mask, 'White')
 
         # clean up
         os.remove(tmp_path)

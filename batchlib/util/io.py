@@ -34,7 +34,7 @@ def open_file(path, mode='r', h5_timeout=5, h5_retry=10):
 
 
 def write_viewer_attributes(ds, image, color, alpha=1., visible=True, skip=False):
-    colors = ['Gray', 'Red', 'Green', 'Blue']
+    colors = ['Gray', 'Red', 'Green', 'Blue', 'White']
     color_maps = ['Glasbey']
     all_colors = colors + color_maps
     assert color in all_colors

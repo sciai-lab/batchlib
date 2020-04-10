@@ -36,14 +36,24 @@ class Preprocess(BatchJob):
         im = imageio.volread(in_path)
         im = np.asarray(im)
 
+        n_channels = im.shape[0]
+        # if reorder is None, try to get it from the data
+        if reorder is None:
+            if n_channels == 3:
+                reorder = True
+            elif n_channels == 4:
+                reorder = False
+            else:
+                raise RuntimeError("Expect inputs to have %i chanels" % n_channels)
+
         # for new iteration of the data, we need to reorder the channels
         # and we don't have the garbage channel
         if reorder:
-            assert im.shape[0] == 3, "Expect inputs to have 3 channels, got %i" % im.shape[0]
+            assert n_channels == 3, "Expect inputs to have 3 channels, got %i" % n_channels
             im = self._reorder(im)
         else:
             # get rid of garbage channels
-            assert im.shape[0] == 4, "Expect inputs to have 4 channels, got %i" % im.shape[0]
+            assert n_channels == 4, "Expect inputs to have 4 channels, got %i" % n_channels
             im = im[:3]
 
         # TODO use the proper flat-field-correction (we will need add. offset parameter for that)
@@ -76,7 +86,7 @@ class Preprocess(BatchJob):
                     ds[:] = chan
                     write_viewer_attributes(ds, chan, color, visible=False)
 
-    def run(self, input_files, output_files, reorder=True, barrel_corrector=None,
+    def run(self, input_files, output_files, reorder=None, barrel_corrector=None,
             keep_raw=True, n_jobs=1):
 
         _preprocess = partial(self.preprocess_image,
