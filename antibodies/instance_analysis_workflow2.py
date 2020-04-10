@@ -11,6 +11,7 @@ from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
+from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
 
 
 # TODO all kwargs should go into config file
@@ -20,6 +21,10 @@ def run_instance_analysis2(input_folder, folder, gpu, n_cpus, batch_size=4,
                            use_unique_output_folder=False,
                            force_recompute=False, ignore_invalid_inputs=None, ignore_failed_outputs=None):
     name = 'InstanceAnalysisWorkflow2'
+
+    # to allow running on the cpu
+    if gpu < 0:
+        gpu = None
 
     input_folder = os.path.abspath(input_folder)
     if folder is None:
@@ -34,6 +39,7 @@ def run_instance_analysis2(input_folder, folder, gpu, n_cpus, batch_size=4,
     with h5py.File(barrel_corrector_path, 'r') as f:
         barrel_corrector = f['data'][:]
 
+    # TODO these should also come from the config!
     in_key = 'raw'
     bd_key = 'pmap_tritc'
     mask_key = 'mask'
@@ -75,7 +81,11 @@ def run_instance_analysis2(input_folder, folder, gpu, n_cpus, batch_size=4,
                                     'mask_key': mask_key},
                           'run': {'erode_mask': 3,
                                   'dilate_seeds': 3,
-                                  'n_jobs': n_cpus}}
+                                  'n_jobs': n_cpus}},
+        CellLevelAnalysis: {'build': {'raw_key': in_key,
+                                      'nuc_seg_key': nuc_key,
+                                      'cell_seg_key': seg_key},
+                            'run': {'gpu_id': gpu}}
     }
 
     t0 = time.time()

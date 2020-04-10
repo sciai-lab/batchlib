@@ -4,16 +4,15 @@ import numpy as np
 import pickle
 import os
 from functools import partial
-from concurrent import futures
 
 from ..util.io import open_file
 from ..base import BatchJob
 
 
-def load_sample(path, cell_seg_key, device='cpu'):
+def load_sample(path, raw_key, nuc_seg_key, cell_seg_key, device):
     with open_file(path, 'r') as f:
-        raw = f['raw'][()]
-        nucleus_seg = f['nucleus_segmentation'][()]
+        raw = f[raw_key][()]
+        nucleus_seg = f[nuc_seg_key][()]
         cell_seg = f[cell_seg_key][()]
     gfp = raw[1]
     serum = raw[2]
@@ -66,8 +65,12 @@ def eval_cells(gfp, serum, nucleus_seg, cell_seg, ignore_label=0,
 
 
 # this is what should be run for each h5 file
-def save_all_stats(in_file, out_file, cell_seg_key, device):
-    sample = load_sample(in_file, cell_seg_key, device=device)
+def save_all_stats(in_file, out_file, device,
+                   raw_key='raw',
+                   nuc_seg_key='nucleus_segmentation',
+                   cell_seg_key='cell_segmentation'):
+    sample = load_sample(in_file, raw_key, nuc_seg_key, cell_seg_key,
+                         device=device)
     per_cell_statistics = eval_cells(*sample)
     with open(out_file, 'wb') as f:
         pickle.dump(per_cell_statistics, f)
@@ -76,12 +79,29 @@ def save_all_stats(in_file, out_file, cell_seg_key, device):
 class CellLevelAnalysis(BatchJob):
     """
     """
-    def __init__(self, input_pattern='*.h5', mode='ws', cell_seg_key=None):
-        self.mode = mode
-        self.cell_seg_key = cell_seg_key if cell_seg_key is not None else 'cell_segmentation_%s' % self.mode
+    def __init__(self,
+                 raw_key='raw',
+                 nuc_seg_key='nucleus_segmentation',
+                 cell_seg_key='cell_segmentation',
+                 identifier=None, input_pattern='*.h5'):
+
+        self.raw_key = raw_key
+        self.nuc_seg_key = nuc_seg_key
+        self.cell_seg_key = cell_seg_key
+
+        # raw should be 3d, rest should be 2d
+        input_ndim = [3, 2, 2]
+
+        # identifier allows to run different instances of this job on the same folder
+        output_ext = '.pickle' if identifier is None else f'_{identifier}.pickle'
+
         super().__init__(input_pattern,
-                         output_ext=f'_{mode}.pickle',
-                         input_key=['raw', 'nucleus_segmentation', 'foreground_mask', self.cell_seg_key])
+                         output_ext=output_ext,
+                         input_key=[self.raw_key,
+                                    self.nuc_seg_key,
+                                    self.cell_seg_key],
+                         input_ndim=input_ndim)
+        self.identifier = identifier
         self.runners = {'default': self.run}
 
     def run(self, input_files, output_files, gpu_id=None):
@@ -92,6 +112,9 @@ class CellLevelAnalysis(BatchJob):
             else:
                 device = torch.device('cpu')
 
-            _save_all_stats = partial(save_all_stats, cell_seg_key=self.cell_seg_key, device=device)
+            _save_all_stats = partial(save_all_stats, device=device,
+                                      raw_key=self.raw_key,
+                                      cell_seg_key=self.cell_seg_key,
+                                      nuc_seg_key=self.nuc_seg_key)
             for input_file, output_file in tqdm(list(zip(input_files, output_files))):
                 _save_all_stats(input_file, output_file)

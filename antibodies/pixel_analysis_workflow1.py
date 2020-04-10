@@ -30,6 +30,7 @@ def run_pixel_analysis1(input_folder, folder, n_cpus,
 
     n_threads_il = None if n_cpus == 1 else 4
 
+    # TODO these should also come from the config!
     in_key = 'raw'
     out_key = 'local_infection'
 
