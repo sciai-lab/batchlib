@@ -17,8 +17,9 @@ def run_all(input_folder, n_jobs, reorder, gpu_id):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run pixel analysis workflow')
     parser.add_argument('input_folder', type=str, help='')
+    parser.add_argument('gpu_id', type=int)
     parser.add_argument('--n_jobs', type=int, help='', default=1)
     parser.add_argument('--reorder', type=int, default=1, help='')
 
     args = parser.parse_args()
-    run_pixel_analysis(args.input_folder, args.n_jobs, bool(args.reorder))
+    run_all(args.input_folder, args.n_jobs, bool(args.reorder), args.gpu_id)
