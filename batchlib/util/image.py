@@ -18,11 +18,10 @@ def normalize(input_, eps=1e-6):
     return input_
 
 
-def barrel_correction(image, barrel_corrector, offset=550):
-    if image.shape != barrel_corrector.shape:
-        raise ValueError(f'Shape mismatch: {image.shape} != {barrel_corrector.shape}')
-    # cast back to uint16 to keep the same datatype
-    corrected = ((image - offset) / barrel_corrector).astype(image.dtype)
+def barrel_correction(image, divisor, offset):
+    if not(image.shape == divisor.shape == offset.shape):
+        raise ValueError(f'Shape mismatch: ({image.shape}, {divisor.shape}, {offset.shape}) are not all equal')
+    corrected = ((image - offset) / divisor).astype(np.float32)
     return corrected
 
 

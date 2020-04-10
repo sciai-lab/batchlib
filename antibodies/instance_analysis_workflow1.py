@@ -42,7 +42,7 @@ def run_instance_analysis1(input_folder, folder, gpu, n_cpus,
 
     barrel_corrector_path = os.path.join(root, 'barrel_correction/barrel_corrector.h5')
     with h5py.File(barrel_corrector_path, 'r') as f:
-        barrel_corrector = f['data'][:]
+        barrel_corrector = (f['divisor'][:], f['offset'][:])
 
     # TODO these should also come from the config!
     in_key = 'raw'

@@ -62,7 +62,7 @@ class Preprocess(BatchJob):
         if barrel_corrector is not None:
             if keep_raw:
                 im_raw = im.copy()
-            im = barrel_correction(im, barrel_corrector)
+            im = barrel_correction(im, *barrel_corrector)
 
         colors = ['Red', 'Green', 'Blue']
         with open_file(out_path, 'a') as f:
