@@ -1,12 +1,15 @@
 import argparse
 import json
+import os
+
 from pixel_analysis_workflow1 import run_pixel_analysis1
 from instance_analysis_workflow1 import run_instance_analysis1
 from instance_analysis_workflow2 import run_instance_analysis2
 
 
-def dump_times(times):
-    with open('run_times.json', 'w') as f:
+def dump_times(times, folder):
+    exp_name = os.path.split(folder)[1]
+    with open('runtimes_%s.json' % exp_name, 'w') as f:
         json.dump(times, f)
 
 
@@ -20,19 +23,19 @@ def run_all(input_folder, gpu, n_cpus,
                                    output_root_name=output_root_name,
                                    use_unique_output_folder=use_unique_output_folder)
     times[name] = rt
-    dump_times(times)
+    dump_times(times, input_folder)
 
     name, rt = run_instance_analysis1(input_folder, None, gpu, n_cpus,
                                       output_root_name=output_root_name,
                                       use_unique_output_folder=use_unique_output_folder)
     times[name] = rt
-    dump_times(times)
+    dump_times(times, input_folder)
 
     name, rt = run_instance_analysis2(input_folder, None, gpu, n_cpus,
                                       output_root_name=output_root_name,
                                       use_unique_output_folder=use_unique_output_folder)
     times[name] = rt
-    dump_times(times)
+    dump_times(times, input_folder)
 
 
 if __name__ == '__main__':
