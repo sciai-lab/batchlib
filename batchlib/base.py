@@ -258,13 +258,11 @@ class BatchJob(ABC):
         if exp_keys is None:
             return True
 
-
         with open_file(path, 'r') as f:
             for key, ndim in zip(exp_keys, exp_ndims):
                 if key not in f:
                     return False
                 if ndim is not None and f[key].ndim != ndim:
-                    print(f[key].ndim, ndim)
                     return False
         return True
 
@@ -312,10 +310,15 @@ class BatchJobWithSubfolder(BatchJob):
     """ Base class for batch jobs that output into a folder
     """
 
-    def __init__(self, *args, output_folder="", **kwargs):
+    def __init__(self, input_pattern,
+                 output_folder="", output_ext=None,
+                 input_key=None, input_ndim=None,
+                 target='default'):
         self.output_folder = output_folder
 
-        super().__init__(*args, **kwargs)
+        super().__init__(input_pattern, output_ext=None,
+                         input_key=None, input_ndim=None,
+                         target='default')
 
     def to_outputs(self, inputs, folder):
         names = [os.path.splitext(os.path.split(inp)[1])[0] for inp in inputs]
