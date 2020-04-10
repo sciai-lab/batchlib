@@ -93,12 +93,13 @@ class BatchJob(ABC):
         # if the class has an identifier member, we add it to the name
         # this allows running multiple batch jobs of the same type for one
         # experiment, by adding the identifiers
-        if hasattr(self, 'identifier'):
+        identifier = getattr(self, 'identifier', None)
+        if identifier is None:
+            return name_
+        else:
             identifier = self.identifier
             assert isinstance(identifier, str)
             return name_ + identifier
-        else:
-            return name_
 
     def status_file(self, folder):
         return os.path.join(folder, 'batchlib', self.name + '.status')
