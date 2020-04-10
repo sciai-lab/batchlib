@@ -10,15 +10,23 @@ from batchlib import run_workflow
 from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import BoundaryAndMaskPrediction, SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
+from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
+
+# Make it easier to change between roots (which is not a good name for this ...)
+ROOT = '/home/covid19/antibodies-nuclei'
+# ROOT = '/home/pape/Work/covid/antibodies-nuclei'
 
 
 # TODO all kwargs should go into config file
 # NOTE ignore_nvalid_inputs / ignore_failed_outputs are not used yet in the function but will be eventually
 def run_instance_analysis1(input_folder, folder, gpu, n_cpus,
-                           root='/home/covid19/antibodies-nuclei', output_root_name='data-processed',
-                           use_unique_output_folder=False,
+                           root=ROOT, output_root_name='data-processed', use_unique_output_folder=False,
                            force_recompute=False, ignore_invalid_inputs=None, ignore_failed_outputs=None):
     name = 'InstanceAnalysisWorkflow1'
+
+    # to allow running on the cpu
+    if gpu < 0:
+        gpu = None
 
     input_folder = os.path.abspath(input_folder)
     if folder is None:
@@ -36,6 +44,7 @@ def run_instance_analysis1(input_folder, folder, gpu, n_cpus,
     with h5py.File(barrel_corrector_path, 'r') as f:
         barrel_corrector = f['data'][:]
 
+    # TODO these should also come from the config!
     in_key = 'raw'
     bd_key = 'pmap_tritc'
     mask_key = 'mask'
@@ -44,7 +53,6 @@ def run_instance_analysis1(input_folder, folder, gpu, n_cpus,
 
     n_threads_il = None if n_cpus == 1 else 4
 
-    # TODO add analysis job
     job_dict = {
         Preprocess: {'run': {'n_jobs': n_cpus,
                              'barrel_corrector': barrel_corrector}},
@@ -67,7 +75,11 @@ def run_instance_analysis1(input_folder, folder, gpu, n_cpus,
                                     'mask_key': mask_key},
                           'run': {'erode_mask': 3,
                                   'dilate_seeds': 3,
-                                  'n_jobs': n_cpus}}
+                                  'n_jobs': n_cpus}},
+        CellLevelAnalysis: {'build': {'raw_key': in_key,
+                                      'nuc_seg_key': nuc_key,
+                                      'cell_seg_key': seg_key},
+                            'run': {'gpu_id': gpu}}
     }
 
     t0 = time.time()
