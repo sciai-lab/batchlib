@@ -25,7 +25,7 @@ class Preprocess(BatchJob):
                          output_key=channel_names_, output_ndim=channel_dims)
         self.runners = {'default': self.run}
 
-    def _reorder(im):
+    def _reorder(self, im):
         im_new = np.zeros_like(im)
         im_new[0] = im[0]
         im_new[1] = im[2]
