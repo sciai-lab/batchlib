@@ -16,11 +16,11 @@ from batchlib.segmentation.unet import UNet2D
 ROOT = '/home/covid19/antibodies-nuclei'
 
 
-def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id, force_recompute):
+def run_instance_analysis2(input_folder, folder, n_jobs, reorder, gpu_id, force_recompute):
 
     input_folder = os.path.abspath(input_folder)
     if folder is None:
-        folder = input_folder.replace('covid-data-vibor', 'data-processed-new') + '_workflow2'
+        folder = input_folder.replace('covid-data-vibor', 'data-processed-new') + '_instance_analysis2'
 
     model_root = os.path.join(ROOT, 'stardist/models/pretrained')
     model_name = '2D_dsb2018'
@@ -80,6 +80,7 @@ def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id, force_r
     run_workflow(name, folder, job_dict, input_folder=input_folder, force_recompute=force_recompute)
     t0 = time.time() - t0
     print("Run", name, "in", t0, "s")
+    return t0
 
 
 if __name__ == '__main__':
@@ -92,5 +93,5 @@ if __name__ == '__main__':
     parser.add_argument('--force_recompute', type=int, default=0)
 
     args = parser.parse_args()
-    run_instance_analysis(args.input_folder, args.folder, args.n_jobs,
-                          bool(args.reorder), args.gpu_id, bool(args.force_recompute))
+    run_instance_analysis2(args.input_folder, args.folder, args.n_jobs,
+                           bool(args.reorder), args.gpu_id, bool(args.force_recompute))

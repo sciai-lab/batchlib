@@ -12,11 +12,11 @@ from batchlib.segmentation import BoundaryAndMaskPrediction, SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 
 
-def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id):
+def run_instance_analysis1(input_folder, folder, n_jobs, reorder, gpu_id):
 
     input_folder = os.path.abspath(input_folder)
     if folder is None:
-        folder = input_folder.replace('covid-data-vibor', 'data-processed-new')
+        folder = input_folder.replace('covid-data-vibor', 'data-processed-new') + '_instance_analysis1'
 
     ilastik_bin = '/home/covid19/software/ilastik-1.4.0b1-Linux/run_ilastik.sh'
     ilastik_project = '/home/covid19/antibodies-nuclei/ilastik/boundaries_and_foreground.ilp'
@@ -67,6 +67,7 @@ def run_instance_analysis(input_folder, folder, n_jobs, reorder, gpu_id):
     run_workflow(name, folder, job_dict, input_folder=input_folder)
     t0 = time.time() - t0
     print("Run", name, "in", t0, "s")
+    return t0
 
 
 if __name__ == '__main__':
@@ -78,4 +79,4 @@ if __name__ == '__main__':
     parser.add_argument('--gpu_id', type=int, default=None)
 
     args = parser.parse_args()
-    run_instance_analysis(args.input_folder, args.folder, args.n_jobs, bool(args.reorder), args.gpu_id)
+    run_instance_analysis1(args.input_folder, args.folder, args.n_jobs, bool(args.reorder), args.gpu_id)

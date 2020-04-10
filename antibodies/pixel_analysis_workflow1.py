@@ -15,7 +15,7 @@ def run_pixel_analysis(input_folder, folder, n_jobs, reorder):
 
     input_folder = os.path.abspath(input_folder)
     if folder is None:
-        folder = input_folder.replace('covid-data-vibor', 'data-processed')
+        folder = input_folder.replace('covid-data-vibor', 'data-processed-new') + '_pixel_analysis1'
 
     ilastik_bin = '/home/covid19/software/ilastik-1.4.0b1-Linux/run_ilastik.sh'
     ilastik_project = '/home/covid19/antibodies-nuclei/ilastik/local_infection.ilp'
@@ -46,6 +46,7 @@ def run_pixel_analysis(input_folder, folder, n_jobs, reorder):
     run_workflow(name, folder, job_dict, input_folder=input_folder)
     t0 = time.time() - t0
     print("Run", name, "in", t0, "s")
+    return t0
 
 
 if __name__ == '__main__':
