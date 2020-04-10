@@ -11,8 +11,23 @@ def files_to_jobs(n_jobs, file_list):
     return job_lists
 
 
+def get_file_lock(lock_file, lock=True):
+    if lock:
+        return FileLock(lock_file)
+    else:
+        return DummyLock()
+
+
+class DummyLock:
+    def __enter__(self):
+        pass
+
+    def __exit__(self, type, value, traceback):
+        pass
+
+
 # copyied fromhttps://github.com/ilastik/lazyflow/blob/master/lazyflow/utility/fileLock.py#L94
-class FileLock(object):
+class FileLock:
     """ A file locking mechanism that has context-manager support so
         you can use it in a ``with`` statement. This should be relatively cross
         compatible as it doesn't rely on ``msvcrt`` or ``fcntl`` for the locking.

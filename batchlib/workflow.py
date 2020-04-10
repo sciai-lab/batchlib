@@ -1,5 +1,6 @@
 import json
 import os
+from .util import get_file_lock
 
 
 def _dump_status(status_file, status):
@@ -7,7 +8,6 @@ def _dump_status(status_file, status):
         json.dump(status, f, indent=2)
 
 
-# TODO add lock for whole workflow
 # TODO implement non-streaming mode, that does not start a job again, once it has status 'processed'
 # TODO also accept 'ignore_invalid_inputs' and 'ignore_failed_outputs'
 # keywords once this is implemented
@@ -35,40 +35,42 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
 
     work_dir = os.path.join(folder, 'batchlib')
     os.makedirs(folder, exist_ok=True)
+    lock_file = os.path.join(work_dir, 'batchlib.lock')
+    with get_file_lock(lock_file, lock_folder):
 
-    status_file = os.path.join(work_dir, name + '.status')
-    status = {}
+        status_file = os.path.join(work_dir, name + '.status')
+        status = {}
 
-    for job_id, (job_class, kwarg_dict) in enumerate(job_dict.items()):
-        build_kwargs = kwarg_dict.get('build', {})
-        run_kwargs = kwarg_dict.get('run', {})
+        for job_id, (job_class, kwarg_dict) in enumerate(job_dict.items()):
+            build_kwargs = kwarg_dict.get('build', {})
+            run_kwargs = kwarg_dict.get('run', {})
 
-        # if we have a separate input_folder, we assume that it's only passed to
-        # the first job, which then needs to take care of
-        # copying all files to be processed to the folder
-        if job_id == 0 and input_folder is not None:
-            run_kwargs.update(dict(input_folder=input_folder))
+            # if we have a separate input_folder, we assume that it's only passed to
+            # the first job, which then needs to take care of
+            # copying all files to be processed to the folder
+            if job_id == 0 and input_folder is not None:
+                run_kwargs.update(dict(input_folder=input_folder))
 
-        job = job_class(**build_kwargs)
+            job = job_class(**build_kwargs)
 
-        # jobs can be given an identifier, in order to run a job with
-        # the same class (but different parameters) twice
-        # for example running segmentation.IlastikPrediction
-        # for two different projects
-        identifier = kwarg_dict.get('identifier', None)
-        if identifier is not None:
-            job.identifier = identifier
-        job_name = job.name
+            # jobs can be given an identifier, in order to run a job with
+            # the same class (but different parameters) twice
+            # for example running segmentation.IlastikPrediction
+            # for two different projects
+            identifier = kwarg_dict.get('identifier', None)
+            if identifier is not None:
+                job.identifier = identifier
+            job_name = job.name
 
-        if force_recompute is not None:
-            run_kwargs.update(dict(force_recompute=force_recompute))
+            if force_recompute is not None:
+                run_kwargs.update(dict(force_recompute=force_recompute))
 
-        try:
-            state = job(folder, **run_kwargs)
-        except Exception as e:
-            status[job_name] = 'errored'
+            try:
+                state = job(folder, **run_kwargs)
+            except Exception as e:
+                status[job_name] = 'errored'
+                _dump_status(status_file, status)
+                raise e
+
+            status[job_name] = state
             _dump_status(status_file, status)
-            raise e
-
-        status[job_name] = state
-        _dump_status(status_file, status)

@@ -4,7 +4,7 @@ import json
 from abc import ABC
 from glob import glob
 
-from .util import open_file, FileLock
+from .util import open_file, get_file_lock
 
 
 class BatchJob(ABC):
@@ -39,6 +39,8 @@ class BatchJob(ABC):
      'invalid_inputs': [],  # list of inputs that are not available or have an issue
      'failed_outputs': []}  # list of outputs that were not computed or have an issue
     """
+    # by default, we lock the whole folder and don't need to lock the individual jobs
+    lock_job = False
 
     @staticmethod
     def check_keys(keys):
@@ -103,7 +105,7 @@ class BatchJob(ABC):
 
     def lock(self, folder):
         lock_path = os.path.join(folder, 'batchlib', self.name + '.lock')
-        return FileLock(lock_path)
+        return get_file_lock(lock_path, self.lock_job)
 
     def get_status(self, folder):
         stat_file = self.status_file(folder)
