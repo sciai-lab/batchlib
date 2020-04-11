@@ -23,7 +23,6 @@ class Preprocess(BatchJob):
         channel_dims = [3, 2, 2, 2]
         super().__init__(input_pattern='*.tiff', output_ext=output_ext,
                          output_key=channel_names_, output_ndim=channel_dims)
-        self.runners = {'default': self.run}
 
     def _reorder(self, im):
         im_new = np.zeros_like(im)
