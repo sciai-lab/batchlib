@@ -104,7 +104,7 @@ class BatchJob(ABC):
         outputs = [os.path.join(folder, name + self.output_ext) for name in names]
         return outputs
 
-    def get_inputs(self, folder, input_folder, status, force_recompute):
+    def get_inputs(self, folder, input_folder, status, force_recompute, ignore_invalid_inputs):
         state = status.get('state', 'processed')
 
         in_pattern = os.path.join(input_folder, self.input_pattern)
@@ -120,7 +120,12 @@ class BatchJob(ABC):
             else:
                 msg = "%i inputs are invalid, fix them and rerun this task" % len(invalid_inputs)
             self.update_status(folder, status, invalid_inputs=invalid_inputs)
-            raise RuntimeError(msg)
+
+            if ignore_invalid_inputs:
+                # TODO log warning
+                pass
+            else:
+                raise RuntimeError(msg)
 
         # force recompute means we just recompute for everything without
         # checking if results are present
@@ -144,15 +149,31 @@ class BatchJob(ABC):
 
         return input_files
 
+    def check_outputs(self, output_files, folder, status, ignore_failed_outputs):
+        # TODO output validation can be expensive, so we might want to parallelize
+        # validate the outputs and update the status
+        failed_outputs = self.get_invalid_outputs(output_files)
+        if len(failed_outputs) > 0:
+            state = status.get('state', 'processed')
+            if state == 'failed_outputs':
+                n_failed = len(failed_outputs)
+                prev_failed = len(status['failed_outputs'])
+                msg = "%i outpus have failed from %i in previous call" % (n_failed,
+                                                                          prev_failed)
+            else:
+                msg = "%i outputs have failed" % len(failed_outputs)
+
+            self.update_status(folder, status, failed_outputs=failed_outputs)
+
+            if ignore_failed_outputs:
+                # TODO log warning
+                pass
+            else:
+                raise RuntimeError(msg)
+
     def __call__(self, folder, input_folder=None, force_recompute=False,
                  ignore_invalid_inputs=False, ignore_failed_outputs=False,
                  executable=None, **kwargs):
-
-        # TODO implement this
-        if ignore_invalid_inputs:
-            raise NotImplementedError
-        if ignore_failed_outputs:
-            raise NotImplementedError
 
         # make the work dir, that stores all batchlib status and log files
         work_dir = os.path.join(folder, 'batchlib')
@@ -170,7 +191,8 @@ class BatchJob(ABC):
             input_folder_ = folder if input_folder is None else input_folder
 
             # validate and get the input files to be processed
-            input_files = self.get_inputs(folder, input_folder_, status, force_recompute)
+            input_files = self.get_inputs(folder, input_folder_, status,
+                                          force_recompute, ignore_invalid_inputs)
             if len(input_files) == 0:
                 return status.get('state', 'processed')
 
@@ -180,22 +202,8 @@ class BatchJob(ABC):
             # run the actual computation
             self.run(input_files, output_files, **kwargs)
 
-            # TODO refactor in function
-            # TODO output validation can be expensive, so we might want to parallelize
-            # validate the outputs and update the status
-            failed_outputs = self.get_invalid_outputs(output_files)
-            if len(failed_outputs) > 0:
-                state = status.get('state', 'processed')
-                if state == 'failed_outputs':
-                    n_failed = len(failed_outputs)
-                    prev_failed = len(status['failed_outputs'])
-                    msg = "%i outpus have failed from %i in previous call" % (n_failed,
-                                                                              prev_failed)
-                else:
-                    msg = "%i outputs have failed" % len(failed_outputs)
-
-                self.update_status(folder, status, failed_outputs=failed_outputs)
-                raise RuntimeError(msg)
+            # check if all outputs were computed properly
+            self.check_outputs(output_files, folder, status, ignore_failed_outputs)
 
             # if everything went through, we set the state to 'processed'
             status = self.update_status(folder, status, processed=True)
@@ -253,7 +261,7 @@ class BatchJobOnContainer(BatchJob, ABC):
             return None, None
 
         supported_ext = BatchJobOnContainer.supported_container_extensions
-        if ext.lower not in supported_ext:
+        if ext.lower() not in supported_ext:
             ext_str = ", ".join(supported_ext)
             raise ValueError("Invalid container extension %s, expected one of %s" % (ext, ext_str))
 
