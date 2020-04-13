@@ -316,8 +316,8 @@ class BatchJobWithSubfolder(BatchJob):
                  target='default'):
         self.output_folder = output_folder
 
-        super().__init__(input_pattern, output_ext=None,
-                         input_key=None, input_ndim=None,
+        super().__init__(input_pattern, output_ext=output_ext,
+                         input_key=input_key, input_ndim=input_ndim,
                          target='default')
 
     def to_outputs(self, inputs, folder):
