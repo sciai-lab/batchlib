@@ -9,13 +9,14 @@ import h5py
 from batchlib import run_workflow
 from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import IlastikPrediction
+from batchlib.analysis.pixel_level_analysis import PixellevelAnalysis, PixellevelPlots
 
 
 # TODO all kwargs should go into config file
 # NOTE ignore_nvalid_inputs / ignore_failed_outputs are not used yet in the function but will be eventually
 def run_pixel_analysis1(input_folder, folder, n_cpus,
-                        root='/home/covid19/antibodies-nuclei', output_root_name='data-processed',
-                        use_unique_output_folder=False,
+                        root='/home/covid19/antibodies-nuclei', output_root_name='data-processed-new',
+                        use_unique_output_folder=True,
                         force_recompute=False, ignore_invalid_inputs=None, ignore_failed_outputs=None):
     name = 'PixelAnalysisWorkflow1'
 
@@ -33,12 +34,13 @@ def run_pixel_analysis1(input_folder, folder, n_cpus,
     # TODO these should also come from the config!
     in_key = 'raw'
     out_key = 'local_infection'
+    output_folder = "pixelwise_analysis"
 
     barrel_corrector_path = os.path.join(root, 'barrel_correction/barrel_corrector.h5')
     with h5py.File(barrel_corrector_path, 'r') as f:
         barrel_corrector = (f['divisor'][:], f['offset'][:])
 
-    # TODO add analysis job
+
     job_dict = {
         Preprocess: {'run': {'n_jobs': n_cpus,
                              'barrel_corrector': barrel_corrector}},
@@ -46,11 +48,16 @@ def run_pixel_analysis1(input_folder, folder, n_cpus,
                                       'ilastik_project': ilastik_project,
                                       'input_key': in_key,
                                       'output_key': out_key},
-                            'run': {'n_jobs': n_cpus, 'n_threads': n_threads_il}}
+                            'run': {'n_jobs': n_cpus, 'n_threads': n_threads_il}},
+        PixellevelAnalysis: {'build': {'raw_key': in_key,
+                                      'infection_key': out_key,
+                                      'output_folder': output_folder}},
     }
 
     t0 = time.time()
     run_workflow(name, folder, job_dict, input_folder=input_folder)
+    job_dict2 = {PixellevelPlots: {'build': {'input_pattern': f'*.json'}}}
+    run_workflow(name, folder, job_dict2, input_folder=os.path.join(folder, output_folder))
     t0 = time.time() - t0
     print("Run", name, "in", t0, "s")
     return name, t0

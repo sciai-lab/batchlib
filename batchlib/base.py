@@ -58,9 +58,9 @@ class BatchJob(ABC):
             exp_ndim = None if keys is None else [None] * len(keys)
             return ndim, exp_ndim
 
-        if isinstance(ndim, list):
+        if isinstance(ndim, (list, tuple)):
             if len(ndim) != len(keys):
-                raise ValueError("Ivnalid data ndim")
+                raise ValueError("Invalid data ndim")
             exp_ndim = ndim
         else:
             exp_ndim = [ndim] * len(keys)
@@ -295,3 +295,32 @@ class BatchJobOnContainer(BatchJob):
         super().__init__(input_pattern=input_pattern, output_ext=None,
                          input_key=input_key, output_key=output_key,
                          input_ndim=input_ndim, output_ndim=output_ndim)
+
+
+class BatchJobWithSubfolder(BatchJob):
+    """ Base class for batch jobs that output into a folder
+    """
+
+    def __init__(self, input_pattern,
+                 output_folder="", output_ext=None,
+                 input_key=None, input_ndim=None):
+        self.output_folder = output_folder
+
+        super().__init__(input_pattern, output_ext=output_ext,
+                         input_key=input_key, input_ndim=input_ndim,
+                         target='default')
+
+    def to_outputs(self, inputs, folder):
+        names = [os.path.splitext(os.path.split(inp)[1])[0] for inp in inputs]
+        outputs = [os.path.join(folder,
+                                self.output_folder,
+                                name + self.output_ext) for name in names]
+        return outputs
+
+    def __call__(self, folder, **kwargs):
+
+        # create output folder
+        outdir = os.path.join(folder, self.output_folder)
+        os.makedirs(outdir, exist_ok=True)
+
+        super().__call__(folder, **kwargs)
