@@ -13,12 +13,15 @@ from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
 from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
 
+ROOT = '/home/covid19/antibodies-nuclei'
+# ROOT = '/g/kreshuk/pape/Work/covid/antibodies-nuclei'
+
 
 # TODO all kwargs should go into config file
 # NOTE ignore_nvalid_inputs / ignore_failed_outputs are not used yet in the function but will be eventually
 def run_instance_analysis2(input_folder, folder, gpu, n_cpus, batch_size=4,
-                           root='/home/covid19/antibodies-nuclei', output_root_name='data-processed-new',
-                           use_unique_output_folder=True,
+                           root=ROOT, output_root_name='data-processed-new',
+                           use_unique_output_folder=False,
                            force_recompute=False, ignore_invalid_inputs=None, ignore_failed_outputs=None):
     name = 'InstanceAnalysisWorkflow2'
 

@@ -2,7 +2,21 @@
 
 Batch processing for image-analysis on high-throughput screening data; developed for covid19 antibody test set-up.
 
-## Run Analysis Workflows
+## Installation
+
+- install the conda environment via `conda env create -f environment-gpu.yaml` or `conda env create -f environment-gpu.yaml -n custom_env_name`.
+- activate the environment and install `batchlib` using `setup.py`, e.g. via running `pip install -e .` in this directory to install in development mode
+- to check your installation, go to the `antibodies` directory and run the following example:
+``` sh
+python instance_analysis_workflow2.py /home/covid19/data/covid-data-vibor/test <GPU_ID> <N_CPUS> --folder test
+```
+This should run through without throwing an error and create a folder `test` locally containing 9 h5 files with the results per image.
+
+Note: stardist might have issues with newer GCC versions (GCC 9 fails, GCC 7 works)
+
+## Usage & Development
+
+### Run Analysis Workflows
 
 The analysis for antibody screening are in `antibodies`. To run them on IALGPU03, give the path to the input folder and pass optional parameters.
 To run the pixel based analysis workflow (set `n_jobs` to control the number of worker threads):
@@ -13,12 +27,6 @@ To run the instance segmentation based analysis workflow:
 ```sh
 ./instance_analysis_workflow1.py /path/to/input-folder --n_jobs 8
 ```
-
-## Installation
-
-Note: stardist does not work with newer GCC versions (GCC 9 fails, GCC 7 works)
-
-## Usage & Development
 
 `batchlib` operates on a single folder containing the data to process in this batch.
 Its workflows consist of indvidual jobs that apply an operation to files matching a pattern.
