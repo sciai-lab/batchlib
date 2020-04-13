@@ -22,7 +22,7 @@ from ..util.io import open_file
 
 def load_sample(path, raw_key='TRITC_raw', infection_key='local_infection'):
     with open_file(path, mode='r') as f:
-        tritc = f[raw_key]
+        tritc = f[raw_key][:]
         local_infection_probs = f[infection_key][()]
 
     infected = local_infection_probs[0] > 0.5
@@ -143,8 +143,8 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
         self.raw_key = raw_key
         self.infection_key = infection_key
 
-        # prediction and raw image should be 3d (2d + channels)
-        input_ndim = (3, 3)
+        # all inputs should
+        input_ndim = (2, 3)
 
         # identifier allows to run different instances of this job on the same folder
         output_ext = '.json'
