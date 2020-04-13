@@ -109,7 +109,6 @@ class BatchJob(ABC):
 
         in_pattern = os.path.join(input_folder, self.input_pattern)
         input_files = glob(in_pattern)
-
         # check if we have invalid inputs
         invalid_inputs = self.get_invalid_inputs(input_files)
         if len(invalid_inputs) > 0:

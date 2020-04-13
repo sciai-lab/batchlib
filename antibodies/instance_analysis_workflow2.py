@@ -1,6 +1,6 @@
 #! /home/covid19/software/miniconda3/envs/antibodies-gpu/bin/python
 
-import argparse
+import configargparse
 import os
 import time
 import h5py
@@ -13,43 +13,28 @@ from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
 from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
 
-ROOT = '/home/covid19/antibodies-nuclei'
-# ROOT = '/g/kreshuk/pape/Work/covid/antibodies-nuclei'
 
-
-# TODO all kwargs should go into config file
-# NOTE ignore_nvalid_inputs / ignore_failed_outputs are not used yet in the function but will be eventually
-def run_instance_analysis2(input_folder, folder, gpu, n_cpus, batch_size=4,
-                           root=ROOT, output_root_name='data-processed-new',
-                           use_unique_output_folder=False,
-                           force_recompute=False, ignore_invalid_inputs=None, ignore_failed_outputs=None):
+def run_instance_analysis2(config):
     name = 'InstanceAnalysisWorkflow2'
 
     # to allow running on the cpu
-    if gpu < 0:
-        gpu = None
+    if config.gpu < 0:
+        config.gpu = None
 
-    input_folder = os.path.abspath(input_folder)
-    if folder is None:
-        folder = input_folder.replace('covid-data-vibor', output_root_name)
-        if use_unique_output_folder:
-            folder += '_' + name
+    config.input_folder = os.path.abspath(config.input_folder)
+    if config.folder == "":
+        config.folder = config.input_folder.replace('covid-data-vibor', config.output_root_name)
+        if config.use_unique_output_folder:
+            config.folder += '_' + name
 
-    model_root = os.path.join(root, 'stardist/models/pretrained')
+    model_root = os.path.join(config.root, 'stardist/models/pretrained')
     model_name = '2D_dsb2018'
 
-    barrel_corrector_path = os.path.join(root, 'barrel_correction/barrel_corrector.h5')
+    barrel_corrector_path = os.path.join(config.root, 'barrel_correction/barrel_corrector.h5')
     with h5py.File(barrel_corrector_path, 'r') as f:
         barrel_corrector = (f['divisor'][:], f['offset'][:])
 
-    # TODO these should also come from the config!
-    in_key = 'raw'
-    bd_key = 'pmap_tritc'
-    mask_key = 'mask'
-    nuc_key = 'nucleus_segmentation'
-    seg_key = 'cell_segmentation'
-
-    torch_model_path = os.path.join(root,
+    torch_model_path = os.path.join(config.root,
                                     'unet_segmentation/sample_models/fg_boundaries_best_checkpoint.pytorch')
     torch_model_class = UNet2D
     torch_model_kwargs = {
@@ -61,38 +46,42 @@ def run_instance_analysis2(input_folder, folder, gpu, n_cpus, batch_size=4,
 
     # TODO add analysis job
     job_dict = {
-        Preprocess: {'run': {'n_jobs': n_cpus,
+        Preprocess: {'run': {'n_jobs': config.n_cpus,
                              'barrel_corrector': barrel_corrector}},
-        TorchPrediction: {'build': {'input_key': in_key,
-                                    'output_key': [mask_key, bd_key],
+        TorchPrediction: {'build': {'input_key': config.in_key,
+                                    'output_key': [config.mask_key, config.bd_key],
                                     'model_path': torch_model_path,
                                     'model_class': torch_model_class,
                                     'model_kwargs': torch_model_kwargs,
                                     'input_channel': 2},
-                          'run': {'gpu_id': gpu,
-                                  'batch_size': batch_size,
+                          'run': {'gpu_id': config.gpu,
+                                  'batch_size': config.batch_size,
                                   'threshold_channels': {0: 0.5}}},
         StardistPrediction: {'build': {'model_root': model_root,
                                        'model_name': model_name,
-                                       'input_key': in_key,
-                                       'output_key': nuc_key,
+                                       'input_key': config.in_key,
+                                       'output_key': config.nuc_key,
                                        'input_channel': 0},
-                             'run': {'gpu_id': gpu}},
-        SeededWatershed: {'build': {'pmap_key': bd_key,
-                                    'seed_key': nuc_key,
-                                    'output_key': seg_key,
-                                    'mask_key': mask_key},
+                             'run': {'gpu_id': config.gpu}},
+        SeededWatershed: {'build': {'pmap_key': config.bd_key,
+                                    'seed_key': config.nuc_key,
+                                    'output_key': config.seg_key,
+                                    'mask_key': config.mask_key},
                           'run': {'erode_mask': 3,
                                   'dilate_seeds': 3,
-                                  'n_jobs': n_cpus}},
-        CellLevelAnalysis: {'build': {'raw_key': in_key,
-                                      'nuc_seg_key': nuc_key,
-                                      'cell_seg_key': seg_key},
-                            'run': {'gpu_id': gpu}}
+                                  'n_jobs': config.n_cpus}},
+        CellLevelAnalysis: {'build': {'raw_key': config.in_key,
+                                      'nuc_seg_key': config.nuc_key,
+                                      'cell_seg_key': config.seg_key},
+                            'run': {'gpu_id': config.gpu}}
     }
 
     t0 = time.time()
-    run_workflow(name, folder, job_dict, input_folder=input_folder, force_recompute=force_recompute)
+    run_workflow(name,
+                 config.folder,
+                 job_dict,
+                 input_folder=config.input_folder,
+                 force_recompute=config.force_recompute)
     t0 = time.time() - t0
     print("Run", name, "in", t0, "s")
     return name, t0
@@ -107,11 +96,28 @@ if __name__ == '__main__':
     /home/covid19/data/data-processed/<INPUT_FOLDER_NAME>, which will be
     overriden if this parameter is specified
     """
-    parser = argparse.ArgumentParser(description=doc)
-    parser.add_argument('input_folder', type=str, help='folder with input files as tifs')
-    parser.add_argument('gpu', type=int, help='id of gpu for this job')
-    parser.add_argument('n_cpus', type=int, help='number of cpus')
-    parser.add_argument('--folder', type=str, default=None, help=fhelp)
+    parser = configargparse.ArgumentParser(description=doc,
+                                           default_config_files=['antibodies/configs/instance_analysis_2.conf'])
+    parser.add('-c', '--config', is_config_file=True, help='config file path')
+    parser.add('--input_folder', required=True, type=str, help='folder with input files as tifs')
+    parser.add('--gpu', required=True, type=int, help='id of gpu for this job')
+    parser.add('--n_cpus', required=True, type=int, help='number of cpus')
+    parser.add('--folder', required=True, type=str, default="", help=fhelp)
+
+    # options
+    parser.add("--batch_size", default=4)
+    parser.add("--root", default='/home/covid19/antibodies-nuclei')
+    parser.add("--output_root_name", default='data-processed-new')
+    parser.add("--use_unique_output_folder", default=False)
+    parser.add("--force_recompute", default=False)
+    # NOTE ignore_nvalid_inputs / ignore_failed_outputs are not used yet in the function but will be eventually
+    parser.add("--ignore_invalid_inputs", default=None)
+    parser.add("--ignore_failed_outputs", default=None)
+    parser.add("--in_key", default='raw', type=str)
+    parser.add("--bd_key", default='pmap_tritc', type=str)
+    parser.add("--mask_key", default='mask', type=str)
+    parser.add("--nuc_key", default='nucleus_segmentation', type=str)
+    parser.add("--seg_key", default='cell_segmentation', type=str)
 
     args = parser.parse_args()
-    run_instance_analysis2(args.input_folder, args.folder, args.gpu, args.n_cpus)
+    run_instance_analysis2(args)
