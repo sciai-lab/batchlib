@@ -26,8 +26,6 @@ def run_pixel_analysis1(config):
 
     n_threads_il = None if config.n_cpus == 1 else 4
 
-    # TODO these should also come from the config!
-
     barrel_corrector_path = os.path.join(config.root, 'barrel_correction/barrel_corrector.h5')
     with h5py.File(barrel_corrector_path, 'r') as f:
         barrel_corrector = (f['divisor'][:], f['offset'][:])
@@ -40,7 +38,7 @@ def run_pixel_analysis1(config):
                                       'input_key': config.in_key,
                                       'output_key': config.out_key},
                             'run': {'n_jobs': config.n_cpus, 'n_threads': n_threads_il}},
-        PixellevelAnalysis: {'build': {'raw_key': config.in_key,
+        PixellevelAnalysis: {'build': {'raw_key': config.in_analysis_key,
                                        'infection_key': config.out_key,
                                        'output_folder': config.output_folder}},
     }
@@ -74,7 +72,8 @@ if __name__ == '__main__':
     parser.add('--folder', required=True, type=str, default=None, help=fhelp)
 
     # options
-    parser.add("--in_key", default='TRITC_raw')
+    parser.add("--in_key", default='raw')
+    parser.add("--in_analysis_key", default='TRITC_raw')
     parser.add("--out_key", default='local_infection')
     parser.add("--output_folder", default="pixelwise_analysis")
     parser.add("--root", default='/home/covid19/antibodies-nuclei', type=str)
