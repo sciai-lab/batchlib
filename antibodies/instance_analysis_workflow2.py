@@ -17,8 +17,8 @@ from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
 # TODO all kwargs should go into config file
 # NOTE ignore_nvalid_inputs / ignore_failed_outputs are not used yet in the function but will be eventually
 def run_instance_analysis2(input_folder, folder, gpu, n_cpus, batch_size=4,
-                           root='/home/covid19/antibodies-nuclei', output_root_name='data-processed',
-                           use_unique_output_folder=False,
+                           root='/home/covid19/antibodies-nuclei', output_root_name='data-processed-new',
+                           use_unique_output_folder=True,
                            force_recompute=False, ignore_invalid_inputs=None, ignore_failed_outputs=None):
     name = 'InstanceAnalysisWorkflow2'
 
