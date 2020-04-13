@@ -41,6 +41,20 @@ def compute_weighted_tritc(mask, intensity, q):
         return float(np.quantile(intensity[mask], q))
 
 
+def ratio(a, b):
+    if b != 0:
+        return a / b
+    else:
+        return 0.
+
+
+def difference_over_sum(a, b):
+    if (a + b) != 0:
+        return (a - b) / (a + b)
+    else:
+        return 0.
+
+
 def all_stats(input_file, output_file, analysis_folde_name="pixelwise_analysis",
               raw_key='raw', infection_key='local_infection'):
 
@@ -52,20 +66,25 @@ def all_stats(input_file, output_file, analysis_folde_name="pixelwise_analysis",
     infected, not_infected, tritc = load_sample(input_file, raw_key, infection_key)
     result = {}
 
-    nominator = compute_weighted_tritc(infected, tritc, "mean")
-    denominator = compute_weighted_tritc(not_infected, tritc, "mean")
-    result[f"ratio_of_mean_over_mean"] = nominator / denominator
-    result[f"dos_of_mean_over_mean"] = (nominator - denominator) / (nominator + denominator)
+    infected_tritc_intensity = compute_weighted_tritc(infected, tritc, "mean")
+    not_infected_tritc_intensity = compute_weighted_tritc(not_infected, tritc, "mean")
 
+    result[f"ratio_of_mean_over_mean"] = ratio(infected_tritc_intensity,
+                                               not_infected_tritc_intensity)
+    result[f"dos_of_mean_over_mean"] = difference_over_sum(infected_tritc_intensity,
+                                                           not_infected_tritc_intensity)
+
+    # compute statistics for different choices of quantiles (q = 0.5 == median)
     for q in [0.5]:
-        nominator = compute_weighted_tritc(infected, tritc, q)
-        denominator = compute_weighted_tritc(not_infected, tritc, 1 - q)
-        result[f"ratio_of_q{q:0.1f}_over_q{(1-q):0.1f}"] = nominator / denominator
-        result[f"dos_of_q{q:0.1f}_over_q{(1-q):0.1f}"] = nominator / denominator
+        infected_tritc_intensity = compute_weighted_tritc(infected, tritc, q)
+        not_infected_tritc_intensity = compute_weighted_tritc(not_infected, tritc, 1 - q)
+        result[f"ratio_of_q{q:0.1f}_over_q{(1-q):0.1f}"] = ratio(infected_tritc_intensity,
+                                                                 not_infected_tritc_intensity)
+        result[f"dos_of_q{q:0.1f}_over_q{(1-q):0.1f}"] = difference_over_sum(infected_tritc_intensity,
+                                                                             not_infected_tritc_intensity)
 
     with open(output_file, 'w') as fp:
         json.dump(result, fp)
-
 
 def all_plots(json_files, out_path):
 
