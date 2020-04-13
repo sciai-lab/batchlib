@@ -5,15 +5,13 @@ import imageio
 import numpy as np
 from tqdm import tqdm
 
-from ..base import BatchJob
+from ..base import BatchJobOnContainer
 from ..util import barrel_correction, open_file, write_viewer_attributes, set_skip
 
 DEFAULT_CHANNEL_NAMES = ['DAPI', 'WF_GFP', 'TRITC']
 
 
-# TODO
-# - something still locks gil, probably h5py. should try processs pool
-class Preprocess(BatchJob):
+class Preprocess(BatchJobOnContainer):
 
     def __init__(self, channel_names=DEFAULT_CHANNEL_NAMES, output_ext='.h5'):
         if len(channel_names) != 3:

@@ -41,14 +41,17 @@ class BatchJob(ABC):
     lock_job = False
 
     def __init__(self, input_pattern, output_ext=None, identifier=None):
-        if not self.hasattr('run'):
+        if not hasattr(self, 'run'):
             raise AttributeError("Class deriving from BatchJob must implement run method")
 
         self.input_pattern = input_pattern
         self.input_ext = os.path.splitext(self.input_pattern)[1]
         self.output_ext = self.input_ext if output_ext is None else output_ext
-        if (identifier is not None) or (not isinstance(identifier, str)):
-            raise ValueError("Expect identifier to  be None or string")
+
+        is_none = identifier is None
+        is_str = isinstance(identifier, str)
+        if not (is_none or is_str):
+            raise ValueError("Expect identifier to  be None or string, not %s" % type(identifier))
         self.identifier = identifier
 
     @property
@@ -237,9 +240,6 @@ class BatchJobOnContainer(BatchJob, ABC):
     def __init__(self, input_pattern, output_ext=None, identifier=None,
                  input_key=None, output_key=None,
                  input_ndim=None, output_ndim=None):
-        ext = os.path.splitext(input_pattern)[1]
-        if ext.lower() not in self.supported_extensions:
-            raise ValueError("Invalid extension %s in input pattern" % ext)
         super().__init__(input_pattern=input_pattern,
                          output_ext=output_ext,
                          identifier=identifier)
