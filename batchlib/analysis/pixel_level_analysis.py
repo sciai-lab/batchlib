@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 from matplotlib.pyplot import imshow
 
 import pathlib
-import argparse
 import os
 import os.path
 from concurrent import futures
@@ -86,6 +85,7 @@ def all_stats(input_file, output_file, analysis_folde_name="pixelwise_analysis",
     with open(output_file, 'w') as fp:
         json.dump(result, fp)
 
+
 def all_plots(json_files, out_path):
 
     # load first json file to get list of key
@@ -144,7 +144,7 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
         self.infection_key = infection_key
 
         # prediction and raw image should be 3d (2d + channels)
-        input_ndim = (3, 3)
+        input_ndim = (2, 3)
 
         # identifier allows to run different instances of this job on the same folder
         output_ext = '.json'
