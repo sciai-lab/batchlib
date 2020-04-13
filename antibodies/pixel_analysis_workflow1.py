@@ -33,6 +33,7 @@ def run_pixel_analysis1(input_folder, folder, n_cpus,
 
     # TODO these should also come from the config!
     in_key = 'raw'
+    in_analysis_key = 'TRITC_raw'
     out_key = 'local_infection'
     output_folder = "pixelwise_analysis"
 
@@ -49,7 +50,7 @@ def run_pixel_analysis1(input_folder, folder, n_cpus,
                                       'input_key': in_key,
                                       'output_key': out_key},
                             'run': {'n_jobs': n_cpus, 'n_threads': n_threads_il}},
-        PixellevelAnalysis: {'build': {'raw_key': in_key,
+        PixellevelAnalysis: {'build': {'raw_key': in_analysis_key,
                                       'infection_key': out_key,
                                       'output_folder': output_folder}},
     }

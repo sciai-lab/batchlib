@@ -20,9 +20,9 @@ from ..util.plate_visualizations import well_plot
 from ..util.io import open_file
 
 
-def load_sample(path, raw_key='raw', infection_key='local_infection'):
+def load_sample(path, raw_key='TRITC_raw', infection_key='local_infection'):
     with open_file(path, mode='r') as f:
-        tritc = f[raw_key][2]
+        tritc = f[raw_key]
         local_infection_probs = f[infection_key][()]
 
     infected = local_infection_probs[0] > 0.5
@@ -56,7 +56,7 @@ def difference_over_sum(a, b):
 
 
 def all_stats(input_file, output_file, analysis_folde_name="pixelwise_analysis",
-              raw_key='raw', infection_key='local_infection'):
+              raw_key='TRITC_raw', infection_key='local_infection'):
 
     root_path, filename = os.path.split(input_file)
     # make sure the analysis folder exists
@@ -133,7 +133,7 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
     """
 
     def __init__(self,
-                 raw_key='raw',
+                 raw_key='TRITC_raw',
                  infection_key='local_infection',
                  input_pattern='*.h5',
                  output_folder="pixelwise_analysis",
