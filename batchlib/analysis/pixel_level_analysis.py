@@ -17,33 +17,18 @@ from tqdm import tqdm
 from time import sleep
 from ..base import BatchJob, BatchJobWithSubfolder
 from ..util.plate_visualizations import well_plot
+from ..util.io import open_file
 
 
-def open_hdf5(filename, *args, **kwargs):
-    while True:
-        try:
-            hdf5_file = h5py.File(filename, *args, **kwargs)
-            break  # Success!
-        except OSError:
-            print(f"waiting on {filename}")
-            sleep(5)  # Wait a bit
-    return hdf5_file
-
-
-def load_sample(path):
-    with open_hdf5(path, mode='r') as f:
-        tritc = f['raw'][2]
-        local_infection_probs = f['local_infection'][()]
+def load_sample(path, raw_key='raw', infection_key='local_infection'):
+    with open_file(path, mode='r') as f:
+        tritc = f[raw_key][2]
+        local_infection_probs = f[infection_key][()]
 
     infected = local_infection_probs[0] > 0.5
     not_infected = local_infection_probs[1] > 0.5
 
     return infected, not_infected, tritc
-
-
-def create_folder(*split_path):
-    new_folder = os.path.join(*split_path)
-    pathlib.Path(new_folder).mkdir(parents=True, exist_ok=True)
 
 
 def compute_weighted_tritc(mask, intensity, q):
@@ -55,16 +40,16 @@ def compute_weighted_tritc(mask, intensity, q):
     else:
         return float(np.quantile(intensity[mask], q))
 
-# this is what should be run for each h5 file
 
+def all_stats(input_file, output_file, analysis_folde_name="pixelwise_analysis",
+              raw_key='raw', infection_key='local_infection'):
 
-def all_stats(input_file, output_file, analysis_folde_name="pixelwise_analysis"):
-
-    print(input_file)
     root_path, filename = os.path.split(input_file)
-    create_folder(root_path, analysis_folde_name)
+    # make sure the analysis folder exists
+    analysis_folder = os.path.join(root_path, analysis_folde_name)
+    os.makedirs(analysis_folder, exist_ok=True)
 
-    infected, not_infected, tritc = load_sample(input_file)
+    infected, not_infected, tritc = load_sample(input_file, raw_key, infection_key)
     result = {}
 
     nominator = compute_weighted_tritc(infected, tritc, "mean")
@@ -123,6 +108,7 @@ def all_plots(json_files, out_path):
                   wedge_width=0,
                   title=out_path + "\n" + key)
 
+
 class PixellevelAnalysis(BatchJobWithSubfolder):
     """
     """
@@ -158,13 +144,14 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
     def run(self, input_files, output_files):
 
         def _stat(args):
-            all_stats(*args)        
+            all_stats(*args, raw_key=self.raw_key,
+                      infection_key=self.infection_key)
 
         print("Compute stats for %i input images" % (len(input_files), ))
         with futures.ThreadPoolExecutor(self.n_jobs) as tp:
             list(tqdm(tp.map(_stat,
-                 zip(input_files, output_files)),
-                 total=len(input_files)))
+                             zip(input_files, output_files)),
+                      total=len(input_files)))
 
 
 class PixellevelPlots(BatchJob):
