@@ -16,7 +16,7 @@ def run_pixel_analysis1(config):
     name = 'PixelAnalysisWorkflow1'
 
     input_folder = os.path.abspath(config.input_folder)
-    if config.folder is None or config.folder != "":
+    if config.folder is None or config.folder == "":
         config.folder = input_folder.replace('covid-data-vibor', config.output_root_name)
         if config.use_unique_output_folder:
             config.folder += '_' + name
