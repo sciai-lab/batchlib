@@ -25,9 +25,11 @@ def open_file(path, mode='r', h5_timeout=5, h5_retry=10):
         while n_tries < h5_retry:
             try:
                 return h5py.File(path, mode=mode)
-            except OSError:
+            except OSError as e:
                 sleep(h5_timeout)
                 n_tries += 1
+                if n_tries >= h5_retry:
+                    raise e
 
     elif ext.lower() in Z5_EXTS:
         if z5py is None:

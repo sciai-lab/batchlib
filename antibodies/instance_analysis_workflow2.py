@@ -31,6 +31,7 @@ def run_instance_analysis2(config):
         if config.use_unique_output_folder:
             config.folder += '_' + name
 
+    print("Run", name, "for output folder", config.folder)
     model_root = os.path.join(config.root, 'stardist/models/pretrained')
     model_name = '2D_dsb2018'
 
@@ -103,7 +104,7 @@ def run_instance_analysis2(config):
     return name, t0
 
 
-if __name__ == '__main__':
+def parse_instance_config2():
     doc = """Run instance analysis workflow
     Based on ilastik pixel prediction, stardist nucleus prediction
     and watershed segmentation.
@@ -112,9 +113,10 @@ if __name__ == '__main__':
     /home/covid19/data/data-processed/<INPUT_FOLDER_NAME>, which will be
     overriden if this parameter is specified
     """
+    default_config = os.path.join(os.path.split(__file__)[0], 'configs', 'instance_analysis_2.conf')
     parser = configargparse.ArgumentParser(description=doc,
-                                           default_config_files=['antibodies/configs/instance_analysis_2.conf'])
-    parser.add('-c', '--config', is_config_file=True, help='config file path')
+                                           default_config_files=[default_config])
+    parser.add('-c', '-$-config', is_config_file=True, help='config file path')
     parser.add('--input_folder', required=True, type=str, help='folder with input files as tifs')
     parser.add('--gpu', required=True, type=int, help='id of gpu for this job')
     parser.add('--n_cpus', required=True, type=int, help='number of cpus')
@@ -136,5 +138,9 @@ if __name__ == '__main__':
     parser.add("--nuc_key", default='nucleus_segmentation', type=str)
     parser.add("--seg_key", default='cell_segmentation', type=str)
 
-    args = parser.parse_args()
-    run_instance_analysis2(args)
+    return parser.parse_args()
+
+
+if __name__ == '__main__':
+    config = parse_instance_config2()
+    run_instance_analysis2(config)
