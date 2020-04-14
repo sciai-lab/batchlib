@@ -3,11 +3,12 @@
 import configargparse
 import os
 import time
+from glob import glob
 
 import h5py
 
 from batchlib import run_workflow
-from batchlib.preprocessing import Preprocess
+from batchlib.preprocessing import Preprocess, get_channel_settings
 from batchlib.segmentation import BoundaryAndMaskPrediction, SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
@@ -21,7 +22,7 @@ def run_instance_analysis1(config):
         config.gpu = None
 
     config.input_folder = os.path.abspath(config.input_folder)
-    if config.folder is None or config.folder == "":
+    if config.folder == "":
         config.folder = config.input_folder.replace('covid-data-vibor', config.output_root_name)
         if config.use_unique_output_folder:
             config.folder += '_' + name
@@ -38,9 +39,15 @@ def run_instance_analysis1(config):
 
     n_threads_il = None if config.n_cpus == 1 else 4
 
+    fname = glob(os.path.join(config.input_folder, '*.tiff'))[0]
+    channel_names, settings, reorder = get_channel_settings(fname)
+
     job_dict = {
-        Preprocess: {'run': {'n_jobs': config.n_cpus,
-                             'barrel_corrector': barrel_corrector}},
+        Preprocess: {'build': {'channel_names': channel_names,
+                               'viewer_settings': settings},
+                     'run': {'n_jobs': config.n_cpus,
+                             'barrel_corrector': barrel_corrector,
+                             'reorder': reorder}},
         BoundaryAndMaskPrediction: {'build': {'ilastik_bin': ilastik_bin,
                                               'ilastik_project': ilastik_project,
                                               'input_key': config.in_key,
@@ -68,13 +75,15 @@ def run_instance_analysis1(config):
     }
 
     t0 = time.time()
-    run_workflow(name, config.folder, job_dict, input_folder=config.input_folder)
+    run_workflow(name, config.folder, job_dict,
+                 input_folder=config.input_folder,
+                 ignore_invalid_inputs=config.ignore_invalid_inputs,
+                 ignore_failed_outputs=config.ignore_failed_outputs)
     t0 = time.time() - t0
-    print("Run", name, "in", t0, "s")
     return name, t0
 
 
-if __name__ == '__main__':
+def parse_instance_config1():
     doc = """Run instance analysis workflow
     Based on torch prediction, stardist nucleus prediction
     and watershed segmentation.
@@ -83,8 +92,10 @@ if __name__ == '__main__':
     /home/covid19/data/data-processed/<INPUT_FOLDER_NAME>, which will be
     overriden if this parameter is specified
     """
+    default_config = os.path.join(os.path.split(__file__)[0], 'configs', 'instance_analysis_1.conf')
     parser = configargparse.ArgumentParser(description=doc,
-                                           default_config_files=['antibodies/configs/instance_analysis_2.conf'])
+                                           default_config_files=[default_config],
+                                           config_file_parser_class=configargparse.YAMLConfigFileParser)
     parser.add('-c', '--config', is_config_file=True, help='config file path')
     parser.add('--input_folder', required=True, type=str, help='folder with input files as tifs')
     parser.add('--gpu', required=True, type=int, help='id of gpu for this job')
@@ -93,18 +104,20 @@ if __name__ == '__main__':
 
     parser.add('--root', default='/home/covid19/antibodies-nuclei')
     parser.add('--output_root_name', default='data-processed-new')
-    parser.add('--use_unique_output_folder', default=True)
+    parser.add('--use_unique_output_folder', default=False)
     parser.add('--force_recompute', default=False)
-
-    # NOTE ignore_nvalid_inputs / ignore_failed_outputs are not used yet in the function but will be eventually
     parser.add('--ignore_invalid_inputs', default=None)
     parser.add('--ignore_failed_outputs', default=None)
 
     parser.add('--in_key', default='raw', type=str)
-    parser.add('--bd_key', default='pmap_tritc', type=str)
-    parser.add('--mask_key', default='mask', type=str)
+    parser.add('--bd_key', default='pmap_tritc_ilastik', type=str)
+    parser.add('--mask_key', default='mask_ilastik', type=str)
     parser.add('--nuc_key', default='nucleus_segmentation', type=str)
-    parser.add('--seg_key', default='cell_segmentation', type=str)
+    parser.add('--seg_key', default='cell_segmentation_ilastik', type=str)
 
-    args = parser.parse_args()
-    run_instance_analysis1(args)
+    return parser.parse_args()
+
+
+if __name__ == '__main__':
+    config = parse_instance_config1()
+    run_instance_analysis1(config)

@@ -1,19 +1,10 @@
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-# import seaborn as sns
-from matplotlib.pyplot import imshow
-
-import pathlib
 import os
-import os.path
-from concurrent import futures
-from glob import glob
 import json
-import h5py
+from concurrent import futures
+
 import numpy as np
 from tqdm import tqdm
-from time import sleep
+
 from ..base import BatchJob, BatchJobWithSubfolder
 from ..util.plate_visualizations import well_plot
 from ..util.io import open_file
@@ -180,12 +171,12 @@ class PixellevelPlots(BatchJob):
                  output_ext="",
                  identifier=None):
 
-        super().__init__(input_pattern,
-                         output_ext=output_ext)
-        self.identifier = identifier
+        super().__init__(input_pattern=input_pattern,
+                         output_ext=output_ext,
+                         identifier=identifier)
 
     def run(self, input_files, output_files):
-        print("plot histograms for %i input jsons" % (len(input_files), ))
+        print("Plot histograms for %i input jsons" % (len(input_files), ))
         output_folder = os.path.split(output_files[0])[0]
         all_plots(input_files, output_folder)
 

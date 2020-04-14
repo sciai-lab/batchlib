@@ -24,14 +24,11 @@ def run_instance_analysis2(config):
         config.gpu = None
 
     config.input_folder = os.path.abspath(config.input_folder)
-    # FIXME the string is not truely empty. for now, we do hacky check ...
-    # if config.folder == "":
-    if len(config.folder) < 4:
+    if config.folder == "":
         config.folder = config.input_folder.replace('covid-data-vibor', config.output_root_name)
         if config.use_unique_output_folder:
             config.folder += '_' + name
 
-    print("Run", name, "for output folder", config.folder)
     model_root = os.path.join(config.root, 'stardist/models/pretrained')
     model_name = '2D_dsb2018'
 
@@ -57,16 +54,12 @@ def run_instance_analysis2(config):
     fname = glob(os.path.join(config.input_folder, '*.tiff'))[0]
     channel_names, settings, reorder = get_channel_settings(fname)
 
-    # FIXME deactivate this again
-    force_rerun = True
-
     job_dict = {
         Preprocess: {'build': {'channel_names': channel_names,
                                'viewer_settings': settings},
                      'run': {'n_jobs': config.n_cpus,
                              'barrel_corrector': barrel_corrector,
-                             'reorder': reorder,
-                             'force_recompute': force_rerun}},
+                             'reorder': reorder}},
         TorchPrediction: {'build': {'input_key': config.in_key,
                                     'output_key': [config.mask_key, config.bd_key],
                                     'model_path': torch_model_path,
@@ -101,9 +94,10 @@ def run_instance_analysis2(config):
                  config.folder,
                  job_dict,
                  input_folder=config.input_folder,
-                 force_recompute=config.force_recompute)
+                 force_recompute=config.force_recompute,
+                 ignore_invalid_inputs=config.ignore_invalid_inputs,
+                 ignore_failed_outputs=config.ignore_failed_outputs)
     t0 = time.time() - t0
-    print("Run", name, "in", t0, "s")
     return name, t0
 
 
@@ -118,8 +112,10 @@ def parse_instance_config2():
     """
     default_config = os.path.join(os.path.split(__file__)[0], 'configs', 'instance_analysis_2.conf')
     parser = configargparse.ArgumentParser(description=doc,
-                                           default_config_files=[default_config])
-    parser.add('-c', '-$-config', is_config_file=True, help='config file path')
+                                           default_config_files=[default_config],
+                                           config_file_parser_class=configargparse.YAMLConfigFileParser)
+
+    parser.add('-c', '--config', is_config_file=True, help='config file path')
     parser.add('--input_folder', required=True, type=str, help='folder with input files as tifs')
     parser.add('--gpu', required=True, type=int, help='id of gpu for this job')
     parser.add('--n_cpus', required=True, type=int, help='number of cpus')
@@ -131,9 +127,9 @@ def parse_instance_config2():
     parser.add("--output_root_name", default='data-processed-new')
     parser.add("--use_unique_output_folder", default=False)
     parser.add("--force_recompute", default=False)
-    # NOTE ignore_invalid_inputs / ignore_failed_outputs are not used yet in the function but will be eventually
     parser.add("--ignore_invalid_inputs", default=None)
     parser.add("--ignore_failed_outputs", default=None)
+
     parser.add("--in_key", default='raw', type=str)
     parser.add("--in_key_analysis", default='raw', type=str)
     parser.add("--bd_key", default='pmap_tritc', type=str)
