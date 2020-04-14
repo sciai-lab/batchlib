@@ -1,1 +1,1 @@
-from .preprocess import Preprocess
+from .preprocess import Preprocess, get_channel_settings

@@ -2,7 +2,7 @@ import os
 from tqdm import tqdm
 
 from batchlib.base import BatchJobOnContainer
-from batchlib.util import open_file, write_viewer_attributes, normalize_percentile
+from batchlib.util import open_file, normalize_percentile
 
 
 class StardistPrediction(BatchJobOnContainer):
@@ -33,10 +33,7 @@ class StardistPrediction(BatchJobOnContainer):
         labels, _ = model.predict_instances(im)
         labels = labels.astype('uint32')
         with open_file(out_path, 'a') as f:
-            ds = f.require_dataset(self.output_key, shape=labels.shape, compression='gzip',
-                                   dtype=labels.dtype)
-            ds[:] = labels
-            write_viewer_attributes(ds, labels, 'Glasbey')
+            self.write_result(f, self.output_key, labels)
 
     def run(self, input_files, output_files, gpu_id=None):
 
