@@ -4,16 +4,16 @@ import os
 
 
 class Outliers:
-    def __init__(self):
+    def __init__(self, root_table_dir):
         """
-        Parses CSV files stored in 'tagged_experiments', where each CSV corresponds to a given plate, and stores
+        Parses CSV files stored in 'root_table_dir', where each CSV corresponds to a given plate, and stores
         the results in a dictionary of the form {PLATE_NAME: TAGGER_STATE}, where TAGGER_STATE is a dict
         containing all images in a given PLATE_NAME together with their labels: (0 - accepted, 1 - outlier, -1 - skipped)
         """
 
         self.outliers = {}
 
-        for csv_file in glob.glob('tagged_experiments/*.csv'):
+        for csv_file in glob.glob(os.path.join(root_table_dir, '*.csv')):
             assert '_tagger_state.csv' in csv_file
             plate_name = os.path.split(csv_file)[1]
             plate_name = plate_name[:plate_name.find('_tagger')]
