@@ -25,19 +25,19 @@ def run_all(input_folder, gpu, n_cpus,
                                    output_root_name=output_root_name,
                                    use_unique_output_folder=use_unique_output_folder)
     times[name] = rt
-    dump_times(times, input_folder)
+    # dump_times(times, input_folder)
 
-    name, rt = run_instance_analysis1(input_folder, None, gpu, n_cpus,
-                                      output_root_name=output_root_name,
-                                      use_unique_output_folder=use_unique_output_folder)
-    times[name] = rt
-    dump_times(times, input_folder)
+    # name, rt = run_instance_analysis1(input_folder, None, gpu, n_cpus,
+    #                                   output_root_name=output_root_name,
+    #                                   use_unique_output_folder=use_unique_output_folder)
+    # times[name] = rt
+    # dump_times(times, input_folder)
 
-    name, rt = run_instance_analysis2(input_folder, None, gpu, n_cpus,
-                                      output_root_name=output_root_name,
-                                      use_unique_output_folder=use_unique_output_folder)
-    times[name] = rt
-    dump_times(times, input_folder)
+    # name, rt = run_instance_analysis2(input_folder, None, gpu, n_cpus,
+    #                                   output_root_name=output_root_name,
+    #                                   use_unique_output_folder=use_unique_output_folder)
+    # times[name] = rt
+    # dump_times(times, input_folder)
 
 
 if __name__ == '__main__':

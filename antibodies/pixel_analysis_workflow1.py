@@ -16,7 +16,9 @@ def run_pixel_analysis1(config):
     name = 'PixelAnalysisWorkflow1'
 
     input_folder = os.path.abspath(config.input_folder)
-    if config.folder is None or config.folder == "":
+    # FIXME the string is not truely empty. for now, we do hacky check ...
+    # if config.folder == "":
+    if len(config.folder) < 4:
         config.folder = input_folder.replace('covid-data-vibor', config.output_root_name)
         if config.use_unique_output_folder:
             config.folder += '_' + name
@@ -64,8 +66,9 @@ if __name__ == '__main__':
     /home/covid19/data/data-processed/<INPUT_FOLDER_NAME>, which will be
     overriden if this parameter is specified
     """
+    default_config = os.path.join(os.path.split(__file__)[0], 'configs', 'pixelwise_analysis.conf')
     parser = configargparse.ArgumentParser(description=doc,
-                                           default_config_files=['antibodies/configs/pixelwise_analysis.conf'])
+                                           default_config_files=[default_config])
     parser.add('-c', '--config', is_config_file=True, help='config file path')
     parser.add('--input_folder', required=True, type=str, help='folder with input files as tifs')
     parser.add('--n_cpus', required=True, type=int, help='number of cpus')
@@ -73,7 +76,7 @@ if __name__ == '__main__':
 
     # options
     parser.add("--in_key", default='raw')
-    parser.add("--in_analysis_key", default='TRITC_raw')
+    parser.add("--in_analysis_key", default='TRITC')
     parser.add("--out_key", default='local_infection')
     parser.add("--output_folder", default="pixelwise_analysis")
     parser.add("--root", default='/home/covid19/antibodies-nuclei', type=str)

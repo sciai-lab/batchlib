@@ -133,7 +133,7 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
     """
 
     def __init__(self,
-                 raw_key='TRITC_raw',
+                 raw_key='TRITC',
                  infection_key='local_infection',
                  input_pattern='*.h5',
                  output_folder="pixelwise_analysis",

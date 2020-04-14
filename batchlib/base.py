@@ -98,7 +98,8 @@ class BatchJob(ABC):
         return status
 
     def to_inputs(self, outputs, input_folder):
-        names = [os.path.splitext(os.path.split(out)[1])[0] for out in outputs]
+        ext_len = len(self.output_ext)
+        names = [os.path.split(out)[1][:-ext_len] for out in outputs]
         inputs = [os.path.join(input_folder, name + self.input_ext) for name in names]
         return inputs
 
@@ -337,7 +338,8 @@ class BatchJobWithSubfolder(BatchJobOnContainer, ABC):
         self.output_folder = output_folder
 
         super().__init__(input_pattern, output_ext=output_ext,
-                         input_key=input_key, input_ndim=input_ndim)
+                         input_key=input_key, input_ndim=input_ndim,
+                         identifier=identifier)
 
     def to_outputs(self, inputs, folder):
         names = [os.path.splitext(os.path.split(inp)[1])[0] for inp in inputs]

@@ -31,6 +31,7 @@ def run_instance_analysis2(config):
         if config.use_unique_output_folder:
             config.folder += '_' + name
 
+    print("Run", name, "for output folder", config.folder)
     model_root = os.path.join(config.root, 'stardist/models/pretrained')
     model_name = '2D_dsb2018'
 
@@ -48,21 +49,24 @@ def run_instance_analysis2(config):
         'testing': True
     }
 
-    analysis_key = config.in_key_analysis
     analysis_identifier = None
-    if analysis_key != 'raw':
-        analysis_identifier = analysis_key
+    if config.in_key_analysis != 'raw':
+        analysis_identifier = config.in_key_analysis
 
     # get the correct channel ordering and names for this data
     fname = glob(os.path.join(config.input_folder, '*.tiff'))[0]
     channel_names, settings, reorder = get_channel_settings(fname)
+
+    # FIXME deactivate this again
+    force_rerun = True
 
     job_dict = {
         Preprocess: {'build': {'channel_names': channel_names,
                                'viewer_settings': settings},
                      'run': {'n_jobs': config.n_cpus,
                              'barrel_corrector': barrel_corrector,
-                             'reorder': reorder}},
+                             'reorder': reorder,
+                             'force_recompute': force_rerun}},
         TorchPrediction: {'build': {'input_key': config.in_key,
                                     'output_key': [config.mask_key, config.bd_key],
                                     'model_path': torch_model_path,
@@ -85,7 +89,7 @@ def run_instance_analysis2(config):
                           'run': {'erode_mask': 3,
                                   'dilate_seeds': 3,
                                   'n_jobs': config.n_cpus}},
-        CellLevelAnalysis: {'build': {'raw_key': analysis_key,
+        CellLevelAnalysis: {'build': {'raw_key': config.in_key_analysis,
                                       'nuc_seg_key': config.nuc_key,
                                       'cell_seg_key': config.seg_key,
                                       'identifier': analysis_identifier},
@@ -103,7 +107,7 @@ def run_instance_analysis2(config):
     return name, t0
 
 
-if __name__ == '__main__':
+def parse_instance_config2():
     doc = """Run instance analysis workflow
     Based on ilastik pixel prediction, stardist nucleus prediction
     and watershed segmentation.
@@ -112,9 +116,10 @@ if __name__ == '__main__':
     /home/covid19/data/data-processed/<INPUT_FOLDER_NAME>, which will be
     overriden if this parameter is specified
     """
+    default_config = os.path.join(os.path.split(__file__)[0], 'configs', 'instance_analysis_2.conf')
     parser = configargparse.ArgumentParser(description=doc,
-                                           default_config_files=['antibodies/configs/instance_analysis_2.conf'])
-    parser.add('-c', '--config', is_config_file=True, help='config file path')
+                                           default_config_files=[default_config])
+    parser.add('-c', '-$-config', is_config_file=True, help='config file path')
     parser.add('--input_folder', required=True, type=str, help='folder with input files as tifs')
     parser.add('--gpu', required=True, type=int, help='id of gpu for this job')
     parser.add('--n_cpus', required=True, type=int, help='number of cpus')
@@ -136,5 +141,9 @@ if __name__ == '__main__':
     parser.add("--nuc_key", default='nucleus_segmentation', type=str)
     parser.add("--seg_key", default='cell_segmentation', type=str)
 
-    args = parser.parse_args()
-    run_instance_analysis2(args)
+    return parser.parse_args()
+
+
+if __name__ == '__main__':
+    config = parse_instance_config2()
+    run_instance_analysis2(config)

@@ -101,8 +101,8 @@ class CellLevelAnalysis(BatchJobOnContainer):
                          input_key=[self.raw_key,
                                     self.nuc_seg_key,
                                     self.cell_seg_key],
-                         input_ndim=input_ndim)
-        self.identifier = identifier
+                         input_ndim=input_ndim,
+                         identifier=identifier)
 
     def run(self, input_files, output_files, gpu_id=None):
         with torch.no_grad():

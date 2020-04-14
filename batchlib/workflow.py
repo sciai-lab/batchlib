@@ -15,7 +15,7 @@ def _update_run_kwargs(run_kwargs, force_recompute,
     """
 
     def _update_kwarg(kwarg_name, kwarg):
-        if kwarg is not None and kwarg not in run_kwargs:
+        if kwarg is not None and kwarg_name not in run_kwargs:
             run_kwargs.update({kwarg_name: kwarg})
 
     _update_kwarg('force_recompute', force_recompute)
