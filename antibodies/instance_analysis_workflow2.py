@@ -3,10 +3,12 @@
 import configargparse
 import os
 import time
+from glob import glob
+
 import h5py
 
 from batchlib import run_workflow
-from batchlib.preprocessing import Preprocess
+from batchlib.preprocessing import Preprocess, get_channel_settings
 from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
@@ -49,9 +51,16 @@ def run_instance_analysis2(config):
     if analysis_key != 'raw':
         analysis_identifier = analysis_key
 
+    # get the correct channel ordering and names for this data
+    fname = glob(os.path.join(config.input_folder, '*.tiff'))[0]
+    channel_names, settings, reorder = get_channel_settings(fname)
+
     job_dict = {
-        Preprocess: {'run': {'n_jobs': config.n_cpus,
-                             'barrel_corrector': barrel_corrector}},
+        Preprocess: {'build': {'channel_names': channel_names,
+                               'viewer_settings': settings},
+                     'run': {'n_jobs': config.n_cpus,
+                             'barrel_corrector': barrel_corrector,
+                             'reorder': reorder}},
         TorchPrediction: {'build': {'input_key': config.in_key,
                                     'output_key': [config.mask_key, config.bd_key],
                                     'model_path': torch_model_path,
