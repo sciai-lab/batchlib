@@ -8,16 +8,31 @@ def _dump_status(status_file, status):
         json.dump(status, f, indent=2)
 
 
-# TODO implement non-streaming mode, that does not start a job again, once it has status 'processed'
-# TODO also accept 'ignore_invalid_inputs' and 'ignore_failed_outputs'
-# keywords once this is implemented
+def _update_run_kwargs(run_kwargs, force_recompute,
+                       ignore_invalid_inputs, ignore_failed_outputs):
+    """ Update the run kwargs with the values for force recompute etc.
+    iff the corresponding is not None and not in the kwargs already
+    """
+
+    def _update_kwarg(kwarg_name, kwarg):
+        if kwarg is not None and kwarg not in run_kwargs:
+            run_kwargs.update({kwarg_name: kwarg})
+
+    _update_kwarg('force_recompute', force_recompute)
+    _update_kwarg('ignore_invalid_inputs', ignore_invalid_inputs)
+    _update_kwarg('ignore_failed_outputs', ignore_failed_outputs)
+
+    return run_kwargs
+
+
 def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None,
+                 ignore_invalid_inputs=None, ignore_failed_outputs=None,
                  lock_folder=True):
     """ Run workflow of consecutive batch jobs.
 
     The jobs to be run are specified in a dictionary:
-    job_dict = {FirstJob: {'build_kwargs': {...},
-                           'run_kwargs': {...}},
+    job_dict = {FirstJob: {'build': {...},
+                           'run': {...}},
                 SecondJob: {}}
     All keys must be classes that inherit from batchlib.BatchJob and map
     to a dictionary with optional keys:
@@ -31,6 +46,9 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
         job_dict - specification of the jobs
         input_folder - separate input folder (default: None)
         force_recompute - whether to recompute all results (default: None)
+        ignore_invalid_inputs - whether to continue processing with invalid inputs (default: None)
+        ignore_failed_outputs - whether to continue processing with failed outputs (default: None)
+        lock_folder - lock the folder so that no other workflow can act on it (default: True)
     """
 
     work_dir = os.path.join(folder, 'batchlib')
@@ -62,8 +80,8 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
                 job.identifier = identifier
             job_name = job.name
 
-            if force_recompute is not None:
-                run_kwargs.update(dict(force_recompute=force_recompute))
+            run_kwargs = _update_run_kwargs(run_kwargs, force_recompute,
+                                            ignore_invalid_inputs, ignore_failed_outputs)
 
             try:
                 state = job(folder, **run_kwargs)
