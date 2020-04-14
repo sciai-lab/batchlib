@@ -70,7 +70,7 @@ def run_pixel_analysis1(config):
     return name, t0
 
 
-if __name__ == '__main__':
+def parse_pixel_config1():
     doc = """Run pixel analysis workflow
     Based on ilastik preidctions.
     """
@@ -101,6 +101,10 @@ if __name__ == '__main__':
     parser.add("--ignore_invalid_inputs", default=None)
     parser.add("--ignore_failed_outputs", default=None)
 
-    args = parser.parse_args()
     print(parser.format_values())
-    run_pixel_analysis1(args)
+    return parser.parse_args()
+
+
+if __name__ == '__main__':
+    config = parse_pixel_config1()
+    run_pixel_analysis1(config)
