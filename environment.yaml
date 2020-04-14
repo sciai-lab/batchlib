@@ -5,6 +5,7 @@ channels:
 name:
     antibodies
 dependencies:
+    - configargparse
     - cpuonly
     - imageio
     - h5py
@@ -12,7 +13,7 @@ dependencies:
     - pip
     - pytorch
     - scikit-image
-    - tensorflow 1.14
+    - tensorflow 1.15
     - torchvision
     - tqdm
     - vigra

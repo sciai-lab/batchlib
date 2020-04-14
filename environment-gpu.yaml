@@ -5,10 +5,12 @@ channels:
 name:
     antibodies-gpu
 dependencies:
+    - configargparse
     - cudatoolkit=10.1
     - imageio
     - h5py
     - napari
+    - numba
     - pip
     - pytorch
     - scikit-image
