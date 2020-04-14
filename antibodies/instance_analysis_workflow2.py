@@ -24,7 +24,9 @@ def run_instance_analysis2(config):
         config.gpu = None
 
     config.input_folder = os.path.abspath(config.input_folder)
-    if config.folder == "":
+    # FIXME the string is not truely empty. for now, we do hacky check ...
+    # if config.folder == "":
+    if len(config.folder) < 4:
         config.folder = config.input_folder.replace('covid-data-vibor', config.output_root_name)
         if config.use_unique_output_folder:
             config.folder += '_' + name
@@ -46,7 +48,7 @@ def run_instance_analysis2(config):
         'testing': True
     }
 
-    analysis_key = config.in_key_analyis
+    analysis_key = config.in_key_analysis
     analysis_identifier = None
     if analysis_key != 'raw':
         analysis_identifier = analysis_key

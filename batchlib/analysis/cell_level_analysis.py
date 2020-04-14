@@ -6,7 +6,7 @@ import os
 from functools import partial
 
 from ..util.io import open_file
-from ..base import BatchJob
+from ..base import BatchJobOnContainer
 
 
 def load_sample(path, raw_key, nuc_seg_key, cell_seg_key, device):
@@ -77,7 +77,7 @@ def save_all_stats(in_file, out_file, device,
         pickle.dump(per_cell_statistics, f)
 
 
-class CellLevelAnalysis(BatchJob):
+class CellLevelAnalysis(BatchJobOnContainer):
     """
     """
     def __init__(self,
