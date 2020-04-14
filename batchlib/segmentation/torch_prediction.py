@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 from batchlib.base import BatchJobOnContainer
 from batchlib.segmentation.unet import UNet2D
-from batchlib.util import open_file, files_to_jobs, write_viewer_attributes, standardize
+from batchlib.util import open_file, files_to_jobs, standardize
 
 
 # TODO
@@ -29,7 +29,6 @@ class TorchPrediction(BatchJobOnContainer):
         self.model_path = model_path
         self.model_class = model_class
         self.model_kwargs = model_kwargs
-        self.runners = {'default': self.run}
 
     def predict_images(self, in_batch, out_batch, model,
                        default_normalize, device, threshold_channels):
@@ -71,10 +70,7 @@ class TorchPrediction(BatchJobOnContainer):
                     threshold = threshold_channels.get(channel_id, None)
                     if threshold is not None:
                         channel = (channel > threshold).astype('uint8')
-                    ds = f.require_dataset(key, shape=channel.shape, compression='gzip',
-                                           dtype=channel.dtype)
-                    ds[:] = channel
-                    write_viewer_attributes(ds, channel, 'White')
+                    self.write_result(f, key, channel)
 
     # load from pickled model or from state dict
     def load_model(self, device):

@@ -7,7 +7,7 @@ from skimage.filters import gaussian
 from skimage.morphology import dilation, erosion, disk
 
 from ..base import BatchJobOnContainer
-from ..util import open_file, normalize, write_viewer_attributes
+from ..util import open_file, normalize
 
 
 # TODO
@@ -31,7 +31,6 @@ class SeededSegmentation(BatchJobOnContainer):
         self.pmap_key = pmap_key
         self.seed_key = seed_key
         self.mask_key = mask_key
-        self.runners = {'default': self.run}
 
     def process_mask_and_seeds(self, seeds, mask, erode_mask, dilate_seeds):
         if dilate_seeds > 0:
@@ -77,10 +76,7 @@ class SeededSegmentation(BatchJobOnContainer):
             labels = np.where(labels == bg_id, 0, labels).astype('uint32')
 
         with open_file(out_path, 'a') as f:
-            ds = f.require_dataset(self.output_key, shape=labels.shape, compression='gzip',
-                                   dtype=labels.dtype)
-            ds[:] = labels
-            write_viewer_attributes(ds, labels, 'Glasbey')
+            self.write_result(f, self.output_key, labels)
 
     def run(self, input_files, output_files, invert_pmap=False, sigma=2.,
             erode_mask=0, dilate_seeds=0, n_jobs=1, **kwargs):

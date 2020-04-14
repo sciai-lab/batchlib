@@ -2,7 +2,7 @@ import os
 from scipy.ndimage.morphology import binary_opening, binary_closing
 
 from .ilastik_prediction import IlastikPrediction
-from ..util import open_file, write_viewer_attributes
+from ..util import open_file
 
 
 # TODO
@@ -42,20 +42,11 @@ class BoundaryAndMaskPrediction(IlastikPrediction):
         # apply opening to get rid of small foreground predictions in background
         fg_mask = binary_opening(fg_mask, iterations=2)
         # apply closing to smooth the foreground mask
-        fg_mask = binary_closing(fg_mask, iterations=2)
+        fg_mask = binary_closing(fg_mask, iterations=2).astype('uint8')
 
         with open_file(out_path, 'a') as f:
-            # don't trust numpy bool
-            ds = f.require_dataset(self.mask_key, shape=fg_mask.shape,
-                                   dtype='uint8', compression='gzip')
-            ds[:] = fg_mask
-            write_viewer_attributes(ds, fg_mask, 'White')
-
-            # save the boundaries
-            ds = f.require_dataset(self.boundary_key, shape=bd.shape, compression='gzip',
-                                   dtype='float32')
-            ds[:] = bd
-            write_viewer_attributes(ds, fg_mask, 'White')
+            self.write_result(f, self.mask_key, fg_mask)
+            self.write_result(f, self.boundary_key, bd)
 
         # clean up
         os.remove(tmp_path)

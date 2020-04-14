@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 from matplotlib.pyplot import imshow
 
 import pathlib
-import argparse
 import os
 import os.path
 from concurrent import futures
@@ -69,10 +68,10 @@ def all_stats(input_file, output_file, analysis_folde_name="pixelwise_analysis",
     infected_tritc_intensity = compute_weighted_tritc(infected, tritc, "mean")
     not_infected_tritc_intensity = compute_weighted_tritc(not_infected, tritc, "mean")
 
-    result[f"ratio_of_mean_over_mean"] = ratio(infected_tritc_intensity,
-                                               not_infected_tritc_intensity)
-    result[f"dos_of_mean_over_mean"] = difference_over_sum(infected_tritc_intensity,
-                                                           not_infected_tritc_intensity)
+    result["ratio_of_mean_over_mean"] = ratio(infected_tritc_intensity,
+                                              not_infected_tritc_intensity)
+    result["dos_of_mean_over_mean"] = difference_over_sum(infected_tritc_intensity,
+                                                          not_infected_tritc_intensity)
 
     # compute statistics for different choices of quantiles (q = 0.5 == median)
     for q in [0.5]:
@@ -85,6 +84,7 @@ def all_stats(input_file, output_file, analysis_folde_name="pixelwise_analysis",
 
     with open(output_file, 'w') as fp:
         json.dump(result, fp)
+
 
 def all_plots(json_files, out_path):
 
@@ -143,7 +143,7 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
         self.raw_key = raw_key
         self.infection_key = infection_key
 
-        # all inputs should
+        # prediction and raw image should be 3d (2d + channels)
         input_ndim = (2, 3)
 
         # identifier allows to run different instances of this job on the same folder
@@ -158,7 +158,6 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
                                     self.infection_key],
                          input_ndim=input_ndim)
         self.identifier = identifier
-        self.runners = {'default': self.run}
 
     def run(self, input_files, output_files):
 
@@ -176,7 +175,6 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
 class PixellevelPlots(BatchJob):
     """
     """
-
     def __init__(self,
                  input_pattern='pixelwise_analysis/*.json',
                  output_ext="",
@@ -184,9 +182,7 @@ class PixellevelPlots(BatchJob):
 
         super().__init__(input_pattern,
                          output_ext=output_ext)
-
         self.identifier = identifier
-        self.runners = {'default': self.run}
 
     def run(self, input_files, output_files):
         print("plot histograms for %i input jsons" % (len(input_files), ))
