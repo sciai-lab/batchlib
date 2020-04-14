@@ -1,9 +1,12 @@
 import os
-import numpy as np
+from glob import glob
 from time import sleep
-from skimage.transform import downscale_local_mean, rescale
 
 import h5py
+import numpy as np
+import pandas as pd
+from skimage.transform import downscale_local_mean, rescale
+
 try:
     import z5py
 except ImportError:
@@ -34,8 +37,41 @@ def open_file(path, mode='r', h5_timeout=5, h5_retry=10):
     raise ValueError("Invalid file extensions %s" % ext)
 
 
-def write_table():
-    pass
+def image_name_to_site_name(image_name):
+    parts = image_name.split('_')
+    part_a = parts[1].lstrip('Point')
+    part_b = parts[2]
+    site_name = part_a + '-' + part_b
+    return site_name
+
+
+def get_image_and_site_names(folder, pattern):
+    im_names = glob(os.path.join(folder, pattern))
+    im_names = [os.path.split(name)[1] for name in im_names]
+    im_names = [os.path.splitext(name)[0] for name in im_names]
+    site_names = [image_name_to_site_name(name) for name in im_names]
+    return im_names, site_names
+
+
+def write_table(folder, column_dict, column_names, out_path, pattern='*.h5'):
+
+    im_names, site_names = get_image_and_site_names(folder, pattern)
+    table = [im_names, site_names]
+
+    n_cols = len(column_names)
+    cols = [[column_dict[name][ii] for name in site_names] for ii in range(n_cols)]
+    table += cols
+
+    column_names = ['image', 'site-name'] + column_names
+    n_cols = len(column_names)
+    n_images = len(im_names)
+
+    table = np.array(table).T
+    exp_shape = (n_images, n_cols)
+    assert table.shape == exp_shape, "%s, %s" % (table.shape, exp_shape)
+
+    table = pd.DataFrame(table, columns=column_names)
+    table.to_csv(out_path, sep='\t', index=False)
 
 
 def downsample_image_data(path, scale_factors, out_path=None):

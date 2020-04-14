@@ -70,7 +70,7 @@ def run_instance_analysis2(config):
                           'run': {'erode_mask': 3,
                                   'dilate_seeds': 3,
                                   'n_jobs': config.n_cpus}},
-        CellLevelAnalysis: {'build': {'raw_key': config.in_key,
+        CellLevelAnalysis: {'build': {'raw_key': config.in_key_analysis,
                                       'nuc_seg_key': config.nuc_key,
                                       'cell_seg_key': config.seg_key},
                             'run': {'gpu_id': config.gpu}}
@@ -110,10 +110,11 @@ if __name__ == '__main__':
     parser.add("--output_root_name", default='data-processed-new')
     parser.add("--use_unique_output_folder", default=False)
     parser.add("--force_recompute", default=False)
-    # NOTE ignore_nvalid_inputs / ignore_failed_outputs are not used yet in the function but will be eventually
+    # NOTE ignore_invalid_inputs / ignore_failed_outputs are not used yet in the function but will be eventually
     parser.add("--ignore_invalid_inputs", default=None)
     parser.add("--ignore_failed_outputs", default=None)
     parser.add("--in_key", default='raw', type=str)
+    parser.add("--in_key_analysis", default='raw', type=str)
     parser.add("--bd_key", default='pmap_tritc', type=str)
     parser.add("--mask_key", default='mask', type=str)
     parser.add("--nuc_key", default='nucleus_segmentation', type=str)
