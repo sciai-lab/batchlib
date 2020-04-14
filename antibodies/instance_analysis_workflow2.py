@@ -44,7 +44,11 @@ def run_instance_analysis2(config):
         'testing': True
     }
 
-    # TODO add analysis job
+    analysis_key = config.in_key_analyis
+    analysis_identifier = None
+    if analysis_key != 'raw':
+        analysis_identifier = analysis_key
+
     job_dict = {
         Preprocess: {'run': {'n_jobs': config.n_cpus,
                              'barrel_corrector': barrel_corrector}},
@@ -70,9 +74,10 @@ def run_instance_analysis2(config):
                           'run': {'erode_mask': 3,
                                   'dilate_seeds': 3,
                                   'n_jobs': config.n_cpus}},
-        CellLevelAnalysis: {'build': {'raw_key': config.in_key_analysis,
+        CellLevelAnalysis: {'build': {'raw_key': analysis_key,
                                       'nuc_seg_key': config.nuc_key,
-                                      'cell_seg_key': config.seg_key},
+                                      'cell_seg_key': config.seg_key,
+                                      'identifier': analysis_identifier},
                             'run': {'gpu_id': config.gpu}}
     }
 
