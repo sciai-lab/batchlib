@@ -31,7 +31,8 @@ def eval_cells(gfp, serum, nucleus_seg, cell_seg, ignore_label=0,
                substract_mean_background=False):
     # all segs have shape H, W
     assert gfp.shape == serum.shape == nucleus_seg.shape == cell_seg.shape
-    labels = torch.unique(cell_seg[cell_seg != ignore_label])
+    # include background as instance with label 0
+    labels = torch.sort(torch.unique(cell_seg))[0]
 
     if substract_mean_background:
         gfp -= (gfp[cell_seg == ignore_label]).mean()
