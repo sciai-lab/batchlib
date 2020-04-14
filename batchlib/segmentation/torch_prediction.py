@@ -29,7 +29,6 @@ class TorchPrediction(BatchJobOnContainer):
         self.model_path = model_path
         self.model_class = model_class
         self.model_kwargs = model_kwargs
-        self.runners = {'default': self.run}
 
     def predict_images(self, in_batch, out_batch, model,
                        default_normalize, device, threshold_channels):

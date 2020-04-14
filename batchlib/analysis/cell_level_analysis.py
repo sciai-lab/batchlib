@@ -103,7 +103,6 @@ class CellLevelAnalysis(BatchJob):
                                     self.cell_seg_key],
                          input_ndim=input_ndim)
         self.identifier = identifier
-        self.runners = {'default': self.run}
 
     def run(self, input_files, output_files, gpu_id=None):
         with torch.no_grad():

@@ -5,15 +5,13 @@ import imageio
 import numpy as np
 from tqdm import tqdm
 
-from ..base import BatchJob
+from ..base import BatchJobOnContainer
 from ..util import barrel_correction, open_file, write_viewer_attributes, set_skip
 
 DEFAULT_CHANNEL_NAMES = ['DAPI', 'WF_GFP', 'TRITC']
 
 
-# TODO
-# - something still locks gil, probably h5py. should try processs pool
-class Preprocess(BatchJob):
+class Preprocess(BatchJobOnContainer):
 
     def __init__(self, channel_names=DEFAULT_CHANNEL_NAMES, output_ext='.h5'):
         if len(channel_names) != 3:
@@ -23,7 +21,6 @@ class Preprocess(BatchJob):
         channel_dims = [3, 2, 2, 2]
         super().__init__(input_pattern='*.tiff', output_ext=output_ext,
                          output_key=channel_names_, output_ndim=channel_dims)
-        self.runners = {'default': self.run}
 
     def _reorder(self, im):
         im_new = np.zeros_like(im)

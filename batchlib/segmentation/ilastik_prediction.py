@@ -9,11 +9,8 @@ from ..util import open_file, files_to_jobs, set_skip
 
 # TODO
 # - ilastik saves files with 'w'. this should be changed to 'a', and then we can write directly
-# - subprocess doesn't seem to lift gil fully, could use ProcessPool, but this gets stuck
-# - make work with both h5 and n5 (zarr?) inputs!
-# - does ilastik support zarr files?
 # - how do I run batch processing with n5/zarr files
-# - consider changing default to n5
+# - does ilastik support zarr files? (no)
 class IlastikPrediction(BatchJobOnContainer):
     """
     """
@@ -26,9 +23,6 @@ class IlastikPrediction(BatchJobOnContainer):
 
         self.bin = ilastik_bin
         self.project = ilastik_project
-
-        self.runners = {'default': self.run,
-                        'slurm': self.run_slurm}
 
     def predict_images(self, input_files):
         inputs = ['%s/%s' % (inp, self.input_key) for inp in input_files]
@@ -67,9 +61,6 @@ class IlastikPrediction(BatchJobOnContainer):
 
             job_files = files_to_jobs(n_jobs, input_files)
 
-            # TODO would be better to run with a process pool
-            # but somehow this gets stuck
-            # with futures.ProcessPoolExecutor(n_jobs) as pp:
             with futures.ThreadPoolExecutor(n_jobs) as tp:
                 list(tqdm(tp.map(self.predict_images, job_files), total=len(job_files)))
 
@@ -85,8 +76,3 @@ class IlastikPrediction(BatchJobOnContainer):
             # load predictions and save to the output
             for in_path, out_path in tqdm(zip(input_files, output_files)):
                 self.save_prediction(in_path, out_path)
-
-    # this would implement prediction on slurm cluster
-    def run_slurm(self, input_files, output_files, n_jobs=1,
-                  n_threads=None, mem_limit=None):
-        raise NotImplementedError

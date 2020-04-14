@@ -31,7 +31,6 @@ class SeededSegmentation(BatchJobOnContainer):
         self.pmap_key = pmap_key
         self.seed_key = seed_key
         self.mask_key = mask_key
-        self.runners = {'default': self.run}
 
     def process_mask_and_seeds(self, seeds, mask, erode_mask, dilate_seeds):
         if dilate_seeds > 0:

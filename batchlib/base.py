@@ -20,13 +20,11 @@ class BatchJob(ABC):
     - ignore_failed_outputs - continue running even if some outputs were not computed properly
                               (in default mode the job will raise a RuntimeError in this case)
 
-    Deriving classes must have the member `runners` dict[str, function].
-    This dictionary maps computation target (e.g. local execution, slurm cluster) to
-    function executing the job for this target.
-    Minimal implementation:
-        self.runners = {'default': self.run}
-    The run functions must have the syntax:
+    Deriving classes must implement a run method, that implements the actual computation.
+    It must follow the syntax
         def run(self, input_files, output_files, **kwargs)
+    where input_files is the list of files to process
+    and output_files the files to write the correspondign results.
 
     Deriving classes may override the following methods.
     - check output    - check if output is present
@@ -42,64 +40,26 @@ class BatchJob(ABC):
     # by default, we lock the whole folder and don't need to lock the individual jobs
     lock_job = False
 
-    @staticmethod
-    def check_keys(keys):
-        if keys is None:
-            return None, None
-
-        if not isinstance(keys, (str, list)):
-            raise ValueError("Invalid data keys")
-        if isinstance(keys, list) and not all(isinstance(k, str) for k in keys):
-            raise ValueError("Invalid data keys")
-        exp_keys = [keys] if isinstance(keys, str) else keys
-        return keys, exp_keys
-
-    @staticmethod
-    def check_ndim(ndim, keys):
-        if ndim is None:
-            exp_ndim = None if keys is None else [None] * len(keys)
-            return ndim, exp_ndim
-
-        if isinstance(ndim, (list, tuple)):
-            if len(ndim) != len(keys):
-                raise ValueError("Invalid data ndim")
-            exp_ndim = ndim
-        else:
-            exp_ndim = [ndim] * len(keys)
-        return ndim, exp_ndim
-
-    def __init__(self, input_pattern, output_ext=None,
-                 input_key=None, output_key=None,
-                 input_ndim=None, output_ndim=None,
-                 target='default'):
-        # the input and output keys (= internal datasets)
-        # the _exp_ variables are the normalized versions we need in the checks
-        self.input_key, self._input_exp_key = self.check_keys(input_key)
-        self.output_key, self._output_exp_key = self.check_keys(output_key)
-
-        # the input and output dimensions
-        # the _exp_ variables are the normalized versions we need in the checks
-        self.input_ndim, self._input_exp_ndim = self.check_ndim(input_ndim, self._input_exp_key)
-        self.output_ndim, self._output_exp_ndim = self.check_ndim(output_ndim, self._output_exp_key)
+    def __init__(self, input_pattern, output_ext=None, identifier=None):
+        if not hasattr(self, 'run'):
+            raise AttributeError("Class deriving from BatchJob must implement run method")
 
         self.input_pattern = input_pattern
         self.input_ext = os.path.splitext(self.input_pattern)[1]
         self.output_ext = self.input_ext if output_ext is None else output_ext
-        self.target = target
+
+        is_none = identifier is None
+        is_str = isinstance(identifier, str)
+        if not (is_none or is_str):
+            raise ValueError("Expect identifier to  be None or string, not %s" % type(identifier))
+        self.identifier = identifier
 
     @property
     def name(self):
         name_ = self.__class__.__name__
-        # if the class has an identifier member, we add it to the name
-        # this allows running multiple batch jobs of the same type for one
-        # experiment, by adding the identifiers
-        identifier = getattr(self, 'identifier', None)
-        if identifier is None:
-            return name_
-        else:
-            identifier = self.identifier
-            assert isinstance(identifier, str)
-            return name_ + identifier
+        # if the class identifier is not None, it's added to the name
+        # this allows running multiple batch jobs of the same type for one class
+        return name_ if self.identifier is None else name_ + self.identifier
 
     def status_file(self, folder):
         return os.path.join(folder, 'batchlib', self.name + '.status')
@@ -147,7 +107,7 @@ class BatchJob(ABC):
         outputs = [os.path.join(folder, name + self.output_ext) for name in names]
         return outputs
 
-    def get_inputs(self, folder, input_folder, status, force_recompute):
+    def get_inputs(self, folder, input_folder, status, force_recompute, ignore_invalid_inputs):
         state = status.get('state', 'processed')
 
         in_pattern = os.path.join(input_folder, self.input_pattern)
@@ -162,7 +122,12 @@ class BatchJob(ABC):
             else:
                 msg = "%i inputs are invalid, fix them and rerun this task" % len(invalid_inputs)
             self.update_status(folder, status, invalid_inputs=invalid_inputs)
-            raise RuntimeError(msg)
+
+            if ignore_invalid_inputs:
+                # TODO log warning
+                pass
+            else:
+                raise RuntimeError(msg)
 
         # force recompute means we just recompute for everything without
         # checking if results are present
@@ -186,15 +151,31 @@ class BatchJob(ABC):
 
         return input_files
 
+    def check_outputs(self, output_files, folder, status, ignore_failed_outputs):
+        # TODO output validation can be expensive, so we might want to parallelize
+        # validate the outputs and update the status
+        failed_outputs = self.get_invalid_outputs(output_files)
+        if len(failed_outputs) > 0:
+            state = status.get('state', 'processed')
+            if state == 'failed_outputs':
+                n_failed = len(failed_outputs)
+                prev_failed = len(status['failed_outputs'])
+                msg = "%i outpus have failed from %i in previous call" % (n_failed,
+                                                                          prev_failed)
+            else:
+                msg = "%i outputs have failed" % len(failed_outputs)
+
+            self.update_status(folder, status, failed_outputs=failed_outputs)
+
+            if ignore_failed_outputs:
+                # TODO log warning
+                pass
+            else:
+                raise RuntimeError(msg)
+
     def __call__(self, folder, input_folder=None, force_recompute=False,
                  ignore_invalid_inputs=False, ignore_failed_outputs=False,
                  executable=None, **kwargs):
-
-        # TODO implement this
-        if ignore_invalid_inputs:
-            raise NotImplementedError
-        if ignore_failed_outputs:
-            raise NotImplementedError
 
         # make the work dir, that stores all batchlib status and log files
         work_dir = os.path.join(folder, 'batchlib')
@@ -212,42 +193,99 @@ class BatchJob(ABC):
             input_folder_ = folder if input_folder is None else input_folder
 
             # validate and get the input files to be processed
-            input_files = self.get_inputs(folder, input_folder_, status, force_recompute)
+            input_files = self.get_inputs(folder, input_folder_, status,
+                                          force_recompute, ignore_invalid_inputs)
             if len(input_files) == 0:
                 return status.get('state', 'processed')
 
+            # get the output files corresponding to the input files
             output_files = self.to_outputs(input_files, folder)
-            # get the function to run the actual job
-            # runners is a dict mapping the computation target (e.g. 'default', 'slurm')
-            # to the correct run  function.
-            # if the target is not available, it defaults to the default run implementation,
-            # but throws a warning
-            _run = self.runners.get(self.target, None)
-            if _run is None:
-                raise RuntimeError("%s does not implement a runner for %s" % (self.name,
-                                                                              self.target))
 
-            _run(input_files, output_files, **kwargs)
+            # run the actual computation
+            self.run(input_files, output_files, **kwargs)
 
-            # TODO output validation can be expensive, so we might want to parallelize
-            # validate the outputs and update the status
-            failed_outputs = self.get_invalid_outputs(output_files)
-            if len(failed_outputs) > 0:
-                state = status.get('state', 'processed')
-                if state == 'failed_outputs':
-                    n_failed = len(failed_outputs)
-                    prev_failed = len(status['failed_outputs'])
-                    msg = "%i outpus have failed from %i in previous call" % (n_failed,
-                                                                              prev_failed)
-                else:
-                    msg = "%i outputs have failed" % len(failed_outputs)
-
-                self.update_status(folder, status, failed_outputs=failed_outputs)
-                raise RuntimeError(msg)
+            # check if all outputs were computed properly
+            self.check_outputs(output_files, folder, status, ignore_failed_outputs)
 
             # if everything went through, we set the state to 'processed'
             status = self.update_status(folder, status, processed=True)
             return status['state']
+
+    def check_output(self, path):
+        return os.path.exists(path)
+
+    def validate_input(self, path):
+        return os.path.exists(path)
+
+    # in the default implementation, validate_output just calls
+    # check_output. This is a separate function though to allow
+    # more expensive checks, that are only computed once after
+    # the calculation is finished
+    def validate_output(self, path):
+        return self.check_output(path)
+
+    def get_invalid_inputs(self, inputs):
+        return [path for path in inputs if not self.validate_input(path)]
+
+    def get_invalid_outputs(self, outputs):
+        return [path for path in outputs if not self.validate_output(path)]
+
+
+class BatchJobOnContainer(BatchJob, ABC):
+    """ Base class for batch jobs operating on at least one
+    container file (= h5/n5/zarr file).
+    """
+    supported_container_extensions = {'.h5', '.hdf5', '.zarr', '.zr', '.n5'}
+
+    def __init__(self, input_pattern, output_ext=None, identifier=None,
+                 input_key=None, output_key=None,
+                 input_ndim=None, output_ndim=None):
+        super().__init__(input_pattern=input_pattern,
+                         output_ext=output_ext,
+                         identifier=identifier)
+
+        # the input and output keys (= internal datasets)
+        # the _exp_ variables are the normalized versions we need in the checks
+        self.input_key, self._input_exp_key = self.check_keys(input_key, self.input_ext)
+        self.output_key, self._output_exp_key = self.check_keys(output_key, self.output_ext)
+
+        # the input and output dimensions
+        # the _exp_ variables are the normalized versions we need in the checks
+        self.input_ndim, self._input_exp_ndim = self.check_ndim(input_ndim, self._input_exp_key)
+        self.output_ndim, self._output_exp_ndim = self.check_ndim(output_ndim, self._output_exp_key)
+
+    @staticmethod
+    def check_keys(keys, ext):
+        if keys is None:
+            return None, None
+
+        supported_ext = BatchJobOnContainer.supported_container_extensions
+        if ext.lower() not in supported_ext:
+            ext_str = ", ".join(supported_ext)
+            raise ValueError("Invalid container extension %s, expected one of %s" % (ext, ext_str))
+
+        if not isinstance(keys, (str, list)):
+            raise ValueError("Invalid data keys")
+
+        if isinstance(keys, list) and not all(isinstance(k, str) for k in keys):
+            raise ValueError("Invalid data keys")
+
+        exp_keys = [keys] if isinstance(keys, str) else keys
+        return keys, exp_keys
+
+    @staticmethod
+    def check_ndim(ndim, keys):
+        if ndim is None:
+            exp_ndim = None if keys is None else [None] * len(keys)
+            return ndim, exp_ndim
+
+        if isinstance(ndim, (list, tuple)):
+            if len(ndim) != len(keys):
+                raise ValueError("Invalid data ndim")
+            exp_ndim = ndim
+        else:
+            exp_ndim = [ndim] * len(keys)
+        return ndim, exp_ndim
 
     @staticmethod
     def _check_impl(path, exp_keys, exp_ndims):
@@ -271,53 +309,19 @@ class BatchJob(ABC):
     def validate_input(self, path):
         return self._check_impl(path, self._input_exp_key, self._input_exp_ndim)
 
-    # in the default implementation, validate_output just calls
-    # check_output. This is a separate function though to allow
-    # more expensive checks, that are only computed once after
-    # the calculation is finished
-    def validate_output(self, path):
-        return self.check_output(path)
 
-    def get_invalid_inputs(self, inputs):
-        return [path for path in inputs if not self.validate_input(path)]
-
-    def get_invalid_outputs(self, outputs):
-        return [path for path in outputs if not self.validate_output(path)]
-
-
-# TODO this should still be abstract, how do we do this?
-# maybe move the h5/n5 specific functionality from BatchJob here?
-class BatchJobOnContainer(BatchJob):
-    """ Base class for batch jobs operating on single container (= h5/n5/zarr file).
-    """
-    supported_extensions = {'.h5', '.hdf5', '.zarr', '.zr', '.n5'}
-
-    def __init__(self, input_pattern, input_key, output_key,
-                 input_ndim=None, output_ndim=None,
-                 target='default'):
-        ext = os.path.splitext(input_pattern)[1]
-        if ext.lower() not in self.supported_extensions:
-            raise ValueError("Invalid extension %s in input pattern" % ext)
-        super().__init__(input_pattern=input_pattern, output_ext=None,
-                         input_key=input_key, output_key=output_key,
-                         input_ndim=input_ndim, output_ndim=output_ndim,
-                         target=target)
-
-
-class BatchJobWithSubfolder(BatchJob):
-
-    """ Base class for batch jobs that output into a folder
+class BatchJobWithSubfolder(BatchJobOnContainer, ABC):
+    """ Base class for a job that operates on an input container
+    and writes ouput to a sub-folder.
     """
 
-    def __init__(self, input_pattern,
-                 output_folder="", output_ext=None,
-                 input_key=None, input_ndim=None,
-                 target='default'):
+    def __init__(self, input_pattern, output_ext=None,
+                 identifier=None, output_folder="",
+                 input_key=None, input_ndim=None):
         self.output_folder = output_folder
 
         super().__init__(input_pattern, output_ext=output_ext,
-                         input_key=input_key, input_ndim=input_ndim,
-                         target='default')
+                         input_key=input_key, input_ndim=input_ndim)
 
     def to_outputs(self, inputs, folder):
         names = [os.path.splitext(os.path.split(inp)[1])[0] for inp in inputs]

@@ -1,9 +1,11 @@
+import os
 import unittest
 
 
 class TestWorkflow(unittest.TestCase):
     in_folder = '../data/test_inputs'
     folder = './out'
+    root = '/g/kreshuk/pape/Work/covid/antibodies-nuclei'
 
     def test_instance_segmentation(self):
         from batchlib.preprocessing import Preprocess
@@ -11,10 +13,11 @@ class TestWorkflow(unittest.TestCase):
         from batchlib.segmentation.stardist_prediction import StardistPrediction
         from batchlib.workflow import run_workflow
 
-        ilastik_bin = '/home/pape/Work/covid/antibodies-nuclei/ilastik/run_ilastik.sh'
-        ilastik_project = '/home/pape/Work/covid/antibodies-nuclei/ilastik/boundaries_and_foreground.ilp'
+        # TODO these should go into this repository
+        ilastik_bin = os.path.join(self.root, 'ilastik/run_ilastik.sh')
+        ilastik_project = os.path.join(self.root, 'ilastik/boundaries_and_foreground.ilp')
+        model_root = os.path.join(self.root, 'stardist/models/pretrained')
 
-        model_root = '/home/pape/Work/covid/antibodies-nuclei/stardist/models/pretrained'
         model_name = '2D_dsb2018'
 
         in_key = 'raw'
@@ -24,7 +27,7 @@ class TestWorkflow(unittest.TestCase):
         seg_key = 'cells'
 
         job_dict = {
-            Preprocess: {'run': {'reorder': False, 'n_jobs': 4}},
+            Preprocess: {'run': {'n_jobs': 4}},
             BoundaryAndMaskPrediction: {'build': {'ilastik_bin': ilastik_bin,
                                                   'ilastik_project': ilastik_project,
                                                   'input_key': in_key,

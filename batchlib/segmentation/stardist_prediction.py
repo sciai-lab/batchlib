@@ -5,11 +5,6 @@ from batchlib.base import BatchJobOnContainer
 from batchlib.util import open_file, write_viewer_attributes, normalize_percentile
 
 
-# TODO (or rather to premature optimize, this is fast enough on single gpu for now!)
-# - implement multi gpu support, would probably need to do IPC through files or
-#    call this script with inputs / outputs in subprocess, it Deadlocked when running
-#    from one process pool
-# - or is there something like torch.data_parallel one could use?
 class StardistPrediction(BatchJobOnContainer):
     """
     """
@@ -26,7 +21,6 @@ class StardistPrediction(BatchJobOnContainer):
 
         self.model_root = model_root
         self.model_name = model_name
-        self.runners = {'default': self.run}
 
     def segment_image(self, in_path, out_path, model):
         with open_file(in_path, 'r') as f:
