@@ -33,20 +33,40 @@ def open_file(path, mode='r', h5_timeout=5, h5_retry=10):
     raise ValueError("Invalid file extensions %s" % ext)
 
 
-def write_viewer_attributes(ds, image, color, alpha=1., visible=True, skip=False):
+def write_viewer_settings(ds, image, color=None, alpha=1., visible=False, skip=None,
+                          percentile_min=1, percentile_max=99):
+    # if skip is None, we determine it from the dimensionality
+    if skip is None:
+        if image.ndim > 2:
+            skip = True
+        else:
+            skip = False
+
+    # we only need to write the skip attribute in this case
+    if skip:
+        ds.attrs['skip'] = skip
+        return
+
+    # if color is None, we determine it from the image dtype
+    if color is None:
+        dtype = image.dtype
+        if dtype in (np.int8, np.uint8, np.int16, np.uint16, np.float32, np.float64):
+            color = 'White'
+        else:
+            color = 'Glasbey'
+
+    # check the color value that was passed
     colors = ['Gray', 'Red', 'Green', 'Blue', 'White']
     color_maps = ['Glasbey']
     all_colors = colors + color_maps
     assert color in all_colors
 
     attrs = {'Color': color, 'Visible': visible, 'Skip': skip, 'Alpha': alpha}
-
+    # if we have an actual color and not glasbey, we need to set the contrast limits
     if color in colors:
-        mi, ma = np.float64(image.min()), np.float64(image.max())
+        # we use percentiles instead of min max to be more robust to outliers
+        mi = np.float64(np.percentile(image), percentile_min)
+        ma = np.float64(np.percentile(image), percentile_max)
         attrs.update({'ContrastLimits': [mi, ma]})
 
     ds.attrs.update(attrs)
-
-
-def set_skip(ds):
-    ds.attrs['Skip'] = True

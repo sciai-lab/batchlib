@@ -6,21 +6,28 @@ import numpy as np
 from tqdm import tqdm
 
 from ..base import BatchJobOnContainer
-from ..util import barrel_correction, open_file, write_viewer_attributes, set_skip
+from ..util import barrel_correction, open_file
 
 DEFAULT_CHANNEL_NAMES = ['DAPI', 'WF_GFP', 'TRITC']
+DEFAULT_VIEWER_SETTINGS = {'DAPI': {'color': ''},
+                           'WF_GFP': {'color': ''},
+                           'TRITC': {'color': ''}}
 
 
 class Preprocess(BatchJobOnContainer):
 
-    def __init__(self, channel_names=DEFAULT_CHANNEL_NAMES, output_ext='.h5'):
+    def __init__(self, channel_names=DEFAULT_CHANNEL_NAMES,
+                 viewer_settings=DEFAULT_VIEWER_SETTINGS, output_ext='.h5'):
         if len(channel_names) != 3:
             raise ValueError("Expected 3 channels, got %i" % len(channel_names))
+
         self.channel_names = channel_names
         channel_names_ = ['raw'] + channel_names
         channel_dims = [3, 2, 2, 2]
+
         super().__init__(input_pattern='*.tiff', output_ext=output_ext,
-                         output_key=channel_names_, output_ndim=channel_dims)
+                         output_key=channel_names_, output_ndim=channel_dims,
+                         viewer_settings=viewer_settings)
 
     def _reorder(self, im):
         im_new = np.zeros_like(im)
@@ -53,7 +60,6 @@ class Preprocess(BatchJobOnContainer):
             assert n_channels == 4, "Expect inputs to have 4 channels, got %i" % n_channels
             im = im[:3]
 
-        # TODO use the proper flat-field-correction (we will need add. offset parameter for that)
         # apply barrel correction
         im_raw = None
         if barrel_corrector is not None:
@@ -61,27 +67,18 @@ class Preprocess(BatchJobOnContainer):
                 im_raw = im.copy()
             im = barrel_correction(im, *barrel_corrector)
 
-        colors = ['Red', 'Green', 'Blue']
         with open_file(out_path, 'a') as f:
             # TODO try to have the raw data as region references to the individual channels
-            ds = f.require_dataset('raw', shape=im.shape, dtype=im.dtype,
-                                   compression='gzip')
-            ds[:] = im
-            set_skip(ds)
+            self.write_result(f, 'raw', im)
 
-            for chan_id, (color, key) in enumerate(zip(colors, self.channel_names)):
+            for chan_id, key in enumerate(self.channel_names):
                 chan = im[chan_id]
-                ds = f.require_dataset(key, shape=chan.shape, dtype=chan.dtype,
-                                       compression='gzip')
-                ds[:] = im[chan_id]
-                write_viewer_attributes(ds, chan, color)
+                self.write_result(f, key, chan)
 
                 if im_raw is not None:
                     chan = im_raw[chan_id]
-                    ds = f.require_dataset(key + '_raw', shape=chan.shape, dtype=chan.dtype,
-                                           compression='gzip')
-                    ds[:] = chan
-                    write_viewer_attributes(ds, chan, color, visible=False)
+                    self.write_result(f, key + '_raw', chan,
+                                      settings=self.viewer_settings[key])
 
     def run(self, input_files, output_files, reorder=None, barrel_corrector=None,
             keep_raw=True, n_jobs=1):
