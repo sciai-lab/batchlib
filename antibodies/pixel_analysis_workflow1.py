@@ -1,16 +1,19 @@
 #! /home/covid19/software/miniconda3/envs/antibodies-gpu/bin/python
 
-import configargparse
 import os
 import time
 from glob import glob
 
+import configargparse
 import h5py
 
 from batchlib import run_workflow
+from batchlib.analysis.pixel_level_analysis import PixellevelAnalysis, PixellevelPlots
 from batchlib.preprocessing import Preprocess, get_channel_settings
 from batchlib.segmentation import IlastikPrediction
-from batchlib.analysis.pixel_level_analysis import PixellevelAnalysis, PixellevelPlots
+from batchlib.util.logging import get_logger
+
+logger = get_logger('Workflow.PixelAnalysis')
 
 
 def run_pixel_analysis1(config):
@@ -67,6 +70,7 @@ def run_pixel_analysis1(config):
                  ignore_failed_outputs=config.ignore_failed_outputs)
 
     t0 = time.time() - t0
+    logger.info(f"Run {name} in {t0}s")
     return name, t0
 
 
@@ -101,7 +105,7 @@ def parse_pixel_config1():
     parser.add("--ignore_invalid_inputs", default=None)
     parser.add("--ignore_failed_outputs", default=None)
 
-    print(parser.format_values())
+    logger.info(parser.format_values())
     return parser.parse_args()
 
 

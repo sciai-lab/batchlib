@@ -1,4 +1,12 @@
+import matplotlib
+
+from batchlib.util.logging import get_logger
+
+matplotlib.use("Agg")
+# import seaborn as sns
+
 import os
+import os.path
 import json
 from concurrent import futures
 
@@ -9,6 +17,7 @@ from ..base import BatchJob, BatchJobWithSubfolder
 from ..util.plate_visualizations import well_plot
 from ..util.io import open_file
 
+logger = get_logger('Workflow.BatchJob.PixelAnalysis')
 
 def load_sample(path, raw_key='TRITC_raw', infection_key='local_infection'):
     with open_file(path, mode='r') as f:
@@ -156,7 +165,7 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
             all_stats(*args, raw_key=self.raw_key,
                       infection_key=self.infection_key)
 
-        print("Compute stats for %i input images" % (len(input_files), ))
+        logger.info("Compute stats for %i input images" % (len(input_files), ))
         with futures.ThreadPoolExecutor(self.n_jobs) as tp:
             list(tqdm(tp.map(_stat,
                              zip(input_files, output_files)),
@@ -176,7 +185,7 @@ class PixellevelPlots(BatchJob):
                          identifier=identifier)
 
     def run(self, input_files, output_files):
-        print("Plot histograms for %i input jsons" % (len(input_files), ))
+        logger.info("Plot histograms for %i input jsons" % (len(input_files), ))
         output_folder = os.path.split(output_files[0])[0]
         all_plots(input_files, output_folder)
 
