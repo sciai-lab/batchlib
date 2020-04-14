@@ -65,8 +65,8 @@ def write_viewer_settings(ds, image, color=None, alpha=1., visible=False, skip=N
     # if we have an actual color and not glasbey, we need to set the contrast limits
     if color in colors:
         # we use percentiles instead of min max to be more robust to outliers
-        mi = np.float64(np.percentile(image), percentile_min)
-        ma = np.float64(np.percentile(image), percentile_max)
+        mi = np.float64(np.percentile(image, percentile_min))
+        ma = np.float64(np.percentile(image, percentile_max))
         attrs.update({'ContrastLimits': [mi, ma]})
 
     ds.attrs.update(attrs)

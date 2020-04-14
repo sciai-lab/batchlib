@@ -9,9 +9,9 @@ from ..base import BatchJobOnContainer
 from ..util import barrel_correction, open_file
 
 DEFAULT_CHANNEL_NAMES = ['DAPI', 'WF_GFP', 'TRITC']
-DEFAULT_VIEWER_SETTINGS = {'DAPI': {'color': ''},
-                           'WF_GFP': {'color': ''},
-                           'TRITC': {'color': ''}}
+DEFAULT_VIEWER_SETTINGS = {'DAPI': {'color': 'Blue'},
+                           'WF_GFP': {'color': 'Green'},
+                           'TRITC': {'color': 'Red'}}
 
 
 class Preprocess(BatchJobOnContainer):
