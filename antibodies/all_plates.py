@@ -7,7 +7,7 @@ from instance_analysis_workflow2 import run_instance_analysis2, parse_instance_c
 # def all_plates_all_wfs():
 #     in_folder = '/home/covid19/data/covid-data-vibor'
 #     folders = glob(in_folder + '/*')
-# 
+#
 #     for folder in folders:
 #         print("Run for plate", folder)
 #         run_all(folder, 0, 12)
@@ -21,12 +21,11 @@ def load_config(folder, key):
     return config
 
 
-def all_plates_instance_wf2(with_corrected=True, with_raw=True):
+def all_plates_instance_wf2(with_corrected=True):
     in_folder = '/home/covid19/data/covid-data-vibor'
     folders = glob(in_folder + '/*')
 
     for folder in folders:
-        
         if with_raw:
             config = load_config(folder, 'raw')
             print("Run instance analysis 2 for plate", config.input_folder)
@@ -40,5 +39,4 @@ def all_plates_instance_wf2(with_corrected=True, with_raw=True):
             run_instance_analysis2(config)
 
 
-# all_plates()
 all_plates_instance_wf2(True, False)
