@@ -39,7 +39,7 @@ TODO explain advanced stuff:
 - multiple workflow sharing job on same folder (locking, but needs n5)
 - different execution modes, `force_recompute`, `ignore_invalid_inputs`, `ignore_failed_outputs`
 
-### Implement new Batch Job
+### Implement a new Batch Job
 
 - Inherit from `batchlib.BatchJob` or batchlib.BatchJobOnContainer`
 - Implement `self.run` with function signature `run(self, input_files, output_files, **kwargs)`

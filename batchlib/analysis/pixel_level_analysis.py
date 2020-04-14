@@ -15,6 +15,7 @@ def load_sample(path, raw_key='TRITC_raw', infection_key='local_infection'):
         tritc = f[raw_key][:]
         local_infection_probs = f[infection_key][()]
 
+    # TODO use single channel only
     infected = local_infection_probs[0] > 0.5
     not_infected = local_infection_probs[1] > 0.5
 

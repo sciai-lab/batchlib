@@ -6,6 +6,8 @@ from ..util import open_file
 
 
 # TODO
+# - merge into IlastikPrediction
+# TODO
 # - make mask postprocessing optional
 # - allow to specify <, > in the thresholding operation
 # - support threhold = None -> we just save fg prediction and don't make binary mask

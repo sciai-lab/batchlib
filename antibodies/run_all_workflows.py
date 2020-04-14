@@ -28,7 +28,7 @@ def load_config(folder, output_root_name, parser,
 
     # set a non-default analysis key
     if key is not None:
-        config.in_key_analysis = key
+        config.in_analysis_key = key
 
     return config
 

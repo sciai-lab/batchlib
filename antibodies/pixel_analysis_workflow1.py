@@ -35,6 +35,7 @@ def run_pixel_analysis1(config):
     fname = glob(os.path.join(config.input_folder, '*.tiff'))[0]
     channel_names, settings, reorder = get_channel_settings(fname)
 
+    # TODO only save one channel in ilastik prediction
     job_dict = {
         Preprocess: {'build': {'channel_names': channel_names,
                                'viewer_settings': settings},

@@ -8,6 +8,8 @@ from ..util import open_file, files_to_jobs
 
 
 # TODO
+# - merge BoundaryAndMaskPrediction
+# TODO
 # - ilastik saves files with 'w'. this should be changed to 'a', and then we can write directly
 # - how do I run batch processing with n5/zarr files
 # - does ilastik support zarr files? (no)

@@ -241,7 +241,7 @@ class BatchJobOnContainer(BatchJob, ABC):
     def __init__(self, input_pattern, output_ext=None, identifier=None,
                  input_key=None, output_key=None,
                  input_ndim=None, output_ndim=None,
-                 viewer_settings={}):
+                 viewer_settings={}, scale_factors=None):
         super().__init__(input_pattern=input_pattern,
                          output_ext=output_ext,
                          identifier=identifier)
@@ -256,12 +256,16 @@ class BatchJobOnContainer(BatchJob, ABC):
         self.input_ndim, self._input_exp_ndim = self.check_ndim(input_ndim, self._input_exp_key)
         self.output_ndim, self._output_exp_ndim = self.check_ndim(output_ndim, self._output_exp_key)
 
+        # TODO validate the scale factors
+        self.scale_factors = scale_factors
+
         # validate the viewer settings
         for key in viewer_settings:
             if key not in self._output_exp_key:
                 raise ValueError("Key %s was not specified in the outputs" % key)
         self.viewer_settings = viewer_settings
 
+    # TODO implement writing with multi-res, if we have scale-factors
     def write_result(self, f, out_key, image, settings=None):
         ds = f.require_dataset(out_key, shape=image.shape, dtype=image.dtype,
                                compression='gzip')
@@ -270,6 +274,10 @@ class BatchJobOnContainer(BatchJob, ABC):
             settings = self.viewer_settings.get(out_key, {})
         assert isinstance(settings, dict)
         write_viewer_settings(ds, image, **settings)
+
+    # TODO read from dataset and mult-res group
+    def read_input(self):
+        pass
 
     @staticmethod
     def check_keys(keys, ext):
