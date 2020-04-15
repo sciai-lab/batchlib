@@ -14,12 +14,14 @@ class StardistPrediction(BatchJobOnContainer):
 
     def __init__(self, model_root, model_name,
                  input_key, output_key,
-                 input_channel=None, input_pattern='*.h5'):
+                 input_channel=None, input_pattern='*.h5',
+                 **super_kwargs):
         self.input_channel = input_channel
         input_ndim = 2 if self.input_channel is None else 3
         super().__init__(input_pattern,
                          input_key=input_key, output_key=output_key,
-                         input_ndim=input_ndim, output_ndim=2)
+                         input_ndim=input_ndim, output_ndim=2,
+                         **super_kwargs)
 
         self.model_root = model_root
         self.model_name = model_name
@@ -27,10 +29,7 @@ class StardistPrediction(BatchJobOnContainer):
     # TODO can we stack images along the batch axis?
     def predict_image(self, in_path, out_path, model):
         with open_file(in_path, 'r') as f:
-            if self.input_channel is None:
-                im = f[self.input_key][:]
-            else:
-                im = f[self.input_key][self.input_channel]
+            im = self.read_input(f, self.input_key, channel=self.input_channel)
 
         im = normalize_percentile(im, 1, 99.8)
         prob, dist = model.predict(im)

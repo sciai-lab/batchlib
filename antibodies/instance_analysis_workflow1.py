@@ -2,6 +2,7 @@
 
 import os
 import time
+from glob import glob
 
 import configargparse
 import h5py
@@ -119,7 +120,11 @@ def parse_instance_config1():
     parser.add('--nuc_key', default='nucleus_segmentation', type=str)
     parser.add('--seg_key', default='cell_segmentation_ilastik', type=str)
 
-    logger.info(parser.format_values())
+    # TODO add default scale factors
+    default_scale_factors = None
+    # default_scale_factors = [1, 2, 4, 8]
+    parser.add("--scale_factors", default=default_scale_factors)
+
     return parser.parse_args()
 
 

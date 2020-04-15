@@ -41,14 +41,16 @@ def run_pixel_analysis1(config):
     # TODO only save one channel in ilastik prediction
     job_dict = {
         Preprocess: {'build': {'channel_names': channel_names,
-                               'viewer_settings': settings},
+                               'viewer_settings': settings,
+                               'scale_factors': config.scale_factors},
                      'run': {'n_jobs': config.n_cpus,
                              'barrel_corrector': barrel_corrector,
                              'reorder': reorder}},
         IlastikPrediction: {'build': {'ilastik_bin': ilastik_bin,
                                       'ilastik_project': ilastik_project,
                                       'input_key': config.in_key,
-                                      'output_key': config.out_key},
+                                      'output_key': config.out_key,
+                                      'scale_factors': config.scale_factors},
                             'run': {'n_jobs': config.n_cpus, 'n_threads': n_threads_il}},
         PixellevelAnalysis: {'build': {'raw_key': config.in_analysis_key,
                                        'infection_key': config.out_key,
@@ -106,7 +108,11 @@ def parse_pixel_config1():
     parser.add("--ignore_invalid_inputs", default=None)
     parser.add("--ignore_failed_outputs", default=None)
 
-    logger.info(parser.format_values())
+    # TODO add default scale factors
+    default_scale_factors = None
+    # default_scale_factors = [1, 2, 4, 8]
+    parser.add("--scale_factors", default=default_scale_factors)
+
     return parser.parse_args()
 
 

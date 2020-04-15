@@ -19,12 +19,14 @@ class TorchPrediction(BatchJobOnContainer):
 
     def __init__(self, input_key, output_key, model_path,
                  model_class=None, model_kwargs={},
-                 input_channel=None, input_pattern='*.h5'):
+                 input_channel=None, input_pattern='*.h5',
+                 **super_kwargs):
         self.input_channel = input_channel
         input_ndim = 2 if self.input_channel is None else 3
         super().__init__(input_pattern,
                          input_key=input_key, output_key=output_key,
-                         input_ndim=input_ndim, output_ndim=2)
+                         input_ndim=input_ndim, output_ndim=2,
+                         **super_kwargs)
 
         self.model_path = model_path
         self.model_class = model_class
@@ -35,10 +37,7 @@ class TorchPrediction(BatchJobOnContainer):
         inputs = []
         for in_path in in_batch:
             with open_file(in_path, 'r') as f:
-                if self.input_channel is None:
-                    im = f[self.input_key][:]
-                else:
-                    im = f[self.input_key][self.input_channel]
+                im = self.read_input(f, self.input_key, channel=self.input_channel)
 
                 assert im.ndim == 2
                 # TODO this should not be hard-coded to the model class, but passed as an extra parameter.

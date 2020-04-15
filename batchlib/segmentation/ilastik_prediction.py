@@ -4,7 +4,7 @@ from concurrent import futures
 from tqdm import tqdm
 
 from ..base import BatchJobOnContainer
-from ..util import open_file, files_to_jobs
+from ..util import open_file, files_to_jobs, is_group
 
 
 # TODO
@@ -18,16 +18,30 @@ class IlastikPrediction(BatchJobOnContainer):
     """
     def __init__(self, ilastik_bin, ilastik_project,
                  input_key, output_key, input_pattern='*.h5',
-                 input_ndim=None, output_ndim=None):
+                 input_ndim=None, output_ndim=None, **super_kwargs):
         super().__init__(input_pattern,
                          input_key=input_key, output_key=output_key,
-                         input_ndim=input_ndim, output_ndim=output_ndim)
+                         input_ndim=input_ndim, output_ndim=output_ndim,
+                         **super_kwargs)
 
         self.bin = ilastik_bin
         self.project = ilastik_project
 
+    def check_multiscale_input(self, path):
+        with open_file(path, 'r') as f:
+            obj = f[self.input_key]
+        return is_group(obj)
+
     def predict_images(self, input_files):
-        inputs = ['%s/%s' % (inp, self.input_key) for inp in input_files]
+        if len(input_files) == 0:
+            return
+
+        is_multi_scale = self.check_multiscale_input(input_files[0])
+        if is_multi_scale:
+            inputs = ['%s/%s/s0' % (inp, self.input_key) for inp in input_files]
+        else:
+            inputs = ['%s/%s' % (inp, self.input_key) for inp in input_files]
+
         cmd = [self.bin, '--headless', '--readonly', '--project=%s' % self.project]
         cmd.extend(inputs)
         subprocess.run(cmd, check=True)
@@ -38,6 +52,8 @@ class IlastikPrediction(BatchJobOnContainer):
 
         # load and resave the data
         with open_file(tmp_path, 'r') as f:
+            # note: we read from ilastik here, so we don't need `read_input`
+            # beacuse this will not be multi-scale
             ds = f[tmp_key]
             data = ds[:]
 

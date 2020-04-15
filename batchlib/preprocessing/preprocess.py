@@ -82,7 +82,8 @@ def get_channel_settings(input_name):
 class Preprocess(BatchJobOnContainer):
 
     def __init__(self, channel_names=DEFAULT_CHANNEL_NAMES,
-                 viewer_settings=DEFAULT_VIEWER_SETTINGS, output_ext='.h5'):
+                 viewer_settings=DEFAULT_VIEWER_SETTINGS, output_ext='.h5',
+                 **super_kwargs):
         if len(channel_names) != 3:
             raise ValueError("Expected 3 channels, got %i" % len(channel_names))
 
@@ -92,7 +93,7 @@ class Preprocess(BatchJobOnContainer):
 
         super().__init__(input_pattern='*.tiff', output_ext=output_ext,
                          output_key=channel_names_, output_ndim=channel_dims,
-                         viewer_settings=viewer_settings)
+                         viewer_settings=viewer_settings, **super_kwargs)
 
     def _reorder(self, im, reorder):
         im_shape = im.shape[1:]

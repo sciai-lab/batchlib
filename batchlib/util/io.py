@@ -16,6 +16,22 @@ H5_EXTS = ['.h5', '.hdf', '.hdf5']
 Z5_EXTS = ['.zr', '.zarr', '.n5']
 
 
+def is_dataset(obj):
+    if isinstance(obj, h5py.Dataset):
+        return True
+    if z5py is not None and isinstance(obj, z5py.Dataset):
+        return True
+    return False
+
+
+def is_group(obj):
+    if isinstance(obj, h5py.Group):
+        return True
+    if z5py is not None and isinstance(obj, z5py.Group):
+        return True
+    return False
+
+
 def open_file(path, mode='r', h5_timeout=5, h5_retry=10):
     ext = os.path.splitext(path)[1]
 
@@ -76,9 +92,17 @@ def write_table(folder, column_dict, column_names, out_path, pattern='*.h5'):
     table.to_csv(out_path, sep='\t', index=False)
 
 
-def downsample_image_data(path, scale_factors, out_path=None):
-    # TODO support in-place
-    assert out_path is not None, "Do not support in-place donwn-sampling for now"
+def downscale_image(image, scale_factor):
+    assert isinstance(scale_factor, int), scale_factor
+    interpolation_dtypes = (np.uint8, np.int8, np.int16, np.uint16, np.float32, np.float64)
+    if image.dtype in interpolation_dtypes:
+        return downscale_local_mean(image, (scale_factor, scale_factor)).astype(image.dtype)
+    else:
+        return rescale(image, scale_factor, order=0, anti_aliasing=False,
+                       preserve_range=True).astype(image.dtype)
+
+
+def downsample_image_data(path, scale_factors, out_path):
     if any(not isinstance(sf, int) for sf in scale_factors):
         raise ValueError("Expect all down-scaling factors to be integers")
 
@@ -96,14 +120,6 @@ def downsample_image_data(path, scale_factors, out_path=None):
         if copy_attrs:
             _copy_attrs(ds, ds_out)
 
-    def _downscale(data, scale_factor):
-        interpolation_dtypes = (np.uint8, np.int8, np.int16, np.uint16, np.float32, np.float64)
-        if data.dtype in interpolation_dtypes:
-            return downscale_local_mean(data, (scale_factor, scale_factor)).astype(data.dtype)
-        else:
-            return rescale(data, scale_factor, order=0, anti_aliasing=False,
-                           preserve_range=True).astype(data.dtype)
-
     def _copy_and_downscale_dataset(f, ds, name, scale_factors):
         g = f.require_group(name)
 
@@ -113,7 +129,7 @@ def downsample_image_data(path, scale_factors, out_path=None):
         data = ds[:]
         # downsample the other scales
         for scale_factor in scale_factors:
-            downscaled = _downscale(data, scale_factor)
+            downscaled = downscale_image(data, scale_factor)
             out_name = 'image_scale%ix%i' % (scale_factor, scale_factor)
             ds_out = g.require_dataset(out_name, shape=downscaled.shape,
                                        dtype=downscaled.dtype, compression='gzip')
@@ -152,8 +168,9 @@ def write_image_information(path, image_information=None, well_information=None)
             f.attrs['WellInformation'] = well_information
 
 
+# TODO how do we write the scale factor ?
 def write_viewer_settings(ds, image, color=None, alpha=1., visible=False, skip=None,
-                          percentile_min=1, percentile_max=99):
+                          percentile_min=1, percentile_max=99, scale_factors=None):
     # if skip is None, we determine it from the dimensionality
     if skip is None:
         if image.ndim > 2:

@@ -18,7 +18,7 @@ class SeededSegmentation(BatchJobOnContainer):
     """
     """
     def __init__(self, pmap_key, seed_key, output_key,
-                 mask_key=None, input_pattern='*.h5'):
+                 mask_key=None, input_pattern='*.h5', **super_kwargs):
 
         input_keys = [pmap_key, seed_key]
         if mask_key is not None:
@@ -26,7 +26,7 @@ class SeededSegmentation(BatchJobOnContainer):
 
         super().__init__(input_pattern,
                          input_key=input_keys, output_key=output_key,
-                         input_ndim=2, output_ndim=2)
+                         input_ndim=2, output_ndim=2, **super_kwargs)
 
         self.pmap_key = pmap_key
         self.seed_key = seed_key
@@ -59,12 +59,12 @@ class SeededSegmentation(BatchJobOnContainer):
 
     def segment_image(self, in_path, out_path, invert_pmap, sigma, erode_mask, dilate_seeds, **kwargs):
         with open_file(in_path, 'r') as f:
-            pmap = f[self.pmap_key][:]
-            seeds = f[self.seed_key][:]
+            pmap = self.read_input(f, self.pmap_key)
+            seeds = self.read_input(f, self.seed_key)
             if self.mask_key is None:
                 mask = None
             else:
-                mask = f[self.mask_key][:].astype('bool')
+                mask = self.read_input(f, self.mask_key).astype('bool')
 
         pmap = self.process_pmap(pmap, invert_pmap, sigma)
         seeds, mask, bg_id = self.process_mask_and_seeds(seeds, mask, erode_mask, dilate_seeds)
