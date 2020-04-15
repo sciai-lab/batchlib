@@ -16,9 +16,7 @@ class TestPreprocess(unittest.TestCase):
 
     def test_preprocess(self):
         from batchlib.preprocessing import Preprocess, get_channel_settings
-        fname = glob(os.path.join(self.in_folder, '*.tiff'))[0]
-        names, settings, reorder = get_channel_settings(fname)
-        job = Preprocess(names, settings, reorder=reorder)
+        job = Preprocess.from_folder(self.in_folder)
         job(self.folder, self.in_folder, n_jobs=4)
 
     def test_preprocess_with_barrel_correction(self):
@@ -28,8 +26,7 @@ class TestPreprocess(unittest.TestCase):
 
         barrel_corrector_path = '../../misc/barrel_corrector.h5'
 
-        job = Preprocess(names, settings, reorder=reorder,
-                         barrel_corrector_path=barrel_corrector_path)
+        job = Preprocess.from_folder(folder, barrel_corrector_path=barrel_corrector_path)
         job(self.folder, self.in_folder, n_jobs=4)
 
 

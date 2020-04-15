@@ -1,6 +1,7 @@
 import os
 from concurrent import futures
 from functools import partial
+from glob import glob
 
 import imageio
 import numpy as np
@@ -102,7 +103,17 @@ class Preprocess(BatchJobOnContainer):
     @classmethod
     def from_folder(cls, input_folder, output_ext='.h5',
                     barrel_correction=None, **super_kwargs):
-        pass
+        # TODO do we need a channel-name -> semantics mapping
+
+        pattern = os.path.join(input_folder, '*.tiff')
+        input_files = glob(pattern)
+
+        # TODO check that all files have the same channels
+        names, settings, reorder = get_channel_settings(input_files[0])
+
+        return cls.__init__(names, settings, reorder=reorder, output_ext=output_ext,
+                            barrel_corrector_path=barrel_corrector_path, **super_kwargs)
+
 
     def __init__(self, channel_names, viewer_settings, reorder=None,
                  output_ext='.h5', barrel_corrector_path=None,
