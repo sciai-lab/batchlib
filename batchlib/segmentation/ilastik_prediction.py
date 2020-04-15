@@ -8,8 +8,6 @@ from ..util import open_file, files_to_jobs, is_group
 
 
 # TODO
-# - merge BoundaryAndMaskPrediction
-# TODO
 # - ilastik saves files with 'w'. this should be changed to 'a', and then we can write directly
 # - how do I run batch processing with n5/zarr files
 # - does ilastik support zarr files? (no)
@@ -18,7 +16,19 @@ class IlastikPrediction(BatchJobOnContainer):
     """
     def __init__(self, ilastik_bin, ilastik_project,
                  input_key, output_key, input_pattern='*.h5',
-                 input_ndim=None, output_ndim=None, **super_kwargs):
+                 keep_channels=None, input_ndim=None, output_ndim=None,
+                 **super_kwargs):
+        if keep_channels is not None:
+            if not isinstance(keep_channels, (list, tuple)):
+                raise ValueError("keep_channels must be list or tuple, not %s" % type(keep_channels))
+            if not isinstance(output_key, (list, tuple)):
+                raise ValueError("If keep_channels is given, output key must be list or tuple")
+            n_keep = len(keep_channels)
+            if n_keep != len(output_key):
+                raise ValueError("Number of output keys and channels to keep does not agree")
+
+        self.keep_channels = keep_channels
+
         super().__init__(input_pattern,
                          input_key=input_key, output_key=output_key,
                          input_ndim=input_ndim, output_ndim=output_ndim,
@@ -57,8 +67,22 @@ class IlastikPrediction(BatchJobOnContainer):
             ds = f[tmp_key]
             data = ds[:]
 
-        with open_file(out_path, 'a') as f:
-            self.write_result(f, self.output_key, data)
+        if isinstance(self.output_key, str):
+            with open_file(out_path, 'a') as f:
+                self.write_result(f, self.output_key, data)
+        else:
+            n_channels = len(data)
+            keep_channels = list(range(n_channels)) if self.keep_channels is None else self.keep_channels
+            assert all(kc < n_channels for kc in keep_channels)
+
+            with open_file(out_path, 'a') as f:
+                current_key_id = 0
+                for chan_id, chan in enumerate(data):
+                    if chan_id not in keep_channels:
+                        continue
+                    key = self.output_key[current_key_id]
+                    self.write_result(f, key, chan)
+                    current_key_id += 1
 
         # clean up
         os.remove(tmp_path)

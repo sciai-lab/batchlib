@@ -85,16 +85,18 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
 
     def __init__(self,
                  raw_key='TRITC',
-                 infection_key='local_infection',
+                 infected_key='local_infected',
+                 not_infected_key='local_not_infected',
                  input_pattern='*.h5',
                  output_folder="pixelwise_analysis",
                  identifier=None,
                  n_jobs=1):
         self.raw_key = raw_key
-        self.infection_key = infection_key
+        self.infected_key = infected_key
+        self.not_infected_key = not_infected_key
 
-        # prediction and raw image should be 3d (2d + channels)
-        input_ndim = (2, 3)
+        # all inputs should be 2d
+        input_ndim = (2, 2, 2)
 
         # identifier allows to run different instances of this job on the same folder
         output_ext = '.json'
@@ -105,18 +107,19 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
                          output_ext=output_ext,
                          output_folder=output_folder,
                          input_key=[self.raw_key,
-                                    self.infection_key],
+                                    self.infected_key,
+                                    self.not_infected_key],
                          input_ndim=input_ndim)
         self.identifier = identifier
 
     def load_sample(self, path):
         with open_file(path, mode='r') as f:
             tritc = self.read_input(f, self.raw_key)
-            local_infection_probs = self.read_input(f, self.infection_key)
+            infected = self.read_input(f, self.infected_key)
+            not_infected = self.read_input(f, self.infected_key)
 
-        # TODO use single channel only
-        infected = local_infection_probs[0] > 0.5
-        not_infected = local_infection_probs[1] > 0.5
+        infected = infected > 0.5
+        not_infected = not_infected > 0.5
 
         return infected, not_infected, tritc
 

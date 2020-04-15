@@ -270,9 +270,14 @@ class BatchJobOnContainer(BatchJob, ABC):
         ds = g.require_dataset(out_key, shape=image.shape, dtype=image.dtype,
                                compression='gzip')
         ds[:] = image
+        return ds
 
-    def _write_multi_scale(self, g, out_key, image):
+    def _write_multi_scale(self, f, out_key, image):
+        g = f.require_group(out_key)
         self._write_single_scale(g, "s0", image)
+
+        if self.scale_factors is None:
+            return g
 
         prev_scale_factor = 1
         # note: scale_factors[0] is always 1
@@ -284,11 +289,13 @@ class BatchJobOnContainer(BatchJob, ABC):
             prev_scale_factor = scale_factor
 
     def write_result(self, f, out_key, image, settings=None):
-        g = f.require_group(out_key)
-        if self.scale_factors is None or image.ndim != 2:
-            self._write_single_scale(g, "s0", image)
+        # dimensionality is not to
+        # -> this is not in image format and we just writ the data
+        if image.ndim != 2:
+            g = self._write_single_scale(f, out_key, image)
+        # otherwise, write in  multi-scale format
         else:
-            self._write_multi_scale(g, image)
+            g = self._write_multi_scale(f, out_key, image)
 
         if settings is None:
             settings = self.viewer_settings.get(out_key, {})

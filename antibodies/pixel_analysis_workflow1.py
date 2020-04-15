@@ -38,7 +38,6 @@ def run_pixel_analysis1(config):
     fname = glob(os.path.join(config.input_folder, '*.tiff'))[0]
     channel_names, settings, reorder = get_channel_settings(fname)
 
-    # TODO only save one channel in ilastik prediction
     job_dict = {
         Preprocess: {'build': {'channel_names': channel_names,
                                'viewer_settings': settings,
@@ -49,11 +48,14 @@ def run_pixel_analysis1(config):
         IlastikPrediction: {'build': {'ilastik_bin': ilastik_bin,
                                       'ilastik_project': ilastik_project,
                                       'input_key': config.in_key,
-                                      'output_key': config.out_key,
+                                      'output_key': [config.out_key_infected,
+                                                     config.out_key_not_infected],
+                                      'keep_channels': [0, 1],
                                       'scale_factors': config.scale_factors},
                             'run': {'n_jobs': config.n_cpus, 'n_threads': n_threads_il}},
         PixellevelAnalysis: {'build': {'raw_key': config.in_analysis_key,
-                                       'infection_key': config.out_key,
+                                       'infected_key': config.out_key_infected,
+                                       'not_infected_key': config.out_key_not_infected,
                                        'output_folder': config.output_folder}},
     }
 
@@ -98,7 +100,8 @@ def parse_pixel_config1():
     # options
     parser.add("--in_key", default='raw')
     parser.add("--in_analysis_key", default='TRITC')
-    parser.add("--out_key", default='local_infection')
+    parser.add("--out_key_infected", default='local_infected')
+    parser.add("--out_key_not_infected", default='local_not_infected')
     parser.add("--output_folder", default="pixelwise_analysis")
     parser.add("--root", default='/home/covid19/antibodies-nuclei', type=str)
     parser.add("--output_root_name", default='data-processed-new', type=str)
