@@ -5,7 +5,6 @@ import time
 from glob import glob
 
 import configargparse
-import h5py
 
 from batchlib import run_workflow
 from batchlib.analysis.pixel_level_analysis import PixellevelAnalysis, PixellevelPlots
@@ -31,8 +30,7 @@ def run_pixel_analysis1(config):
     n_threads_il = None if config.n_cpus == 1 else 4
 
     barrel_corrector_path = os.path.join(config.root, 'barrel_correction/barrel_corrector.h5')
-    with h5py.File(barrel_corrector_path, 'r') as f:
-        barrel_corrector = (f['divisor'][:], f['offset'][:])
+    barrel_corrector_key = ('divisor', 'offset')
 
     # get the correct channel ordering and names for this data
     fname = glob(os.path.join(config.input_folder, '*.tiff'))[0]
@@ -41,9 +39,10 @@ def run_pixel_analysis1(config):
     job_dict = {
         Preprocess: {'build': {'channel_names': channel_names,
                                'viewer_settings': settings,
+                               'barrel_corrector_path': barrel_corrector_path,
+                               'barrel_corrector_key': barrel_corrector_key,
                                'scale_factors': config.scale_factors},
                      'run': {'n_jobs': config.n_cpus,
-                             'barrel_corrector': barrel_corrector,
                              'reorder': reorder}},
         IlastikPrediction: {'build': {'ilastik_bin': ilastik_bin,
                                       'ilastik_project': ilastik_project,

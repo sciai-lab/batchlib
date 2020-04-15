@@ -5,7 +5,6 @@ import time
 from glob import glob
 
 import configargparse
-import h5py
 
 from batchlib import run_workflow
 from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
@@ -36,8 +35,7 @@ def run_instance_analysis2(config):
     model_name = '2D_dsb2018'
 
     barrel_corrector_path = os.path.join(config.root, 'barrel_correction/barrel_corrector.h5')
-    with h5py.File(barrel_corrector_path, 'r') as f:
-        barrel_corrector = (f['divisor'][:], f['offset'][:])
+    barrel_corrector_key = ('divisor', 'offset')
 
     torch_model_path = os.path.join(config.root,
                                     'unet_segmentation/sample_models/fg_boundaries_best_checkpoint.pytorch')
@@ -59,9 +57,10 @@ def run_instance_analysis2(config):
 
     job_dict = {
         Preprocess: {'build': {'channel_names': channel_names,
-                               'viewer_settings': settings},
+                               'viewer_settings': settings,
+                               'barrel_corrector_path': barrel_corrector_path,
+                               'barrel_corrector_key': barrel_corrector_key},
                      'run': {'n_jobs': config.n_cpus,
-                             'barrel_corrector': barrel_corrector,
                              'reorder': reorder}},
         TorchPrediction: {'build': {'input_key': config.in_key,
                                     'output_key': [config.mask_key, config.bd_key],
