@@ -1,13 +1,13 @@
 import json
 import os
-import os.path
 from concurrent import futures
+from glob import glob
 
 import numpy as np
 from tqdm import tqdm
 
 from batchlib.util.logging import get_logger
-from ..base import BatchJob, BatchJobWithSubfolder
+from ..base import BatchJobWithSubfolder
 from ..util.io import open_file
 from ..util.plate_visualizations import well_plot
 
@@ -154,28 +154,14 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
 
     def run(self, input_files, output_files):
         logger.info("Compute stats for %i input images" % (len(input_files),))
+
+        # compute all pixel-level stats
         with futures.ThreadPoolExecutor(self.n_jobs) as tp:
             list(tqdm(tp.map(self.all_stats, input_files, output_files),
                       total=len(input_files)))
 
-
-class PixellevelPlots(BatchJob):
-    """
-    """
-
-    def __init__(self,
-                 input_pattern='pixelwise_analysis/*.json',
-                 output_ext="",
-                 identifier=None):
-        super().__init__(input_pattern=input_pattern,
-                         output_ext=output_ext,
-                         identifier=identifier)
-
-    def run(self, input_files, output_files):
-        logger.info("Plot histograms for %i input jsons" % (len(input_files),))
-        output_folder = os.path.split(output_files[0])[0]
-        all_plots(input_files, output_folder)
-
-    def validate_output(self, path):
-        # We do not need to check the plot files
-        return True
+        # produce the result plots (need to take all files into account, not just current results)
+        output_folder = os.path.join(self.folder, self.output_folder)
+        pattern = os.path.join(output_folder, "*.json")
+        all_results = glob(pattern)
+        all_plots(all_results, output_folder)

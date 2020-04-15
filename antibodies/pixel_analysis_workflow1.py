@@ -7,7 +7,7 @@ from glob import glob
 import configargparse
 
 from batchlib import run_workflow
-from batchlib.analysis.pixel_level_analysis import PixellevelAnalysis, PixellevelPlots
+from batchlib.analysis.pixel_level_analysis import PixellevelAnalysis
 from batchlib.preprocessing import Preprocess, get_channel_settings
 from batchlib.segmentation import IlastikPrediction
 from batchlib.util.logging import get_logger
@@ -65,13 +65,6 @@ def run_pixel_analysis1(config):
                  ignore_invalid_inputs=config.ignore_invalid_inputs,
                  ignore_failed_outputs=config.ignore_failed_outputs)
 
-    job_dict2 = {PixellevelPlots: {}}
-    run_workflow(name, config.folder, job_dict2,
-                 input_folder=os.path.join(config.folder, config.output_folder),
-                 force_recompute=config.force_recompute,
-                 ignore_invalid_inputs=config.ignore_invalid_inputs,
-                 ignore_failed_outputs=config.ignore_failed_outputs)
-
     t0 = time.time() - t0
     logger.info(f"Run {name} in {t0}s")
     return name, t0
@@ -100,7 +93,6 @@ def parse_pixel_config1():
     parser.add("--in_analysis_key", default='TRITC')
     parser.add("--out_key_infected", default='local_infected')
     parser.add("--out_key_not_infected", default='local_not_infected')
-    parser.add("--output_folder", default="pixelwise_analysis")
     parser.add("--root", default='/home/covid19/antibodies-nuclei', type=str)
     parser.add("--output_root_name", default='data-processed-new', type=str)
     parser.add("--use_unique_output_folder", default=False, action='store_false')
