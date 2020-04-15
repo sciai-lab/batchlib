@@ -5,10 +5,9 @@ import time
 from glob import glob
 
 import configargparse
-import h5py
 
 from batchlib import run_workflow
-from batchlib.analysis.pixel_level_analysis import PixellevelAnalysis, PixellevelPlots
+from batchlib.analysis.pixel_level_analysis import PixellevelAnalysis
 from batchlib.preprocessing import Preprocess, get_channel_settings
 from batchlib.segmentation import IlastikPrediction
 from batchlib.util.logging import get_logger
@@ -31,8 +30,7 @@ def run_pixel_analysis1(config):
     n_threads_il = None if config.n_cpus == 1 else 4
 
     barrel_corrector_path = os.path.join(config.root, 'barrel_correction/barrel_corrector.h5')
-    with h5py.File(barrel_corrector_path, 'r') as f:
-        barrel_corrector = (f['divisor'][:], f['offset'][:])
+    barrel_corrector_key = ('divisor', 'offset')
 
     # get the correct channel ordering and names for this data
     fname = glob(os.path.join(config.input_folder, '*.tiff'))[0]
@@ -40,31 +38,29 @@ def run_pixel_analysis1(config):
 
     job_dict = {
         Preprocess: {'build': {'channel_names': channel_names,
-                               'viewer_settings': settings},
+                               'viewer_settings': settings,
+                               'barrel_corrector_path': barrel_corrector_path,
+                               'barrel_corrector_key': barrel_corrector_key,
+                               'scale_factors': config.scale_factors},
                      'run': {'n_jobs': config.n_cpus,
-                             'barrel_corrector': barrel_corrector,
                              'reorder': reorder}},
         IlastikPrediction: {'build': {'ilastik_bin': ilastik_bin,
                                       'ilastik_project': ilastik_project,
                                       'input_key': config.in_key,
-                                      'output_key': config.out_key},
+                                      'output_key': [config.out_key_infected,
+                                                     config.out_key_not_infected],
+                                      'keep_channels': [0, 1],
+                                      'scale_factors': config.scale_factors},
                             'run': {'n_jobs': config.n_cpus, 'n_threads': n_threads_il}},
         PixellevelAnalysis: {'build': {'raw_key': config.in_analysis_key,
-                                       'infection_key': config.out_key,
-                                       'output_folder': config.output_folder}},
+                                       'infected_key': config.out_key_infected,
+                                       'not_infected_key': config.out_key_not_infected}},
     }
 
     t0 = time.time()
 
     run_workflow(name, config.folder, job_dict,
                  input_folder=config.input_folder,
-                 force_recompute=config.force_recompute,
-                 ignore_invalid_inputs=config.ignore_invalid_inputs,
-                 ignore_failed_outputs=config.ignore_failed_outputs)
-
-    job_dict2 = {PixellevelPlots: {}}
-    run_workflow(name, config.folder, job_dict2,
-                 input_folder=os.path.join(config.folder, config.output_folder),
                  force_recompute=config.force_recompute,
                  ignore_invalid_inputs=config.ignore_invalid_inputs,
                  ignore_failed_outputs=config.ignore_failed_outputs)
@@ -95,8 +91,8 @@ def parse_pixel_config1():
     # options
     parser.add("--in_key", default='raw')
     parser.add("--in_analysis_key", default='TRITC')
-    parser.add("--out_key", default='local_infection')
-    parser.add("--output_folder", default="pixelwise_analysis")
+    parser.add("--out_key_infected", default='local_infected')
+    parser.add("--out_key_not_infected", default='local_not_infected')
     parser.add("--root", default='/home/covid19/antibodies-nuclei', type=str)
     parser.add("--output_root_name", default='data-processed-new', type=str)
     parser.add("--use_unique_output_folder", default=False, action='store_false')
@@ -105,7 +101,11 @@ def parse_pixel_config1():
     parser.add("--ignore_invalid_inputs", default=None)
     parser.add("--ignore_failed_outputs", default=None)
 
-    logger.info(parser.format_values())
+    # TODO add default scale factors
+    default_scale_factors = None
+    # default_scale_factors = [1, 2, 4, 8]
+    parser.add("--scale_factors", default=default_scale_factors)
+
     return parser.parse_args()
 
 

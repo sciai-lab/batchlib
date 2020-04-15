@@ -29,17 +29,24 @@ For now, we have three workflows:
 These scripts use `configargparse` to read options from a config file and enable over-riding options
 from the command line. The default configurations to run on ialgpu03 are in `antibodies/configs`.
 
-### Design Principles
+### How does it work?
 
-`batchlib` operates on a single folder containing the data to process for a given experiment (usually all images from one plate).
-Its workflows consist of indvidual jobs that apply an operation to files matching a pattern.
-Jobs can be rerun on a folder once more data has been added and will only process new files.
+Workflows operate on a single folder containing the data to be processed for a given experiment (usually all images from one plate).
+They consist of indvidual jobs that apply an operation to all files that match a given pattern.
+Jobs can be rerun on a folder when more data has been added and will only process the new files.
 
-TODO explain advanced stuff:
-- multiple workflow sharing job on same folder (locking, but needs n5)
-- different execution modes, `force_recompute`, `ignore_invalid_inputs`, `ignore_failed_outputs`
+There are som more advanced methods of execution, they can be activated by passing the corresponding flag to `run_workflow` or the job's `__call__` method:
+- `force_recompute`: Run computation for ALL files.
+- `ignore_invalid_inputs`: Don't throw an error if there are invalid input files, but continue computing on the valid ones.
+- `ignore_failed_outputs`: Don't throw an error if the computation fails, but continue with the next job,
 
-### Implement new Batch Job
+### Troubleshooting
+
+- **Can I see the progress of my job?** All files related to running workflows are stored in the `batchlib` subfolder of the folder where the data is being processed. There is a `.status` file for the workflows and individual jobs that keep track of the progress. There is also a`.log` file that contains everything that was logged.
+- **I have failed inputs or outputs.** Look into the `.status` file of the job, It will contain the paths to the files for which it failed. Fix the issues and rerun the job.
+- **I try to run a workflow but it does not start.** There is a `.lock` file in the `batchlab` folder that prevents multiple workflows being run on the same folder at the same time. It might not be deleted properly if a job gets killed or segaults. Just delete it and rerun.
+
+### Implement a new Batch Job
 
 - Inherit from `batchlib.BatchJob` or batchlib.BatchJobOnContainer`
 - Implement `self.run` with function signature `run(self, input_files, output_files, **kwargs)`

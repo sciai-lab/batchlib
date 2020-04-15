@@ -5,7 +5,8 @@ from abc import ABC
 from glob import glob
 
 from batchlib.util.logging import get_logger
-from .util import open_file, get_file_lock, write_viewer_settings
+from .util import (downscale_image, is_group, is_dataset,
+                   open_file, get_file_lock, write_viewer_settings)
 
 logger = get_logger('Workflow.BatchJob')
 
@@ -82,7 +83,6 @@ class BatchJob(ABC):
 
     def update_status(self, folder, status,
                       invalid_inputs=None, failed_outputs=None, processed=None):
-        # TODO check that only one of the three last inputs is not None
         path = self.status_file(folder)
 
         if invalid_inputs is not None:
@@ -155,7 +155,7 @@ class BatchJob(ABC):
         return input_files
 
     def check_outputs(self, output_files, folder, status, ignore_failed_outputs):
-        # TODO output validation can be expensive, so we might want to parallelize
+        # NOTE output validation can be expensive, so we might want to parallelize in the future
         # validate the outputs and update the status
         failed_outputs = self.get_invalid_outputs(output_files)
         if len(failed_outputs) > 0:
@@ -242,7 +242,7 @@ class BatchJobOnContainer(BatchJob, ABC):
     def __init__(self, input_pattern, output_ext=None, identifier=None,
                  input_key=None, output_key=None,
                  input_ndim=None, output_ndim=None,
-                 viewer_settings={}):
+                 viewer_settings={}, scale_factors=None):
         super().__init__(input_pattern=input_pattern,
                          output_ext=output_ext,
                          identifier=identifier)
@@ -257,20 +257,72 @@ class BatchJobOnContainer(BatchJob, ABC):
         self.input_ndim, self._input_exp_ndim = self.check_ndim(input_ndim, self._input_exp_key)
         self.output_ndim, self._output_exp_ndim = self.check_ndim(output_ndim, self._output_exp_key)
 
+        self.check_scale_factors(scale_factors)
+        self.scale_factors = scale_factors
+
         # validate the viewer settings
         for key in viewer_settings:
             if key not in self._output_exp_key:
                 raise ValueError("Key %s was not specified in the outputs" % key)
         self.viewer_settings = viewer_settings
 
-    def write_result(self, f, out_key, image, settings=None):
-        ds = f.require_dataset(out_key, shape=image.shape, dtype=image.dtype,
+    def _write_single_scale(self, g, out_key, image):
+        ds = g.require_dataset(out_key, shape=image.shape, dtype=image.dtype,
                                compression='gzip')
         ds[:] = image
+        return ds
+
+    def _write_multi_scale(self, f, out_key, image):
+        g = f.require_group(out_key)
+        self._write_single_scale(g, "s0", image)
+
+        if self.scale_factors is None:
+            return g
+
+        prev_scale_factor = 1
+        # note: scale_factors[0] is always 1
+        for scale, scale_factor in enumerate(self.scale_factors[1:], 1):
+            rel_scale_factor = int(scale_factor / prev_scale_factor)
+            image = downscale_image(image, rel_scale_factor)
+            key = "s%i" % scale
+            self._write_single_scale(g, key, image)
+            prev_scale_factor = scale_factor
+
+    def write_result(self, f, out_key, image, settings=None):
+        # dimensionality is not to
+        # -> this is not in image format and we just writ the data
+        if image.ndim != 2:
+            g = self._write_single_scale(f, out_key, image)
+        # otherwise, write in  multi-scale format
+        else:
+            g = self._write_multi_scale(f, out_key, image)
+
         if settings is None:
             settings = self.viewer_settings.get(out_key, {})
+
         assert isinstance(settings, dict)
-        write_viewer_settings(ds, image, **settings)
+        write_viewer_settings(g, image,
+                              scale_factors=self.scale_factors,
+                              **settings)
+
+    def read_input(self, f, key, channel=None, scale=0):
+        ds = f[key]
+        if is_group(ds):
+            ds = ds['s%i' % scale]
+        assert is_dataset(ds)
+        data = ds[:] if channel is None else ds[channel]
+        return data
+
+    @staticmethod
+    def check_scale_factors(scale_factors):
+        if scale_factors is None:
+            return
+        if not isinstance(scale_factors, (list, tuple)):
+            raise ValueError("Expect scale factors to be None, list or tuple")
+        if not all(isinstance(sf, int) for sf in scale_factors):
+            raise ValueError("Expect integer scale factors")
+        if scale_factors[0] != 1:
+            raise ValueError("First scale factor must be 1, got %i" % scale_factors[0])
 
     @staticmethod
     def check_keys(keys, ext):
@@ -317,7 +369,12 @@ class BatchJobOnContainer(BatchJob, ABC):
             for key, ndim in zip(exp_keys, exp_ndims):
                 if key not in f:
                     return False
-                if ndim is not None and f[key].ndim != ndim:
+                if ndim is None:
+                    continue
+                ds = f[key]
+                if is_group(ds):
+                    ds = ds['s0']
+                if ds.ndim != ndim:
                     return False
         return True
 

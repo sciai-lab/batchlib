@@ -5,7 +5,6 @@ import time
 from glob import glob
 
 import configargparse
-import h5py
 
 from batchlib import run_workflow
 from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
@@ -36,8 +35,7 @@ def run_instance_analysis2(config):
     model_name = '2D_dsb2018'
 
     barrel_corrector_path = os.path.join(config.root, 'barrel_correction/barrel_corrector.h5')
-    with h5py.File(barrel_corrector_path, 'r') as f:
-        barrel_corrector = (f['divisor'][:], f['offset'][:])
+    barrel_corrector_key = ('divisor', 'offset')
 
     torch_model_path = os.path.join(config.root,
                                     'unet_segmentation/sample_models/fg_boundaries_best_checkpoint.pytorch')
@@ -50,8 +48,8 @@ def run_instance_analysis2(config):
     }
 
     analysis_identifier = None
-    if config.in_key_analysis != 'raw':
-        analysis_identifier = config.in_key_analysis
+    if config.in_analysis_key != 'raw':
+        analysis_identifier = config.in_analysis_key
 
     # get the correct channel ordering and names for this data
     fname = glob(os.path.join(config.input_folder, '*.tiff'))[0]
@@ -59,9 +57,10 @@ def run_instance_analysis2(config):
 
     job_dict = {
         Preprocess: {'build': {'channel_names': channel_names,
-                               'viewer_settings': settings},
+                               'viewer_settings': settings,
+                               'barrel_corrector_path': barrel_corrector_path,
+                               'barrel_corrector_key': barrel_corrector_key},
                      'run': {'n_jobs': config.n_cpus,
-                             'barrel_corrector': barrel_corrector,
                              'reorder': reorder}},
         TorchPrediction: {'build': {'input_key': config.in_key,
                                     'output_key': [config.mask_key, config.bd_key],
@@ -86,7 +85,7 @@ def run_instance_analysis2(config):
                           'run': {'erode_mask': 3,
                                   'dilate_seeds': 3,
                                   'n_jobs': config.n_cpus}},
-        CellLevelAnalysis: {'build': {'raw_key': config.in_key_analysis,
+        CellLevelAnalysis: {'build': {'raw_key': config.in_analysis_key,
                                       'nuc_seg_key': config.nuc_key,
                                       'cell_seg_key': config.seg_key,
                                       'identifier': analysis_identifier},
@@ -136,7 +135,7 @@ def parse_instance_config2():
     parser.add("--ignore_failed_outputs", default=None)
 
     parser.add("--in_key", default='raw', type=str)
-    parser.add("--in_key_analysis", default='raw', type=str)
+    parser.add("--in_analysis_key", default='raw', type=str)
     parser.add("--bd_key", default='pmap_tritc', type=str)
     parser.add("--mask_key", default='mask', type=str)
     parser.add("--nuc_key", default='nucleus_segmentation', type=str)

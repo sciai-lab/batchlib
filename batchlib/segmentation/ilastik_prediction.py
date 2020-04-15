@@ -4,7 +4,7 @@ from concurrent import futures
 from tqdm import tqdm
 
 from ..base import BatchJobOnContainer
-from ..util import open_file, files_to_jobs
+from ..util import open_file, files_to_jobs, is_group
 
 
 # TODO
@@ -16,16 +16,42 @@ class IlastikPrediction(BatchJobOnContainer):
     """
     def __init__(self, ilastik_bin, ilastik_project,
                  input_key, output_key, input_pattern='*.h5',
-                 input_ndim=None, output_ndim=None):
+                 keep_channels=None, input_ndim=None, output_ndim=None,
+                 **super_kwargs):
+        if keep_channels is not None:
+            if not isinstance(keep_channels, (list, tuple)):
+                raise ValueError("keep_channels must be list or tuple, not %s" % type(keep_channels))
+            if not isinstance(output_key, (list, tuple)):
+                raise ValueError("If keep_channels is given, output key must be list or tuple")
+            n_keep = len(keep_channels)
+            if n_keep != len(output_key):
+                raise ValueError("Number of output keys and channels to keep does not agree")
+
+        self.keep_channels = keep_channels
+
         super().__init__(input_pattern,
                          input_key=input_key, output_key=output_key,
-                         input_ndim=input_ndim, output_ndim=output_ndim)
+                         input_ndim=input_ndim, output_ndim=output_ndim,
+                         **super_kwargs)
 
         self.bin = ilastik_bin
         self.project = ilastik_project
 
+    def check_multiscale_input(self, path):
+        with open_file(path, 'r') as f:
+            obj = f[self.input_key]
+        return is_group(obj)
+
     def predict_images(self, input_files):
-        inputs = ['%s/%s' % (inp, self.input_key) for inp in input_files]
+        if len(input_files) == 0:
+            return
+
+        is_multi_scale = self.check_multiscale_input(input_files[0])
+        if is_multi_scale:
+            inputs = ['%s/%s/s0' % (inp, self.input_key) for inp in input_files]
+        else:
+            inputs = ['%s/%s' % (inp, self.input_key) for inp in input_files]
+
         cmd = [self.bin, '--headless', '--readonly', '--project=%s' % self.project]
         cmd.extend(inputs)
         subprocess.run(cmd, check=True)
@@ -36,11 +62,27 @@ class IlastikPrediction(BatchJobOnContainer):
 
         # load and resave the data
         with open_file(tmp_path, 'r') as f:
+            # note: we read from ilastik here, so we don't need `read_input`
+            # beacuse this will not be multi-scale
             ds = f[tmp_key]
             data = ds[:]
 
-        with open_file(out_path, 'a') as f:
-            self.write_result(f, self.output_key, data)
+        if isinstance(self.output_key, str):
+            with open_file(out_path, 'a') as f:
+                self.write_result(f, self.output_key, data)
+        else:
+            n_channels = len(data)
+            keep_channels = list(range(n_channels)) if self.keep_channels is None else self.keep_channels
+            assert all(kc < n_channels for kc in keep_channels)
+
+            with open_file(out_path, 'a') as f:
+                current_key_id = 0
+                for chan_id, chan in enumerate(data):
+                    if chan_id not in keep_channels:
+                        continue
+                    key = self.output_key[current_key_id]
+                    self.write_result(f, key, chan)
+                    current_key_id += 1
 
         # clean up
         os.remove(tmp_path)

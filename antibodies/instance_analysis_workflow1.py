@@ -2,9 +2,9 @@
 
 import os
 import time
+from glob import glob
 
 import configargparse
-import h5py
 
 from batchlib import run_workflow
 from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
@@ -36,19 +36,22 @@ def run_instance_analysis1(config):
     model_name = '2D_dsb2018'
 
     barrel_corrector_path = os.path.join(config.root, 'barrel_correction/barrel_corrector.h5')
-    with h5py.File(barrel_corrector_path, 'r') as f:
-        barrel_corrector = (f['divisor'][:], f['offset'][:])
+    barrel_corrector_key = ('divisor', 'offset')
 
     n_threads_il = None if config.n_cpus == 1 else 4
+
+    barrel_corrector_path = os.path.join(config.root, 'barrel_correction/barrel_corrector.h5')
+    barrel_corrector_key = ('divisor', 'offset')
 
     fname = glob(os.path.join(config.input_folder, '*.tiff'))[0]
     channel_names, settings, reorder = get_channel_settings(fname)
 
     job_dict = {
         Preprocess: {'build': {'channel_names': channel_names,
-                               'viewer_settings': settings},
+                               'viewer_settings': settings,
+                               'barrel_corrector_path': barrel_corrector_path,
+                               'barrel_corrector_key': barrel_corrector_key},
                      'run': {'n_jobs': config.n_cpus,
-                             'barrel_corrector': barrel_corrector,
                              'reorder': reorder}},
         BoundaryAndMaskPrediction: {'build': {'ilastik_bin': ilastik_bin,
                                               'ilastik_project': ilastik_project,
@@ -119,7 +122,11 @@ def parse_instance_config1():
     parser.add('--nuc_key', default='nucleus_segmentation', type=str)
     parser.add('--seg_key', default='cell_segmentation_ilastik', type=str)
 
-    logger.info(parser.format_values())
+    # TODO add default scale factors
+    default_scale_factors = None
+    # default_scale_factors = [1, 2, 4, 8]
+    parser.add("--scale_factors", default=default_scale_factors)
+
     return parser.parse_args()
 
 

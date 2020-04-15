@@ -14,11 +14,13 @@ class BoundaryAndMaskPrediction(IlastikPrediction):
     """
     def __init__(self, ilastik_bin, ilastik_project,
                  input_key, boundary_key, mask_key, input_pattern='*.h5',
-                 boundary_channel=1, mask_channel=0, threshold=0.5, input_ndim=None):
+                 boundary_channel=1, mask_channel=0, threshold=0.5, input_ndim=None,
+                 **super_kwargs):
         super().__init__(ilastik_bin=ilastik_bin, ilastik_project=ilastik_project,
                          input_key=input_key, output_key=[boundary_key, mask_key],
                          input_pattern=input_pattern,
-                         input_ndim=input_ndim, output_ndim=2)
+                         input_ndim=input_ndim, output_ndim=2,
+                         **super_kwargs)
         self.boundary_key = boundary_key
         self.mask_key = mask_key
         self.boundary_channel = boundary_channel
