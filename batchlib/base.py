@@ -266,16 +266,13 @@ class BatchJobOnContainer(BatchJob, ABC):
                 raise ValueError("Key %s was not specified in the outputs" % key)
         self.viewer_settings = viewer_settings
 
-    def _write_single_scale(self, f, out_key, image):
-        ds = f.require_dataset(out_key, shape=image.shape, dtype=image.dtype,
+    def _write_single_scale(self, g, out_key, image):
+        ds = g.require_dataset(out_key, shape=image.shape, dtype=image.dtype,
                                compression='gzip')
         ds[:] = image
-        return ds
 
-    def _write_multi_scale(self, f, out_key, image):
-        g = f.require_group(out_key)
-        key0 = "s0"
-        self._write_single_scale(g, key0, image)
+    def _write_multi_scale(self, g, out_key, image):
+        self._write_single_scale(g, "s0", image)
 
         prev_scale_factor = 1
         # note: scale_factors[0] is always 1
@@ -286,20 +283,20 @@ class BatchJobOnContainer(BatchJob, ABC):
             self._write_single_scale(g, key, image)
             prev_scale_factor = scale_factor
 
-        return g
-
     def write_result(self, f, out_key, image, settings=None):
+        g = f.require_group(out_key)
         if self.scale_factors is None or image.ndim != 2:
-            ds = self._write_single_scale(f, out_key, image)
+            self._write_single_scale(g, "s0", image)
         else:
-            ds = self._write_multi_scale(f, out_key, image)
+            self._write_multi_scale(g, image)
 
         if settings is None:
             settings = self.viewer_settings.get(out_key, {})
 
         assert isinstance(settings, dict)
-        write_viewer_settings(ds, image,
-                              scale_factors=self.scale_factors, **settings)
+        write_viewer_settings(g, image,
+                              scale_factors=self.scale_factors,
+                              **settings)
 
     def read_input(self, f, key, channel=None, scale=0):
         ds = f[key]

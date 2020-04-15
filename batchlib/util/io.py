@@ -168,7 +168,6 @@ def write_image_information(path, image_information=None, well_information=None)
             f.attrs['WellInformation'] = well_information
 
 
-# TODO how do we write the scale factor ?
 def write_viewer_settings(ds, image, color=None, alpha=1., visible=False, skip=None,
                           percentile_min=1, percentile_max=99, scale_factors=None):
     # if skip is None, we determine it from the dimensionality
@@ -197,7 +196,9 @@ def write_viewer_settings(ds, image, color=None, alpha=1., visible=False, skip=N
     all_colors = colors + color_maps
     assert color in all_colors
 
-    attrs = {'Color': color, 'Visible': visible, 'Skip': skip, 'Alpha': alpha}
+    if scale_factors is None:
+        scale_factors = [1]
+    attrs = {'Color': color, 'Visible': visible, 'Skip': skip, 'Alpha': alpha, 'ScaleFactors': scale_factors}
     # if we have an actual color and not glasbey, we need to set the contrast limits
     if color in colors:
         # we use percentiles instead of min max to be more robust to outliers
