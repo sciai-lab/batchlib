@@ -20,7 +20,7 @@ filename,label
 
 "WellF12_PointF12_0000_ChannelDAPI,TRITC,WF_Cy5_Seq0009.tiff",0
 
-"WellF12_PointF12_0001_ChannelDAPI,TRITC,WF_Cy5_Seq0010.tiff",-1
+"WellF12_PointF12_0001_ChannelDAPI,TRITC,WF_Cy5_Seq0010.tiff",0
 
 "WellF12_PointF12_0002_ChannelDAPI,TRITC,WF_Cy5_Seq0011.tiff",0
 
@@ -56,7 +56,7 @@ filename,label
 
 "WellH12_PointH12_0000_ChannelDAPI,TRITC,WF_Cy5_Seq0027.tiff",0
 
-"WellH12_PointH12_0001_ChannelDAPI,TRITC,WF_Cy5_Seq0028.tiff",1
+"WellH12_PointH12_0001_ChannelDAPI,TRITC,WF_Cy5_Seq0028.tiff",0
 
 "WellH12_PointH12_0002_ChannelDAPI,TRITC,WF_Cy5_Seq0029.tiff",0
 
@@ -70,5 +70,5 @@ filename,label
 
 "WellH12_PointH12_0007_ChannelDAPI,TRITC,WF_Cy5_Seq0034.tiff",0
 
-"WellH12_PointH12_0008_ChannelDAPI,TRITC,WF_Cy5_Seq0035.tiff",-1
+"WellH12_PointH12_0008_ChannelDAPI,TRITC,WF_Cy5_Seq0035.tiff",0
 
