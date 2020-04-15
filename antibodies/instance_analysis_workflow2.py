@@ -141,7 +141,6 @@ def parse_instance_config2():
     parser.add("--nuc_key", default='nucleus_segmentation', type=str)
     parser.add("--seg_key", default='cell_segmentation', type=str)
 
-    logger.info(parser.format_values())
     return parser.parse_args()
 
 
