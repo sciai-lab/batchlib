@@ -1,4 +1,6 @@
+from numbers import Number
 import numpy as np
+
 try:
     import numexpr
 except ImportError:
@@ -19,8 +21,13 @@ def normalize(input_, eps=1e-6):
 
 
 def barrel_correction(image, divisor, offset):
-    if not(image.shape == divisor.shape == offset.shape):
-        raise ValueError(f'Shape mismatch: ({image.shape}, {divisor.shape}, {offset.shape}) are not all equal')
+    if image.shape != divisor.shape:
+        raise ValueError(f'Shape mismatch: ({image.shape}, {divisor.shape}) are not all equal')
+    if not isinstance(offset, (Number, np.ndarray)):
+        raise ValueError("Invalid offset value")
+    if isinstance(offset, np.ndarray) and image.shape != offset.shape:
+        raise ValueError(f'Shape mismatch: ({image.shape}, {offset.shape}) are not all equal')
+
     corrected = ((image - offset) / divisor).astype(np.float32)
     return corrected
 
