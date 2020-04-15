@@ -54,8 +54,7 @@ def run_pixel_analysis1(config):
                             'run': {'n_jobs': config.n_cpus, 'n_threads': n_threads_il}},
         PixellevelAnalysis: {'build': {'raw_key': config.in_analysis_key,
                                        'infected_key': config.out_key_infected,
-                                       'not_infected_key': config.out_key_not_infected,
-                                       'output_folder': config.output_folder}},
+                                       'not_infected_key': config.out_key_not_infected}},
     }
 
     t0 = time.time()
