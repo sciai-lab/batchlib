@@ -85,6 +85,7 @@ def parse_pixel_config1():
 
     parser.add('-c', '--config', is_config_file=True, help='config file path')
     parser.add('--input_folder', required=True, type=str, help='folder with input files as tifs')
+    parser.add('--gpu', required=True, type=int, help='id of gpu for this job')
     parser.add('--n_cpus', required=True, type=int, help='number of cpus')
     parser.add('--folder', required=True, type=str, default=None, help=fhelp)
 
