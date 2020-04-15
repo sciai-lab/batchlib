@@ -1,19 +1,22 @@
 #! /home/covid19/software/miniconda3/envs/antibodies-gpu/bin/python
 
-import configargparse
 import os
 import time
 from glob import glob
 
+import configargparse
 import h5py
 
 from batchlib import run_workflow
+from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
 from batchlib.preprocessing import Preprocess, get_channel_settings
 from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
-from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
+from batchlib.util.logging import get_logger
+
+logger = get_logger('Workflow.InstanceAnalysis2')
 
 
 def run_instance_analysis2(config):
@@ -99,6 +102,7 @@ def run_instance_analysis2(config):
                  ignore_invalid_inputs=config.ignore_invalid_inputs,
                  ignore_failed_outputs=config.ignore_failed_outputs)
     t0 = time.time() - t0
+    logger.info(f"Run {name} in {t0}s")
     return name, t0
 
 
@@ -138,7 +142,7 @@ def parse_instance_config2():
     parser.add("--nuc_key", default='nucleus_segmentation', type=str)
     parser.add("--seg_key", default='cell_segmentation', type=str)
 
-    print(parser.format_values())
+    logger.info(parser.format_values())
     return parser.parse_args()
 
 
