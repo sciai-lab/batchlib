@@ -1,6 +1,4 @@
-import os
 import unittest
-from glob import glob
 from shutil import rmtree
 
 
@@ -15,18 +13,14 @@ class TestPreprocess(unittest.TestCase):
             pass
 
     def test_preprocess(self):
-        from batchlib.preprocessing import Preprocess, get_channel_settings
+        from batchlib.preprocessing import Preprocess
         job = Preprocess.from_folder(self.in_folder)
         job(self.folder, self.in_folder, n_jobs=4)
 
     def test_preprocess_with_barrel_correction(self):
-        from batchlib.preprocessing import Preprocess, get_channel_settings
-        fname = glob(os.path.join(self.in_folder, '*.tiff'))[0]
-        names, settings, reorder = get_channel_settings(fname)
-
+        from batchlib.preprocessing import Preprocess
         barrel_corrector_path = '../../misc/barrel_corrector.h5'
-
-        job = Preprocess.from_folder(folder, barrel_corrector_path=barrel_corrector_path)
+        job = Preprocess.from_folder(self.in_folder, barrel_corrector_path=barrel_corrector_path)
         job(self.folder, self.in_folder, n_jobs=4)
 
 
