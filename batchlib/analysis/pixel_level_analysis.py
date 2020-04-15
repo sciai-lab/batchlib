@@ -1,13 +1,17 @@
-import os
 import json
+import os
+import os.path
 from concurrent import futures
 
 import numpy as np
 from tqdm import tqdm
 
+from batchlib.util.logging import get_logger
 from ..base import BatchJob, BatchJobWithSubfolder
-from ..util.plate_visualizations import well_plot
 from ..util.io import open_file
+from ..util.plate_visualizations import well_plot
+
+logger = get_logger('Workflow.BatchJob.PixelAnalysis')
 
 
 def load_sample(path, raw_key='TRITC_raw', infection_key='local_infection'):
@@ -47,7 +51,6 @@ def difference_over_sum(a, b):
 
 def all_stats(input_file, output_file, analysis_folde_name="pixelwise_analysis",
               raw_key='TRITC_raw', infection_key='local_infection'):
-
     root_path, filename = os.path.split(input_file)
     # make sure the analysis folder exists
     analysis_folder = os.path.join(root_path, analysis_folde_name)
@@ -78,7 +81,6 @@ def all_stats(input_file, output_file, analysis_folde_name="pixelwise_analysis",
 
 
 def all_plots(json_files, out_path):
-
     # load first json file to get list of key
     with open(json_files[0], "r") as key_file:
         keys = [k for k in json.load(key_file).keys()]  # if k.startswith("ratio_of")]
@@ -130,7 +132,6 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
                  output_folder="pixelwise_analysis",
                  identifier=None,
                  n_jobs=1):
-
         self.raw_key = raw_key
         self.infection_key = infection_key
 
@@ -151,12 +152,11 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
         self.identifier = identifier
 
     def run(self, input_files, output_files):
-
         def _stat(args):
             all_stats(*args, raw_key=self.raw_key,
                       infection_key=self.infection_key)
 
-        print("Compute stats for %i input images" % (len(input_files), ))
+        logger.info("Compute stats for %i input images" % (len(input_files),))
         with futures.ThreadPoolExecutor(self.n_jobs) as tp:
             list(tqdm(tp.map(_stat,
                              zip(input_files, output_files)),
@@ -166,17 +166,17 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
 class PixellevelPlots(BatchJob):
     """
     """
+
     def __init__(self,
                  input_pattern='pixelwise_analysis/*.json',
                  output_ext="",
                  identifier=None):
-
         super().__init__(input_pattern=input_pattern,
                          output_ext=output_ext,
                          identifier=identifier)
 
     def run(self, input_files, output_files):
-        print("Plot histograms for %i input jsons" % (len(input_files), ))
+        logger.info("Plot histograms for %i input jsons" % (len(input_files),))
         output_folder = os.path.split(output_files[0])[0]
         all_plots(input_files, output_folder)
 

@@ -4,7 +4,10 @@ import json
 from abc import ABC
 from glob import glob
 
+from batchlib.util.logging import get_logger
 from .util import open_file, get_file_lock, write_viewer_settings
+
+logger = get_logger('Workflow.BatchJob')
 
 
 class BatchJob(ABC):
@@ -125,8 +128,7 @@ class BatchJob(ABC):
             self.update_status(folder, status, invalid_inputs=invalid_inputs)
 
             if ignore_invalid_inputs:
-                # TODO log warning
-                pass
+                logger.warning(msg)
             else:
                 raise RuntimeError(msg)
 
@@ -169,8 +171,7 @@ class BatchJob(ABC):
             self.update_status(folder, status, failed_outputs=failed_outputs)
 
             if ignore_failed_outputs:
-                # TODO log warning
-                pass
+                logger.warning(msg)
             else:
                 raise RuntimeError(msg)
 
@@ -349,7 +350,6 @@ class BatchJobWithSubfolder(BatchJobOnContainer, ABC):
         return outputs
 
     def __call__(self, folder, **kwargs):
-
         # create output folder
         outdir = os.path.join(folder, self.output_folder)
         os.makedirs(outdir, exist_ok=True)

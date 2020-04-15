@@ -1,6 +1,10 @@
 import json
 import os
+
+from batchlib.util.logging import get_logger, add_file_handler, remove_file_handler
 from .util import get_file_lock
+
+logger = get_logger('Workflow')
 
 
 def _dump_status(status_file, status):
@@ -53,11 +57,16 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
 
     work_dir = os.path.join(folder, 'batchlib')
     os.makedirs(work_dir, exist_ok=True)
+    # register file workflow's log file
+    add_file_handler(logger, work_dir, name)
+
     lock_file = os.path.join(work_dir, 'batchlib.lock')
     with get_file_lock(lock_file, lock_folder):
 
         status_file = os.path.join(work_dir, name + '.status')
         status = {}
+
+        logger.info(f"Running workflow: '{name}'. Job spec: {job_dict}")
 
         for job_id, (job_class, kwarg_dict) in enumerate(job_dict.items()):
             build_kwargs = kwarg_dict.get('build', {})
@@ -86,9 +95,12 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
             try:
                 state = job(folder, **run_kwargs)
             except Exception as e:
+                logger.error('Job error', exc_info=True)
                 status[job_name] = 'errored'
                 _dump_status(status_file, status)
                 raise e
 
             status[job_name] = state
             _dump_status(status_file, status)
+            # remove workflow's file handler from the main logger
+            remove_file_handler(logger, name)
