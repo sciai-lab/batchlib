@@ -38,11 +38,12 @@ class CellLevelAnalysis(BatchJobOnContainer):
 
     def load_sample(self, path, device):
         with open_file(path, 'r') as f:
-            raw = self.read_input(f, self.raw_key)
+            #raw = self.read_input(f, self.raw_key)
+            # TODO: add gfp_key and serum_key as arguments. Rename gfp to 'infected' to avoid confusion
+            serum = self.read_input(f, 'WF_GFP' if 'WF_GFP' in f else 'WF_Cy5')
+            gfp = self.read_input(f, 'TRITC')
             nucleus_seg = self.read_input(f, self.nuc_seg_key)
             cell_seg = self.read_input(f, self.cell_seg_key)
-        gfp = raw[1]
-        serum = raw[2]
 
         gfp = torch.FloatTensor(gfp.astype(np.float32)).to(device)
         serum = torch.FloatTensor(serum.astype(np.float32)).to(device)
