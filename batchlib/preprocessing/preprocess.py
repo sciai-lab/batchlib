@@ -99,6 +99,11 @@ class Preprocess(BatchJobOnContainer):
             raise ValueError("Invalid number of channels after reordering, expect %i, got %i" % (n_exp,
                                                                                                  n_channels))
 
+    @classmethod
+    def from_folder(cls, input_folder, output_ext='.h5',
+                    barrel_correction=None, **super_kwargs):
+        pass
+
     def __init__(self, channel_names, viewer_settings, reorder=None,
                  output_ext='.h5', barrel_corrector_path=None,
                  **super_kwargs):
@@ -122,7 +127,7 @@ class Preprocess(BatchJobOnContainer):
         expected_channel_dims = len(expected_channel_names) * [2]
 
         super().__init__(input_pattern='*.tiff', output_ext=output_ext,
-                         output_key=self.channel_names, output_ndim=expected_channel_dims,
+                         output_key=expected_channel_names, output_ndim=expected_channel_dims,
                          viewer_settings=viewer_settings, **super_kwargs)
 
     @staticmethod
@@ -164,13 +169,11 @@ class Preprocess(BatchJobOnContainer):
                 # if we have a barrel corrector
                 if barrel_corrector is not None:
                     this_corrector = barrel_corrector[name]
-                    im_corrected = barrel_correction(im, *this_corrector)
+                    chan = barrel_correction(chan, *this_corrector)
 
                     # get the settings for this image channel
                     this_settings = self.viewer_settings[name].copy()
                     this_settings.update({'visible': False})
-
-                    chan = im_corrected[chan_id]
                     self.write_result(f, name + '_corrected', chan, settings=this_settings)
 
     def load_barrel_corrector(self):
