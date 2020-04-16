@@ -127,7 +127,6 @@ def well_plot(data_dict, infected_list=None,
             t = plt.annotate(f'{median:4.3f}', center, ha='center', va='center')
             t.set_bbox(dict(edgecolor='white', facecolor='white', alpha=0.3))
 
-
     plt.gca().set_aspect('equal', adjustable='box')
     plt.xticks(np.arange(12), np.arange(1, 13))
     plt.xlim(-0.7, 11.7)
@@ -135,6 +134,58 @@ def well_plot(data_dict, infected_list=None,
     plt.yticks(np.arange(len(row_letters)), reversed(row_letters))
     if title is not None:
         plt.title(title)
+    if outfile is not None:
+        plt.savefig(outfile)
+        plt.close()
+
+
+def score_distribution_plots(infected_values, not_infected_values, infected_medians=None, not_infected_medians=None,
+                             figsize=(12, 9), title=None, outfile=None, xlim=None, binsize=0.025,
+                             violin_bw_method=None):
+    x = [1]*len(not_infected_medians) + [2]*len(infected_medians)
+    y = not_infected_medians + infected_medians
+    fig, ax = plt.subplots(2 if infected_medians is None else 3, 1, sharex=True, figsize=figsize,
+                           gridspec_kw=dict(height_ratios=(2, 1) if infected_medians is None else (2, 1, 1)))
+
+    # per-image violins
+    ax[0].violinplot([not_infected_values, infected_values], vert=False, widths=0.8,
+                     bw_method=violin_bw_method)
+    ax[0].set_yticks([1, 2])
+    ax[0].set_yticklabels(['negative', 'positive'])
+
+    if infected_medians is not None:
+        assert not_infected_medians is not None
+        # per-well scatter and violins
+        ax[0].scatter(y, x, alpha=0.2, marker='o', color='r', label='per patient ratios\nover all cells')
+        violin_parts = ax[0].violinplot([not_infected_medians, infected_medians], vert=False,
+                                         bw_method=violin_bw_method)
+        for pc in violin_parts['bodies']:
+            pc.set_facecolor('green')
+
+    if xlim is not None:
+        ax[0].set_xlim(*xlim)
+    ax[0].set_title('distribution of scores')
+
+    # per-image cumulative distribution
+    ax[1].set_title(f'cell wise score cumulative distribution')
+    if xlim is None:
+        bins = np.arange(min(infected_values + not_infected_values),
+                         max(infected_values + not_infected_values)+binsize,
+                         binsize)
+    else:
+        bins = np.arange(xlim[0], xlim[1] + binsize, binsize)
+    ax[1].hist([infected_values, not_infected_values], bins=bins, label=['positive', 'negative'],
+               density=True, cumulative=True)
+    ax[1].legend()
+
+    if infected_medians is not None:
+        ax[2].set_title(f'well wise score cumulative distribution')
+        ax[2].hist([infected_medians, not_infected_medians], bins=bins,
+                   label=['positive', 'negative'], density=True, cumulative=True)
+        ax[2].legend()
+
+    if title is not None:
+        plt.suptitle(title)
     if outfile is not None:
         plt.savefig(outfile)
         plt.close()
