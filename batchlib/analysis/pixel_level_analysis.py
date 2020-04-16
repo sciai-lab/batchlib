@@ -1,7 +1,6 @@
 import json
 import os
 from concurrent import futures
-from glob import glob
 
 import numpy as np
 from tqdm import tqdm
@@ -152,9 +151,3 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
         with futures.ThreadPoolExecutor(n_jobs) as tp:
             list(tqdm(tp.map(self.all_stats, input_files, output_files),
                       total=len(input_files)))
-
-        # produce the result plots (need to take all files into account, not just current results)
-        output_folder = os.path.join(self.folder, self.output_folder)
-        pattern = os.path.join(output_folder, "*.json")
-        all_results = glob(pattern)
-        all_plots(all_results, output_folder)
