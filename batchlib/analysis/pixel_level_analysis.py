@@ -113,7 +113,7 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
         with open_file(path, mode='r') as f:
             serum = self.read_input(f, self.serum_key)
             infected = self.read_input(f, self.infected_key)
-            not_infected = self.read_input(f, self.infected_key)
+            not_infected = self.read_input(f, self.not_infected_key)
 
         infected = infected > 0.5
         not_infected = not_infected > 0.5
