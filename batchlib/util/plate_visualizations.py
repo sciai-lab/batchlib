@@ -38,10 +38,40 @@ def well_plot(data_dict, infected_list=None,
               sort=False, print_medians=False, figsize=(7.1, 4), colorbar_range=None,
               radius=0.45, wedge_width=0.2, infected_marker_width=0.05, angular_gap=0.0,
               min_samples_per_well=None):
-    
     """
-    data_dict should be a dictionary mapping filenames to test results (or whatever other value to visualize)
+    Shows result in the structure of a 96 well plate.
+
+    Parameters
+    ----------
+    data_dict : dict
+        Dictionary mapping filenames to scores.
+    infected_list : list, optional
+        List of filenames or well-names (something that get_well() works on, like 'WellG04') of wells corresponding to
+        infected patients. They will be marked with a red circle.
+    fig : matplotlib.figure.Figure, optional
+    ax : matplotlib.axes.Axes, optional
+    title : str, optional
+    outfile : str, optional
+        Path to save the plot at.
+    sort : bool
+        If True, the observations for each well are sorted.
+    print_medians : bool
+        If True, the median values for each well are overlaid as text.
+    figsize : tuple
+    colorbar_range : tuple, optional
+        Min and max of the colorbar. Useful if multiple well plots will be compared by eye.
+    radius : float
+        Radius of the circles for each well
+    wedge_width : float
+        Width of the wedges showing the individual observations per well. Set to 0 to only show the median.
+    infected_marker_width : float
+        Width of the red ring around wells of infected patients.
+    angular_gap : float
+        Gap (in degrees) between neighboring wedges. Useful to clearly see number of observations per well.
+    min_samples_per_well : int, optional
+        Wells with less samples will not be displayed.
     """
+
     per_well_dict = make_per_well_dict(data_dict, min_samples_per_well)
 
     patches = []
