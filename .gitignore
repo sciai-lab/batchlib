@@ -1,4 +1,2 @@
-# this is just some test data. for now we should not expose any data publicly, so I put the data folder here to not accedentally add it
-data/
 __pycache__/
 batchlib.egg-info/
