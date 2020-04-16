@@ -46,12 +46,26 @@ There are som more advanced methods of execution, they can be activated by passi
 - **I have failed inputs or outputs.** Look into the `.status` file of the job, It will contain the paths to the files for which it failed. Fix the issues and rerun the job.
 - **I try to run a workflow but it does not start.** There is a `.lock` file in the `batchlab` folder that prevents multiple workflows being run on the same folder at the same time. It might not be deleted properly if a job gets killed or segaults. Just delete it and rerun.
 
+### Data model
+
+The intermediate image data associated with one raw image is stored in an h5 container with the same name as the image.
+All images are stored with one group per image channel. The group layout for a channel called `data` looks like this:
+```
+/data
+  /s0
+  /s1
+  /s2
+  ...
+```
+The sub-datasets `sI` store the channel's image data as multi-scale image pyramid.
+In addition, the group `data` contains metadata to display the image in the [plateViewer fiji plugin](https://github.com/embl-cba/fiji-plugin-plateViewer).
+
 ### Implement a new Batch Job
 
 - Inherit from `batchlib.BatchJob` or batchlib.BatchJobOnContainer`
 - Implement `self.run` with function signature `run(self, input_files, output_files, **kwargs)`
 - Constraints:
-    - Output should be a single file, if you need multiple files make a sub-directory and store them in there.
-    - For image data, intermediate formats are either `h5` or `n5`.
+    - Output should be a single file per input file. If you need multiple files per input, create a sub-directory and store them in there.
+    - For image data, intermediate formats are either `h5` or `n5`. Use the methods `read_input` / `write_result` to read / write data in the batchlib data model.
     - Use `batchlib.io.open_file` in your job instead of `h5py.File` to support both `h5` and `n5`
     - Jobs should always be runnable with cpu only and should default to running on the cpu. gpu support should be activated via kwarg in run method.
