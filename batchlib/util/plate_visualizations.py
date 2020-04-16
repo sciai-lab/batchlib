@@ -142,6 +142,32 @@ def well_plot(data_dict, infected_list=None,
 def score_distribution_plots(infected_values, not_infected_values, infected_medians=None, not_infected_medians=None,
                              figsize=(12, 9), title=None, outfile=None, xlim=None, binsize=0.025,
                              violin_bw_method=None):
+    """
+    Plot distributions of infected and non_infected scores.
+
+    Parameters
+    ----------
+    infected_values : list
+        List of image-wise scores of infected patients.
+    not_infected_values : list
+        List of image-wise scores of not infected patients.
+    infected_medians : list, optional
+        List of well-wise medians of scores of infected patients.
+    not_infected_medians : list, optional
+        List of well-wise medians of scores of not infected patients.
+    figsize : tuple
+    title : str, optional
+    outfile : str, optional
+        Path to save the plot at.
+    xlim : tuple, optional
+        Range of x-axis.
+    binsize : float
+        Binsize for plots of cumulative distributions
+    violin_bw_method : object
+        Bandwidth estimation method for violin plots. See bw_method at
+        https://matplotlib.org/api/_as_gen/matplotlib.axes.Axes.violinplot.html
+
+    """
     x = [1]*len(not_infected_medians) + [2]*len(infected_medians)
     y = not_infected_medians + infected_medians
     fig, ax = plt.subplots(2 if infected_medians is None else 3, 1, sharex=True, figsize=figsize,
