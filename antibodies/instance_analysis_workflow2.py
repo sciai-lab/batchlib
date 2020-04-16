@@ -2,13 +2,12 @@
 
 import os
 import time
-from glob import glob
 
 import configargparse
 
 from batchlib import run_workflow
 from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
-from batchlib.preprocessing import Preprocess, get_channel_settings
+from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
@@ -16,6 +15,29 @@ from batchlib.segmentation.unet import UNet2D
 from batchlib.util.logging import get_logger
 
 logger = get_logger('Workflow.InstanceAnalysis2')
+
+
+def get_input_keys(config):
+
+    nuc_in_key = 'nuclei'
+    serum_in_key = 'serum'
+    marker_in_key = 'marker'
+
+    if config.segmentation_on_corrected:
+        nuc_seg_in_key = nuc_in_key + '_corrected'
+        serum_seg_in_key = serum_in_key + '_corrected'
+    else:
+        nuc_seg_in_key = nuc_in_key
+        serum_seg_in_key = serum_in_key
+
+    if config.analysis_on_corrected:
+        serum_ana_in_key = serum_in_key + '_corrected'
+        marker_ana_in_key = marker_in_key + '_corrected'
+    else:
+        serum_ana_in_key = serum_in_key
+        marker_ana_in_key = marker_in_key
+
+    return nuc_seg_in_key, serum_seg_in_key, marker_ana_in_key, serum_ana_in_key
 
 
 def run_instance_analysis2(config):
@@ -34,8 +56,8 @@ def run_instance_analysis2(config):
     model_root = os.path.join(config.root, 'stardist/models/pretrained')
     model_name = '2D_dsb2018'
 
-    barrel_corrector_path = os.path.join(config.root, 'barrel_correction/barrel_corrector.h5')
-    barrel_corrector_key = ('divisor', 'offset')
+    barrel_corrector_path = os.path.join(os.path.split(__file__)[0],
+                                         '../misc/barrel_corrector.h5')
 
     torch_model_path = os.path.join(config.root,
                                     'unet_segmentation/sample_models/fg_boundaries_best_checkpoint.pytorch')
@@ -47,35 +69,27 @@ def run_instance_analysis2(config):
         'testing': True
     }
 
-    analysis_identifier = None
-    if config.in_analysis_key != 'raw':
-        analysis_identifier = config.in_analysis_key
-
-    # get the correct channel ordering and names for this data
-    fname = glob(os.path.join(config.input_folder, '*.tiff'))[0]
-    channel_names, settings, reorder = get_channel_settings(fname)
+    # get keys and identifier
+    (nuc_seg_in_key, serum_seg_in_key,
+     marker_ana_in_key, serum_ana_in_key) = get_input_keys(config)
+    analysis_folder = 'instancewise_analysis_corrected' if config.analysis_on_corrected else 'instancewise_analysis'
 
     job_dict = {
-        Preprocess: {'build': {'channel_names': channel_names,
-                               'viewer_settings': settings,
-                               'barrel_corrector_path': barrel_corrector_path,
-                               'barrel_corrector_key': barrel_corrector_key},
-                     'run': {'n_jobs': config.n_cpus,
-                             'reorder': reorder}},
-        TorchPrediction: {'build': {'input_key': config.in_key,
+        Preprocess.from_folder: {'build': {'input_folder': config.input_folder,
+                                           'barrel_corrector_path': barrel_corrector_path},
+                                 'run': {'n_jobs': config.n_cpus}},
+        TorchPrediction: {'build': {'input_key': serum_seg_in_key,
                                     'output_key': [config.mask_key, config.bd_key],
                                     'model_path': torch_model_path,
                                     'model_class': torch_model_class,
-                                    'model_kwargs': torch_model_kwargs,
-                                    'input_channel': 2},
+                                    'model_kwargs': torch_model_kwargs},
                           'run': {'gpu_id': config.gpu,
                                   'batch_size': config.batch_size,
                                   'threshold_channels': {0: 0.5}}},
         StardistPrediction: {'build': {'model_root': model_root,
                                        'model_name': model_name,
-                                       'input_key': config.in_key,
-                                       'output_key': config.nuc_key,
-                                       'input_channel': 0},
+                                       'input_key': nuc_seg_in_key,
+                                       'output_key': config.nuc_key},
                              'run': {'gpu_id': config.gpu,
                                      'n_jobs': config.n_cpus}},
         SeededWatershed: {'build': {'pmap_key': config.bd_key,
@@ -85,10 +99,11 @@ def run_instance_analysis2(config):
                           'run': {'erode_mask': 3,
                                   'dilate_seeds': 3,
                                   'n_jobs': config.n_cpus}},
-        CellLevelAnalysis: {'build': {'raw_key': config.in_analysis_key,
+        CellLevelAnalysis: {'build': {'serum_key': serum_ana_in_key,
+                                      'marker_key': marker_ana_in_key,
                                       'nuc_seg_key': config.nuc_key,
                                       'cell_seg_key': config.seg_key,
-                                      'identifier': analysis_identifier},
+                                      'output_folder': analysis_folder},
                             'run': {'gpu_id': config.gpu}}
     }
 
@@ -134,9 +149,13 @@ def parse_instance_config2():
     parser.add("--ignore_invalid_inputs", default=None)
     parser.add("--ignore_failed_outputs", default=None)
 
-    parser.add("--in_key", default='raw', type=str)
-    parser.add("--in_analysis_key", default='raw', type=str)
-    parser.add("--bd_key", default='pmap_tritc', type=str)
+    # whether to run the segmentation / analysis on the corrected or on the corrected data
+    # TODO change to true once correction works properly
+    parser.add("--segmentation_on_corrected", default=False)
+    parser.add("--analysis_on_corrected", default=False)
+
+    # hdf5 keys for the intermediate segmentation results
+    parser.add("--bd_key", default='boundaries', type=str)
     parser.add("--mask_key", default='mask', type=str)
     parser.add("--nuc_key", default='nucleus_segmentation', type=str)
     parser.add("--seg_key", default='cell_segmentation', type=str)

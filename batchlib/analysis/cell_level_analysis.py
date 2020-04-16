@@ -6,31 +6,36 @@ import os
 from functools import partial
 
 from ..util.io import open_file
-from ..base import BatchJobOnContainer
+from ..base import BatchJobWithSubfolder
 
 
-class CellLevelAnalysis(BatchJobOnContainer):
+class CellLevelAnalysis(BatchJobWithSubfolder):
     """
     """
     def __init__(self,
-                 raw_key='raw',
+                 serum_key='serum',
+                 marker_key='marker',
                  nuc_seg_key='nucleus_segmentation',
                  cell_seg_key='cell_segmentation',
+                 output_folder='instancewise_analysis',
                  identifier=None, input_pattern='*.h5'):
 
-        self.raw_key = raw_key
+        self.serum_key = serum_key
+        self.marker_key = marker_key
         self.nuc_seg_key = nuc_seg_key
         self.cell_seg_key = cell_seg_key
 
-        # raw should be 3d, rest should be 2d
-        input_ndim = [3, 2, 2]
+        # all inputs should be 2d
+        input_ndim = [2, 2, 2, 2]
 
         # identifier allows to run different instances of this job on the same folder
         output_ext = '.pickle' if identifier is None else f'_{identifier}.pickle'
 
         super().__init__(input_pattern,
                          output_ext=output_ext,
-                         input_key=[self.raw_key,
+                         output_folder=output_folder,
+                         input_key=[self.serum_key,
+                                    self.marker_key,
                                     self.nuc_seg_key,
                                     self.cell_seg_key],
                          input_ndim=input_ndim,
@@ -38,32 +43,31 @@ class CellLevelAnalysis(BatchJobOnContainer):
 
     def load_sample(self, path, device):
         with open_file(path, 'r') as f:
-            #raw = self.read_input(f, self.raw_key)
-            # TODO: add gfp_key and serum_key as arguments. Rename gfp to 'infected' to avoid confusion
-            serum = self.read_input(f, 'WF_GFP' if 'WF_GFP' in f else 'WF_Cy5')
-            gfp = self.read_input(f, 'TRITC')
+            # TODO need to make sure that these are the correct channels for Roman!
+            serum = self.read_input(f, self.serum_key)
+            marker = self.read_input(f, self.marker_key)
             nucleus_seg = self.read_input(f, self.nuc_seg_key)
             cell_seg = self.read_input(f, self.cell_seg_key)
 
-        gfp = torch.FloatTensor(gfp.astype(np.float32)).to(device)
+        marker = torch.FloatTensor(marker.astype(np.float32)).to(device)
         serum = torch.FloatTensor(serum.astype(np.float32)).to(device)
         nucleus_seg = torch.LongTensor(nucleus_seg.astype(np.int32)).to(device)
         cell_seg = torch.LongTensor(cell_seg.astype(np.int32)).to(device)
 
         cell_seg[nucleus_seg != 0] = 0
 
-        return gfp, serum, nucleus_seg, cell_seg
+        return marker, serum, nucleus_seg, cell_seg
 
-    def eval_cells(self, gfp, serum, nucleus_seg, cell_seg,
+    def eval_cells(self, marker, serum, nucleus_seg, cell_seg,
                    ignore_label=0,
                    substract_mean_background=False):
         # all segs have shape H, W
-        assert gfp.shape == serum.shape == nucleus_seg.shape == cell_seg.shape
+        assert marker.shape == serum.shape == nucleus_seg.shape == cell_seg.shape
         # include background as instance with label 0
         labels = torch.sort(torch.unique(cell_seg))[0]
 
         if substract_mean_background:
-            gfp -= (gfp[cell_seg == ignore_label]).mean()
+            marker -= (marker[cell_seg == ignore_label]).mean()
             serum -= (serum[cell_seg == ignore_label]).mean()
 
         def get_per_mask_statistics(data):
@@ -86,7 +90,7 @@ class CellLevelAnalysis(BatchJobOnContainer):
                         top10=top10)
 
         cell_properties = dict()
-        cell_properties['gfp'] = get_per_mask_statistics(gfp)
+        cell_properties['marker'] = get_per_mask_statistics(marker)
         cell_properties['serum'] = get_per_mask_statistics(serum)
         cell_properties['labels'] = labels.cpu().numpy()
 
