@@ -111,6 +111,9 @@ def run_instance_analysis2(config):
                             'run': {'gpu_id': config.gpu}}
     }
 
+    if not config.run_analysis:
+        job_dict.pop(CellLevelAnalysis)
+
     t0 = time.time()
     run_workflow(name,
                  config.folder,
@@ -155,6 +158,9 @@ def parse_instance_config2():
     parser.add("--mask_key", default='mask', type=str)
     parser.add("--nuc_key", default='nucleus_segmentation', type=str)
     parser.add("--seg_key", default='cell_segmentation', type=str)
+
+    # whether to run the final analysis at all (this is to circumvent a bug regarding tensorflow not freeing the memory)
+    parser.add("--run_analysis", default=True)
 
     # whether to run the segmentation / analysis on the corrected or on the corrected data
     parser.add("--segmentation_on_corrected", default=True)
