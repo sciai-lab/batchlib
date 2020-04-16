@@ -2,13 +2,12 @@
 
 import os
 import time
-from glob import glob
 
 import configargparse
 
 from batchlib import run_workflow
 from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
-from batchlib.preprocessing import Preprocess, get_channel_settings
+from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import BoundaryAndMaskPrediction, SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.util.logging import get_logger
@@ -37,24 +36,15 @@ def run_instance_analysis1(config):
     model_root = os.path.join(config.root, 'stardist/models/pretrained')
     model_name = '2D_dsb2018'
 
-    barrel_corrector_path = os.path.join(config.root, 'barrel_correction/barrel_corrector.h5')
-    barrel_corrector_key = ('divisor', 'offset')
+    barrel_corrector_path = os.path.join(os.path.split(__file__)[0],
+                                         '../misc/barrel_corrector.h5')
 
     n_threads_il = None if config.n_cpus == 1 else 4
 
-    barrel_corrector_path = os.path.join(config.root, 'barrel_correction/barrel_corrector.h5')
-    barrel_corrector_key = ('divisor', 'offset')
-
-    fname = glob(os.path.join(config.input_folder, '*.tiff'))[0]
-    channel_names, settings, reorder = get_channel_settings(fname)
-
     job_dict = {
-        Preprocess: {'build': {'channel_names': channel_names,
-                               'viewer_settings': settings,
-                               'barrel_corrector_path': barrel_corrector_path,
-                               'barrel_corrector_key': barrel_corrector_key},
-                     'run': {'n_jobs': config.n_cpus,
-                             'reorder': reorder}},
+        Preprocess.from_folder: {'build': {'input_folder': config.input_folder,
+                                           'barrel_corrector_path': barrel_corrector_path},
+                                 'run': {'n_jobs': config.n_cpus}},
         BoundaryAndMaskPrediction: {'build': {'ilastik_bin': ilastik_bin,
                                               'ilastik_project': ilastik_project,
                                               'input_key': config.in_key,

@@ -157,13 +157,12 @@ def parse_instance_config2():
     parser.add("--seg_key", default='cell_segmentation', type=str)
 
     # whether to run the segmentation / analysis on the corrected or on the corrected data
-    # TODO change to true once correction works properly
-    parser.add("--segmentation_on_corrected", default=False)
-    parser.add("--analysis_on_corrected", default=False)
+    parser.add("--segmentation_on_corrected", default=True)
+    parser.add("--analysis_on_corrected", default=True)
 
     # runtime options
     parser.add("--batch_size", default=4)
-    parser.add("--force_recompute", default=False)
+    parser.add("--force_recompute", default=None)
     parser.add("--ignore_invalid_inputs", default=None)
     parser.add("--ignore_failed_outputs", default=None)
 
