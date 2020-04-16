@@ -4,9 +4,10 @@ import os
 import time
 
 import configargparse
+from glob import glob
 
 from batchlib import run_workflow
-from batchlib.analysis import PixellevelAnalysis
+from batchlib.analysis import PixellevelAnalysis, all_plots
 from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import IlastikPrediction
 from batchlib.util.logging import get_logger
@@ -85,6 +86,15 @@ def run_pixel_analysis1(config):
                  force_recompute=config.force_recompute,
                  ignore_invalid_inputs=config.ignore_invalid_inputs,
                  ignore_failed_outputs=config.ignore_failed_outputs)
+
+
+    # produce the result plots (need to take all files into account, not just current results)
+    output_folder = os.path.join(config.folder, analysis_folder)
+    pattern = os.path.join(output_folder, "*.json")
+    all_results = glob(pattern)
+
+    all_plots(all_results, output_folder)
+
     t0 = time.time() - t0
     logger.info(f"Run {name} in {t0}s")
     return name, t0

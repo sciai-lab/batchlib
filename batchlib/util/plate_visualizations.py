@@ -1,5 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use("Agg")
 import re
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Circle, Wedge, Polygon
