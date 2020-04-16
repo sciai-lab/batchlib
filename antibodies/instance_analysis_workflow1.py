@@ -18,6 +18,8 @@ logger = get_logger('Workflow.InstanceAnalysis1')
 
 def run_instance_analysis1(config):
     name = 'InstanceAnalysisWorkflow1'
+    # TODO fix for new data layout
+    raise NotImplementedError("Not adapted to new data layout")
 
     # to allow running on the cpu
     if config.gpu < 0:

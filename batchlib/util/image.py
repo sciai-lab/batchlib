@@ -28,7 +28,7 @@ def barrel_correction(image, divisor, offset):
     if isinstance(offset, np.ndarray) and image.shape != offset.shape:
         raise ValueError(f'Shape mismatch: ({image.shape}, {offset.shape}) are not all equal')
 
-    corrected = ((image - offset) / divisor).astype(np.float32)
+    corrected = ((image.astype('float32') - offset) / divisor).astype('float32') + offset
     return corrected
 
 
@@ -36,7 +36,6 @@ def barrel_correction(image, divisor, offset):
 # to avoid any tf import horrors if possible
 def normalize_percentile(x, pmin=3, pmax=99.8, axis=None, clip=False, eps=1e-20, dtype=np.float32):
     """Percentile-based image normalization."""
-
     mi = np.percentile(x, pmin, axis=axis, keepdims=True)
     ma = np.percentile(x, pmax, axis=axis, keepdims=True)
     return normalize_mi_ma(x, mi, ma, clip=clip, eps=eps, dtype=dtype)

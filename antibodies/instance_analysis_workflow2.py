@@ -76,26 +76,30 @@ def run_instance_analysis2(config):
 
     job_dict = {
         Preprocess.from_folder: {'build': {'input_folder': config.input_folder,
-                                           'barrel_corrector_path': barrel_corrector_path},
+                                           'barrel_corrector_path': barrel_corrector_path,
+                                           'scale_factors': config.scale_factors},
                                  'run': {'n_jobs': config.n_cpus}},
         TorchPrediction: {'build': {'input_key': serum_seg_in_key,
                                     'output_key': [config.mask_key, config.bd_key],
                                     'model_path': torch_model_path,
                                     'model_class': torch_model_class,
-                                    'model_kwargs': torch_model_kwargs},
+                                    'model_kwargs': torch_model_kwargs,
+                                    'scale_factors': config.scale_factors},
                           'run': {'gpu_id': config.gpu,
                                   'batch_size': config.batch_size,
                                   'threshold_channels': {0: 0.5}}},
         StardistPrediction: {'build': {'model_root': model_root,
                                        'model_name': model_name,
                                        'input_key': nuc_seg_in_key,
-                                       'output_key': config.nuc_key},
+                                       'output_key': config.nuc_key,
+                                       'scale_factors': config.scale_factors},
                              'run': {'gpu_id': config.gpu,
                                      'n_jobs': config.n_cpus}},
         SeededWatershed: {'build': {'pmap_key': config.bd_key,
                                     'seed_key': config.nuc_key,
                                     'output_key': config.seg_key,
-                                    'mask_key': config.mask_key},
+                                    'mask_key': config.mask_key,
+                                    'scale_factors': config.scale_factors},
                           'run': {'erode_mask': 3,
                                   'dilate_seeds': 3,
                                   'n_jobs': config.n_cpus}},
@@ -134,31 +138,38 @@ def parse_instance_config2():
                                            default_config_files=[default_config],
                                            config_file_parser_class=configargparse.YAMLConfigFileParser)
 
+    # mandatory
     parser.add('-c', '--config', is_config_file=True, help='config file path')
     parser.add('--input_folder', required=True, type=str, help='folder with input files as tifs')
     parser.add('--gpu', required=True, type=int, help='id of gpu for this job')
     parser.add('--n_cpus', required=True, type=int, help='number of cpus')
     parser.add('--folder', required=True, type=str, default="", help=fhelp)
 
-    # options
-    parser.add("--batch_size", default=4)
+    # folder options
     parser.add("--root", default='/home/covid19/antibodies-nuclei')
-    parser.add("--output_root_name", default='data-processed-new')
+    parser.add("--output_root_name", default='data-processed')
     parser.add("--use_unique_output_folder", default=False)
-    parser.add("--force_recompute", default=False)
-    parser.add("--ignore_invalid_inputs", default=None)
-    parser.add("--ignore_failed_outputs", default=None)
+
+    # keys for intermediate data
+    parser.add("--bd_key", default='boundaries', type=str)
+    parser.add("--mask_key", default='mask', type=str)
+    parser.add("--nuc_key", default='nucleus_segmentation', type=str)
+    parser.add("--seg_key", default='cell_segmentation', type=str)
 
     # whether to run the segmentation / analysis on the corrected or on the corrected data
     # TODO change to true once correction works properly
     parser.add("--segmentation_on_corrected", default=False)
     parser.add("--analysis_on_corrected", default=False)
 
-    # hdf5 keys for the intermediate segmentation results
-    parser.add("--bd_key", default='boundaries', type=str)
-    parser.add("--mask_key", default='mask', type=str)
-    parser.add("--nuc_key", default='nucleus_segmentation', type=str)
-    parser.add("--seg_key", default='cell_segmentation', type=str)
+    # runtime options
+    parser.add("--batch_size", default=4)
+    parser.add("--force_recompute", default=False)
+    parser.add("--ignore_invalid_inputs", default=None)
+    parser.add("--ignore_failed_outputs", default=None)
+
+    default_scale_factors = None
+    # default_scale_factors = [1, 2, 4, 8]
+    parser.add("--scale_factors", default=default_scale_factors)
 
     return parser.parse_args()
 
