@@ -1,4 +1,6 @@
+from numbers import Number
 import numpy as np
+
 try:
     import numexpr
 except ImportError:
@@ -19,9 +21,14 @@ def normalize(input_, eps=1e-6):
 
 
 def barrel_correction(image, divisor, offset):
-    if not(image.shape == divisor.shape == offset.shape):
-        raise ValueError(f'Shape mismatch: ({image.shape}, {divisor.shape}, {offset.shape}) are not all equal')
-    corrected = ((image - offset) / divisor).astype(np.float32)
+    if image.shape != divisor.shape:
+        raise ValueError(f'Shape mismatch: ({image.shape}, {divisor.shape}) are not all equal')
+    if not isinstance(offset, (Number, np.ndarray)):
+        raise ValueError("Invalid offset value")
+    if isinstance(offset, np.ndarray) and image.shape != offset.shape:
+        raise ValueError(f'Shape mismatch: ({image.shape}, {offset.shape}) are not all equal')
+
+    corrected = ((image.astype('float32') - offset) / divisor).astype('float32') + offset
     return corrected
 
 
@@ -29,7 +36,6 @@ def barrel_correction(image, divisor, offset):
 # to avoid any tf import horrors if possible
 def normalize_percentile(x, pmin=3, pmax=99.8, axis=None, clip=False, eps=1e-20, dtype=np.float32):
     """Percentile-based image normalization."""
-
     mi = np.percentile(x, pmin, axis=axis, keepdims=True)
     ma = np.percentile(x, pmax, axis=axis, keepdims=True)
     return normalize_mi_ma(x, mi, ma, clip=clip, eps=eps, dtype=dtype)

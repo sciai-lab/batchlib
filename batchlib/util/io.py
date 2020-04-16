@@ -169,7 +169,8 @@ def write_image_information(path, image_information=None, well_information=None)
 
 
 def write_viewer_settings(ds, image, color=None, alpha=1., visible=False, skip=None,
-                          percentile_min=1, percentile_max=99, scale_factors=None):
+                          percentile_min=1, percentile_max=99, scale_factors=None,
+                          channel_information=None):
     # if skip is None, we determine it from the dimensionality
     if skip is None:
         if image.ndim > 2:
@@ -199,6 +200,11 @@ def write_viewer_settings(ds, image, color=None, alpha=1., visible=False, skip=N
     if scale_factors is None:
         scale_factors = [1]
     attrs = {'Color': color, 'Visible': visible, 'Skip': skip, 'Alpha': alpha, 'ScaleFactors': scale_factors}
+
+    # if we have additional channel information, add it
+    if channel_information is not None:
+        attrs.update({'ChannelInformation': channel_information})
+
     # if we have an actual color and not glasbey, we need to set the contrast limits
     if color in colors:
         # we use percentiles instead of min max to be more robust to outliers

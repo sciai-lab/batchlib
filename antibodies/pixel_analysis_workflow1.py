@@ -2,17 +2,39 @@
 
 import os
 import time
-from glob import glob
 
 import configargparse
 
 from batchlib import run_workflow
-from batchlib.analysis.pixel_level_analysis import PixellevelAnalysis
-from batchlib.preprocessing import Preprocess, get_channel_settings
+from batchlib.analysis import PixellevelAnalysis
+from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import IlastikPrediction
 from batchlib.util.logging import get_logger
 
 logger = get_logger('Workflow.PixelAnalysis')
+
+
+def get_input_keys(config):
+
+    nuc_in_key = 'nuclei'
+    serum_in_key = 'serum'
+    marker_in_key = 'marker'
+
+    if config.segmentation_on_corrected:
+        nuc_seg_in_key = nuc_in_key + '_corrected'
+        marker_seg_in_key = marker_in_key + '_corrected'
+        serum_seg_in_key = serum_in_key + '_corrected'
+    else:
+        nuc_seg_in_key = nuc_in_key
+        marker_seg_in_key = marker_in_key
+        serum_seg_in_key = serum_in_key
+
+    if config.analysis_on_corrected:
+        serum_ana_in_key = serum_in_key + '_corrected'
+    else:
+        serum_ana_in_key = serum_in_key
+
+    return nuc_seg_in_key, marker_seg_in_key, serum_seg_in_key, serum_ana_in_key
 
 
 def run_pixel_analysis1(config):
@@ -29,42 +51,40 @@ def run_pixel_analysis1(config):
 
     n_threads_il = None if config.n_cpus == 1 else 4
 
-    barrel_corrector_path = os.path.join(config.root, 'barrel_correction/barrel_corrector.h5')
-    barrel_corrector_key = ('divisor', 'offset')
+    # get keys and identifier
+    (nuc_seg_in_key, marker_seg_in_key, serum_seg_in_key,
+     serum_ana_in_key) = get_input_keys(config)
+    analysis_folder = 'pixelwise_analysis_corrected' if config.analysis_on_corrected else 'pixelwise_analysis'
 
-    # get the correct channel ordering and names for this data
-    fname = glob(os.path.join(config.input_folder, '*.tiff'))[0]
-    channel_names, settings, reorder = get_channel_settings(fname)
+    barrel_corrector_path = os.path.join(os.path.split(__file__)[0],
+                                         '../misc/barrel_corrector.h5')
 
     job_dict = {
-        Preprocess: {'build': {'channel_names': channel_names,
-                               'viewer_settings': settings,
-                               'barrel_corrector_path': barrel_corrector_path,
-                               'barrel_corrector_key': barrel_corrector_key,
-                               'scale_factors': config.scale_factors},
-                     'run': {'n_jobs': config.n_cpus,
-                             'reorder': reorder}},
+        Preprocess.from_folder: {'build': {'input_folder': config.input_folder,
+                                           'barrel_corrector_path': barrel_corrector_path,
+                                           'scale_factors': config.scale_factors},
+                                 'run': {'n_jobs': config.n_cpus}},
         IlastikPrediction: {'build': {'ilastik_bin': ilastik_bin,
                                       'ilastik_project': ilastik_project,
-                                      'input_key': config.in_key,
+                                      'input_key': [nuc_seg_in_key, marker_seg_in_key, serum_seg_in_key],
                                       'output_key': [config.out_key_infected,
                                                      config.out_key_not_infected],
                                       'keep_channels': [0, 1],
                                       'scale_factors': config.scale_factors},
                             'run': {'n_jobs': config.n_cpus, 'n_threads': n_threads_il}},
-        PixellevelAnalysis: {'build': {'raw_key': config.in_analysis_key,
+        PixellevelAnalysis: {'build': {'serum_key': serum_ana_in_key,
                                        'infected_key': config.out_key_infected,
-                                       'not_infected_key': config.out_key_not_infected}},
+                                       'not_infected_key': config.out_key_not_infected,
+                                       'output_folder': analysis_folder},
+                             'run': {'n_jobs': config.n_cpus}}
     }
 
     t0 = time.time()
-
     run_workflow(name, config.folder, job_dict,
                  input_folder=config.input_folder,
                  force_recompute=config.force_recompute,
                  ignore_invalid_inputs=config.ignore_invalid_inputs,
                  ignore_failed_outputs=config.ignore_failed_outputs)
-
     t0 = time.time() - t0
     logger.info(f"Run {name} in {t0}s")
     return name, t0
@@ -83,29 +103,34 @@ def parse_pixel_config1():
                                            default_config_files=[default_config],
                                            config_file_parser_class=configargparse.YAMLConfigFileParser)
 
+    # mandatory
     parser.add('-c', '--config', is_config_file=True, help='config file path')
     parser.add('--input_folder', required=True, type=str, help='folder with input files as tifs')
     parser.add('--gpu', required=True, type=int, help='id of gpu for this job')
     parser.add('--n_cpus', required=True, type=int, help='number of cpus')
     parser.add('--folder', required=True, type=str, default=None, help=fhelp)
 
-    # options
-    parser.add("--in_key", default='raw')
-    parser.add("--in_analysis_key", default='TRITC')
+    # folder options
+    parser.add("--root", default='/home/covid19/antibodies-nuclei', type=str)
+    parser.add("--output_root_name", default='data-processed', type=str)
+    parser.add("--use_unique_output_folder", default=False)
+
+    # keys for intermediate data
     parser.add("--out_key_infected", default='local_infected')
     parser.add("--out_key_not_infected", default='local_not_infected')
-    parser.add("--root", default='/home/covid19/antibodies-nuclei', type=str)
-    parser.add("--output_root_name", default='data-processed-new', type=str)
-    parser.add("--use_unique_output_folder", default=False, action='store_false')
 
-    parser.add("--force_recompute", default=False)
-    parser.add("--ignore_invalid_inputs", default=None)
-    parser.add("--ignore_failed_outputs", default=None)
+    # whether to run the segmentation / analysis on the corrected or on the corrected data
+    parser.add("--segmentation_on_corrected", default=True)
+    parser.add("--analysis_on_corrected", default=True)
 
-    # TODO add default scale factors
     default_scale_factors = None
     # default_scale_factors = [1, 2, 4, 8]
     parser.add("--scale_factors", default=default_scale_factors)
+
+    # runtime options
+    parser.add("--force_recompute", default=None)
+    parser.add("--ignore_invalid_inputs", default=None)
+    parser.add("--ignore_failed_outputs", default=None)
 
     return parser.parse_args()
 

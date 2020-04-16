@@ -22,9 +22,9 @@ class Summary(BatchJobOnContainer):
         self.cell_seg_key = cell_seg_key
         input_ndim = [2]
 
-        super.__init__(input_pattern=input_pattern, output_ext=None,
-                       input_keys=[cell_seg_key], input_ndim=input_ndim,
-                       **super_kwargs)
+        super().__init__(input_pattern=input_pattern, output_ext=None,
+                         input_key=[cell_seg_key], input_ndim=input_ndim,
+                         **super_kwargs)
 
     def write_summary_table(self, table_out_path):
         im_names, site_names = get_image_and_site_names(self.folder,

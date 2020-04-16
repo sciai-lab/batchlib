@@ -1,6 +1,9 @@
 import os
 import subprocess
 from concurrent import futures
+from functools import partial
+
+import numpy as np
 from tqdm import tqdm
 
 from ..base import BatchJobOnContainer
@@ -37,27 +40,28 @@ class IlastikPrediction(BatchJobOnContainer):
         self.bin = ilastik_bin
         self.project = ilastik_project
 
-    def check_multiscale_input(self, path):
+    @staticmethod
+    def check_multiscale_input(path, input_key):
         with open_file(path, 'r') as f:
-            obj = f[self.input_key]
+            obj = f[input_key]
         return is_group(obj)
 
-    def predict_images(self, input_files):
+    def predict_images(self, input_files, input_key):
         if len(input_files) == 0:
             return
 
-        is_multi_scale = self.check_multiscale_input(input_files[0])
+        is_multi_scale = self.check_multiscale_input(input_files[0], input_key)
         if is_multi_scale:
-            inputs = ['%s/%s/s0' % (inp, self.input_key) for inp in input_files]
+            inputs = ['%s/%s/s0' % (inp, input_key) for inp in input_files]
         else:
-            inputs = ['%s/%s' % (inp, self.input_key) for inp in input_files]
+            inputs = ['%s/%s' % (inp, input_key) for inp in input_files]
 
         cmd = [self.bin, '--headless', '--readonly', '--project=%s' % self.project]
         cmd.extend(inputs)
         subprocess.run(cmd, check=True)
 
-    def save_prediction(self, in_path, out_path):
-        tmp_path = in_path[:-3] + '-raw_Probabilities.h5'
+    def save_prediction(self, in_path, out_path, key):
+        tmp_path = in_path[:-3] + '-%s_Probabilities.h5' % key
         tmp_key = 'exported_data'
 
         # load and resave the data
@@ -87,6 +91,31 @@ class IlastikPrediction(BatchJobOnContainer):
         # clean up
         os.remove(tmp_path)
 
+    def write_temporary_stack(self, input_files, out_key, n_jobs):
+
+        def _write_temp(path):
+            data = []
+            with open_file(path, 'r') as f:
+                for key in self.input_key:
+                    data.append(self.read_input(f, key)[None])
+            data = np.concatenate(data, axis=0)
+
+            tmp_path = os.path.splitext(path)[0] + '_tmp.h5'
+            with open_file(tmp_path, 'w') as f:
+                f.create_dataset(out_key, data=data, chunks=True)
+
+            return tmp_path
+
+        with futures.ThreadPoolExecutor(n_jobs) as tp:
+            tmp_files = list(tqdm(tp.map(_write_temp, input_files), total=len(input_files)))
+
+        return tmp_files
+
+    # note: doesn't work for n5
+    def clear_tmp_files(self, tmp_files):
+        for path in tmp_files:
+            os.remove(path)
+
     def run(self, input_files, output_files, n_jobs=1,
             n_threads=None, mem_limit=None):
 
@@ -95,23 +124,24 @@ class IlastikPrediction(BatchJobOnContainer):
         if mem_limit is not None:
             os.environ['LAZYFLOW_TOTAL_RAM_MB'] = str(mem_limit)
 
-        # run with multiple jobs
-        if n_jobs > 1:
-
-            job_files = files_to_jobs(n_jobs, input_files)
-
-            with futures.ThreadPoolExecutor(n_jobs) as tp:
-                list(tqdm(tp.map(self.predict_images, job_files), total=len(job_files)))
-
-            with futures.ThreadPoolExecutor(n_jobs) as tp:
-                list(tqdm(tp.map(self.save_prediction, input_files, output_files),
-                          total=len(input_files)))
-
-        # run with single job
+        # if we have multiple dataset keys as input, we need to write a temporary stack
+        write_stack = isinstance(self.input_key, (list, tuple))
+        if write_stack:
+            input_key = 'data'
+            input_files = self.write_temporary_stack(input_files, input_key, n_jobs)
         else:
-            # predict the images
-            self.predict_images(input_files)
+            input_key = self.input_key
 
-            # load predictions and save to the output
-            for in_path, out_path in tqdm(zip(input_files, output_files)):
-                self.save_prediction(in_path, out_path)
+        _predict = partial(self.predict_images, input_key=input_key)
+        _save = partial(self.save_prediction, key=input_key)
+        job_files = files_to_jobs(n_jobs, input_files)
+
+        with futures.ThreadPoolExecutor(n_jobs) as tp:
+            list(tqdm(tp.map(_predict, job_files), total=len(job_files)))
+
+        with futures.ThreadPoolExecutor(n_jobs) as tp:
+            list(tqdm(tp.map(_save, input_files, output_files),
+                      total=len(input_files)))
+
+        if write_stack:
+            self.clear_tmp_files(input_files)
