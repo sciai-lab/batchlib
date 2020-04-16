@@ -1,4 +1,6 @@
 import os
+import numpy as np
+
 from ..base import BatchJobOnContainer
 from ..util import (get_image_and_site_names, open_file,
                     write_table, write_image_information)
@@ -32,7 +34,7 @@ class Summary(BatchJobOnContainer):
 
         # just add two dummy columns for now
         column_names = ['score1', 'score2']
-        column_dict = {}
+        column_dict = {name: [np.random.rand(), np.random.rand()] for name in site_names}
 
         write_table(self.folder, column_dict, column_names,
                     out_path=table_out_path,
@@ -68,3 +70,7 @@ class Summary(BatchJobOnContainer):
         # write summary information in the hdf5 tags per image
         for path in output_files:
             self.write_summary_information(path)
+
+    # FIXME this is just a hack, remove once this is properly implemented!
+    def check_output(self, path):
+        return False

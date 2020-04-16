@@ -203,6 +203,9 @@ class BatchJob(ABC):
             # get the output files corresponding to the input files
             output_files = self.to_outputs(input_files, folder)
 
+            # monkey patch the folder, so that we can get this in the run method
+            self.folder = folder
+
             # run the actual computation
             self.run(input_files, output_files, **kwargs)
 
@@ -287,6 +290,7 @@ class BatchJobOnContainer(BatchJob, ABC):
             key = "s%i" % scale
             self._write_single_scale(g, key, image)
             prev_scale_factor = scale_factor
+        return g
 
     def write_result(self, f, out_key, image, settings=None):
         # dimensionality is not to

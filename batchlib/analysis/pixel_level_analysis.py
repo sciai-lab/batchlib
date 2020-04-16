@@ -154,8 +154,7 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
                       total=len(input_files)))
 
         # produce the result plots (need to take all files into account, not just current results)
-        folder = os.path.split(input_files[0])[0]
-        output_folder = os.path.join(folder, self.output_folder)
+        output_folder = os.path.join(self.folder, self.output_folder)
         pattern = os.path.join(output_folder, "*.json")
         all_results = glob(pattern)
         all_plots(all_results, output_folder)
