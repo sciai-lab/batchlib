@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 
 from batchlib.util.logging import get_logger, add_file_handler, remove_file_handler
@@ -58,7 +59,9 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
     work_dir = os.path.join(folder, 'batchlib')
     os.makedirs(work_dir, exist_ok=True)
     # register file workflow's log file
-    add_file_handler(logger, work_dir, name)
+    fh = add_file_handler(logger, work_dir, name)
+    # add file handler to tensorboard logger
+    logging.getLogger('tensorflow').addHandler(fh)
 
     lock_file = os.path.join(work_dir, 'batchlib.lock')
     with get_file_lock(lock_file, lock_folder):
@@ -102,5 +105,7 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
 
             status[job_name] = state
             _dump_status(status_file, status)
-            # remove workflow's file handler from the main logger
-            remove_file_handler(logger, name)
+
+        # remove workflow's file handler from the main logger and tf logger
+        fh = remove_file_handler(logger, name)
+        logging.getLogger('tensorflow').removeHandler(fh)
