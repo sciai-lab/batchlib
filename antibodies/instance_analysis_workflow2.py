@@ -56,8 +56,7 @@ def run_instance_analysis2(config):
     model_root = os.path.join(config.root, 'stardist/models/pretrained')
     model_name = '2D_dsb2018'
 
-    barrel_corrector_path = os.path.join(os.path.split(__file__)[0],
-                                         '../misc/barrel_corrector.h5')
+    barrel_corrector_path = os.path.join(os.path.split(__file__)[0], '../misc/', config.barrel_corrector)
 
     torch_model_path = os.path.join(config.root,
                                     'unet_segmentation/sample_models/fg_boundaries_best_checkpoint.pytorch')
@@ -111,7 +110,7 @@ def run_instance_analysis2(config):
                             'run': {'gpu_id': config.gpu}}
     }
 
-    if not config.run_analysis:
+    if config.skip_analysis:
         job_dict.pop(CellLevelAnalysis)
 
     t0 = time.time()
@@ -148,6 +147,10 @@ def parse_instance_config2():
     parser.add('--n_cpus', required=True, type=int, help='number of cpus')
     parser.add('--folder', required=True, type=str, default="", help=fhelp)
 
+    # barrel correcotor
+    parser.add('--barrel_corrector', type=str, default="barrel_corrector.h5",
+               help="name of barrel corrector file in ../misc/")
+
     # folder options
     parser.add("--root", default='/home/covid19/antibodies-nuclei')
     parser.add("--output_root_name", default='data-processed')
@@ -159,8 +162,8 @@ def parse_instance_config2():
     parser.add("--nuc_key", default='nucleus_segmentation', type=str)
     parser.add("--seg_key", default='cell_segmentation', type=str)
 
-    # whether to run the final analysis at all (this is to circumvent a bug regarding tensorflow not freeing the memory)
-    parser.add("--run_analysis", default=True)
+    # whether to skip the final analysis (this is to circumvent a bug regarding tensorflow not freeing the memory)
+    parser.add_argument('--skip_analysis', dest='skip_analysis', default=False, action='store_true')
 
     # whether to run the segmentation / analysis on the corrected or on the corrected data
     parser.add("--segmentation_on_corrected", default=True)
