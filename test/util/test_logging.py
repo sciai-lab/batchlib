@@ -5,7 +5,7 @@ import os
 from batchlib.util.logging import get_logger, add_file_handler
 
 
-class TestOutliers(unittest.TestCase):
+class TestLogging(unittest.TestCase):
     def test_propagation(self):
         with tempfile.TemporaryDirectory() as work_dir:
             parent = get_logger('Workflow')

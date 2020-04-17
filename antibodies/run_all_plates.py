@@ -5,9 +5,9 @@ from run_all_workflows import run_all_workflows
 from instance_analysis_workflow2 import run_instance_analysis2, parse_instance_config2
 
 
-def run_instance2(folder, use_unique_output_folder):
+def run_instance2(in_folder, use_unique_output_folder):
     config = parse_instance_config2()
-    config.folder = folder
+    config.input_folder = in_folder
     config.use_unique_output_folder = use_unique_output_folder
     run_instance_analysis2(config)
 

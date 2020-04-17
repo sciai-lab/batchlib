@@ -62,6 +62,7 @@ def add_file_handler(logger, workflow_dir, workflow_name):
     logger.addHandler(fh)
     # register handler
     handlers[workflow_name] = fh
+    return fh
 
 
 def remove_file_handler(logger, workflow_name):
@@ -69,3 +70,4 @@ def remove_file_handler(logger, workflow_name):
     if fh is not None:
         logger.removeHandler(fh)
         fh.close()
+    return fh
