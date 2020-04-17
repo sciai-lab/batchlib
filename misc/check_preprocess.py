@@ -1,12 +1,13 @@
 import os
 from glob import glob
+from shutil import rmtree
 
 import h5py
 import napari
 from batchlib.preprocessing import Preprocess
 
 
-ROOT = '../../data/naming_schemes'
+ROOT = '../../data/test_data/naming_schemes'
 
 
 def run():
@@ -33,5 +34,12 @@ def check():
             viewer.add_image(im, name=name)
 
 
+# TODO
+def clean_up():
+    pass
+
+
+# Inspect visually that preprocessing does the right thing
 run()
 check()
+clean_up()
