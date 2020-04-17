@@ -100,7 +100,7 @@ def run_instance_analysis2(config):
                                     'output_key': config.seg_key,
                                     'mask_key': config.mask_key,
                                     'scale_factors': config.scale_factors},
-                          'run': {'erode_mask': 3,
+                          'run': {'erode_mask': 20,
                                   'dilate_seeds': 3,
                                   'n_jobs': config.n_cpus}},
         CellLevelAnalysis: {'build': {'serum_key': serum_ana_in_key,
