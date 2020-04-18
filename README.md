@@ -13,7 +13,7 @@ python instance_analysis_workflow2.py -c configs/test_instance_analysis_2.conf -
 ```
 
 This should run through without throwing an error and create a folder `test` locally containing 9 h5 files with the results per image.
-Note: until we solve issue #14, you will need to copy some test data to `data/test_inputs` and get the `antibodies-nuclei` repository.
+Note: until we solve everything listed in issue #14, you will need to get the (private) `antibodies-nuclei` repository separately.
 
 
 ## Usage & Development
