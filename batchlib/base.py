@@ -275,7 +275,7 @@ class BatchJobOnContainer(BatchJob, ABC):
         ds[:] = image
         return ds
 
-    def _write_multi_scale(self, f, out_key, image):
+    def _write_multi_scale(self, f, out_key, image, use_nearest):
         g = f.require_group(out_key)
         self._write_single_scale(g, "s0", image)
 
@@ -286,23 +286,26 @@ class BatchJobOnContainer(BatchJob, ABC):
         # note: scale_factors[0] is always 1
         for scale, scale_factor in enumerate(self.scale_factors[1:], 1):
             rel_scale_factor = int(scale_factor / prev_scale_factor)
-            image = downscale_image(image, rel_scale_factor)
+            image = downscale_image(image, rel_scale_factor,
+                                    use_nearest=use_nearest)
             key = "s%i" % scale
             self._write_single_scale(g, key, image)
             prev_scale_factor = scale_factor
         return g
 
     def write_result(self, f, out_key, image, settings=None):
+        # get the viewer and donw-sampling settings
+        if settings is None:
+            settings = self.viewer_settings.get(out_key, {})
+
         # dimensionality is not to
         # -> this is not in image format and we just writ the data
         if image.ndim != 2:
             g = self._write_single_scale(f, out_key, image)
         # otherwise, write in  multi-scale format
         else:
-            g = self._write_multi_scale(f, out_key, image)
-
-        if settings is None:
-            settings = self.viewer_settings.get(out_key, {})
+            use_nearest = settings.get('use_nearest', None)
+            g = self._write_multi_scale(f, out_key, image, use_nearest)
 
         assert isinstance(settings, dict)
         write_viewer_settings(g, image,

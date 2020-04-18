@@ -5,7 +5,7 @@ from time import sleep
 import h5py
 import numpy as np
 import pandas as pd
-from skimage.transform import downscale_local_mean, rescale
+from skimage.transform import downscale_local_mean, resize
 
 try:
     import z5py
@@ -92,14 +92,37 @@ def write_table(folder, column_dict, column_names, out_path, pattern='*.h5'):
     table.to_csv(out_path, sep='\t', index=False)
 
 
-def downscale_image(image, scale_factor):
+def sample_shape(shape, scale_factor, add_incomplete_blocks=False):
+    if add_incomplete_blocks:
+        sampled = tuple(sh // scale_factor + int((sh % scale_factor) != 0)
+                        for sh in shape)
+    else:
+        sampled = tuple(sh // scale_factor for sh in shape)
+    sampled = tuple(max(1, sh) for sh in sampled)
+    return sampled
+
+
+def downscale_image(image, scale_factor, use_nearest=None):
     assert isinstance(scale_factor, int), scale_factor
     interpolation_dtypes = (np.uint8, np.int8, np.int16, np.uint16, np.float32, np.float64)
-    if image.dtype in interpolation_dtypes:
-        return downscale_local_mean(image, (scale_factor, scale_factor)).astype(image.dtype)
+    dtype = image.dtype
+    use_nearest = (dtype not in interpolation_dtypes) if use_nearest is None else use_nearest
+
+    out_shape = sample_shape(image.shape, scale_factor)
+
+    if use_nearest:
+        downscaled = resize(image, out_shape, order=0, anti_aliasing=False,
+                            preserve_range=True).astype(image.dtype)
     else:
-        return rescale(image, scale_factor, order=0, anti_aliasing=False,
-                       preserve_range=True).astype(image.dtype)
+        downscaled = downscale_local_mean(image, (scale_factor, scale_factor)).astype(image.dtype)
+        # if the shapes disagree, we need to crop righhtmost pixel in the disagreeing axes
+        if downscaled.shape != out_shape:
+            crop_axes = [dsh != osh for dsh, osh in zip(downscaled.shape, out_shape)]
+            crop = tuple(slice(0, sh) if ax else slice(None) for sh, ax in zip(out_shape, crop_axes))
+            downscaled = downscaled[crop]
+
+    assert downscaled.shape == out_shape
+    return downscaled
 
 
 def downsample_image_data(path, scale_factors, out_path):
@@ -170,7 +193,7 @@ def write_image_information(path, image_information=None, well_information=None)
 
 def write_viewer_settings(ds, image, color=None, alpha=1., visible=False, skip=None,
                           percentile_min=1, percentile_max=99, scale_factors=None,
-                          channel_information=None):
+                          channel_information=None, use_nearest=None):
     # if skip is None, we determine it from the dimensionality
     if skip is None:
         if image.ndim > 2:

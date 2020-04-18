@@ -36,6 +36,16 @@ def difference_over_sum(a, b):
     else:
         return 0.
 
+def get_colorbar_range(key):
+    colorbar_range = None
+
+    if key == "ratio_of_mean_over_mean":
+        colorbar_range = (1, 1.3)
+
+    if key == "plates_ratio_of_mean_over_mean_median":
+        colorbar_range = (1, 1.3)
+
+    return colorbar_range
 
 def all_plots(json_files, out_path):
     # load first json file to get list of key
@@ -66,6 +76,8 @@ def all_plots(json_files, out_path):
 
         well_plot(ratios_per_file,
                   figsize=(14, 6),
+                  print_medians=True,
+                  colorbar_range=get_colorbar_range(key),
                   outfile=outfile,
                   title=out_path + "\n" + key)
 
@@ -74,7 +86,8 @@ def all_plots(json_files, out_path):
         well_plot(ratios_per_file,
                   figsize=(14, 6),
                   outfile=outfile,
-                  wedge_width=0,
+                  print_medians=True,
+                  colorbar_range=get_colorbar_range(key),
                   title=out_path + "\n" + key)
 
 
