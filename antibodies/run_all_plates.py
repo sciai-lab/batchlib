@@ -4,25 +4,28 @@ from glob import glob
 import os
 import sys
 from instance_analysis_workflow2 import run_instance_analysis2, parse_instance_config2
+from instance_analysis_workflow2 import parser as instance_workflow_parser
 from pixel_analysis_workflow1 import run_pixel_analysis1, parse_pixel_config1
+from pixel_analysis_workflow1 import parser as pixel_workflow_parser
 
 
 def run_instance2(in_folder, use_unique_output_folder):
-    config = parse_instance_config2()
+    config, unknown = instance_workflow_parser().parse_known_args()
+    print(f'Arguments unknown to instance workflow: {unknown}')
     config.input_folder = in_folder
     config.use_unique_output_folder = use_unique_output_folder
     run_instance_analysis2(config)
 
 
 def run_pixel1(in_folder, use_unique_output_folder):
-    config = parse_pixel_config1()
+    config, unknown = pixel_workflow_parser().parse_known_args()
+    print(f'Arguments unknown to pixel workflow: {unknown}')
     config.input_folder = in_folder
     config.use_unique_output_folder = use_unique_output_folder
     run_pixel_analysis1(config)
 
 
 def run_plates(folders):
-
     for folder in folders:
         if not os.path.isdir(folder):
             continue
