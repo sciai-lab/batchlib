@@ -127,6 +127,10 @@ def run_instance_analysis2(config):
 
 
 def parse_instance_config2():
+    return parser().parse_args()
+
+
+def parser():
     doc = """Run instance analysis workflow
     Based on ilastik pixel prediction, stardist nucleus prediction
     and watershed segmentation.
@@ -179,7 +183,7 @@ def parse_instance_config2():
     # default_scale_factors = [1, 2, 4, 8]
     parser.add("--scale_factors", default=default_scale_factors)
 
-    return parser.parse_args()
+    return parser
 
 
 if __name__ == '__main__':
