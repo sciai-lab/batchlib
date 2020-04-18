@@ -92,7 +92,7 @@ def run_instance_analysis2(config):
                                        'input_key': nuc_seg_in_key,
                                        'output_key': config.nuc_key,
                                        'scale_factors': config.scale_factors},
-                             'run': {'gpu_id': config.gpu,
+                             'run': {'gpu_id': config.gpu if not config.stardist_on_cpu else None,
                                      'n_jobs': config.n_cpus}},
         SeededWatershed: {'build': {'pmap_key': config.bd_key,
                                     'seed_key': config.nuc_key,
@@ -151,9 +151,12 @@ def parser():
     parser.add('--n_cpus', required=True, type=int, help='number of cpus')
     parser.add('--folder', required=True, type=str, default="", help=fhelp)
 
-    # barrel correcotor
+    # barrel corrector
     parser.add('--barrel_corrector', type=str, default="barrel_corrector.h5",
                help="name of barrel corrector file in ../misc/")
+
+    # as tensorflow / pytorch gpu issue workaround
+    parser.add('--stardist_on_cpu', default=False, action='store_true')
 
     # folder options
     parser.add("--root", default='/home/covid19/antibodies-nuclei')
