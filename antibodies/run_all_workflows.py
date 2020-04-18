@@ -52,9 +52,10 @@ def run_all_workflows(input_folder="",
             times[name] = rt
             dump_times(times, input_folder)
 
+    # TODO implement and then run the summary task
     # run the summary task
-    summary = Summary()
-    summary(config.folder)
+    # summary = Summary()
+    # summary(config.folder)
 
 
 if __name__ == '__main__':
