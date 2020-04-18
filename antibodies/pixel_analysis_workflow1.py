@@ -4,10 +4,9 @@ import os
 import time
 
 import configargparse
-from glob import glob
 
 from batchlib import run_workflow
-from batchlib.analysis import PixellevelAnalysis, all_plots
+from batchlib.analysis import PixellevelAnalysis
 from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import IlastikPrediction
 from batchlib.util.logging import get_logger
@@ -57,8 +56,7 @@ def run_pixel_analysis1(config):
      serum_ana_in_key) = get_input_keys(config)
     analysis_folder = 'pixelwise_analysis_corrected' if config.analysis_on_corrected else 'pixelwise_analysis'
 
-    barrel_corrector_path = os.path.join(os.path.split(__file__)[0],
-                                         '../misc/barrel_corrector.h5')
+    barrel_corrector_path = os.path.join(os.path.split(__file__)[0], '../misc/', config.barrel_corrector)
 
     job_dict = {
         Preprocess.from_folder: {'build': {'input_folder': config.input_folder,
@@ -86,15 +84,6 @@ def run_pixel_analysis1(config):
                  force_recompute=config.force_recompute,
                  ignore_invalid_inputs=config.ignore_invalid_inputs,
                  ignore_failed_outputs=config.ignore_failed_outputs)
-
-
-    # produce the result plots (need to take all files into account, not just current results)
-    output_folder = os.path.join(config.folder, analysis_folder)
-    pattern = os.path.join(output_folder, "*.json")
-    all_results = glob(pattern)
-
-    all_plots(all_results, output_folder)
-
     t0 = time.time() - t0
     logger.info(f"Run {name} in {t0}s")
     return name, t0
@@ -119,6 +108,10 @@ def parse_pixel_config1():
     parser.add('--gpu', required=True, type=int, help='id of gpu for this job')
     parser.add('--n_cpus', required=True, type=int, help='number of cpus')
     parser.add('--folder', required=True, type=str, default=None, help=fhelp)
+
+    # barrel corrector
+    parser.add('--barrel_corrector', type=str, default="barrel_corrector.h5",
+               help="name of barrel corrector file in ../misc/")
 
     # folder options
     parser.add("--root", default='/home/covid19/antibodies-nuclei', type=str)
