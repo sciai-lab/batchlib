@@ -4,7 +4,7 @@ from tqdm import tqdm
 
 import numpy as np
 from skimage.filters import gaussian
-from skimage.morphology import dilation, erosion, disk
+from skimage.morphology import dilation, binary_erosion, disk
 
 from ..base import BatchJobOnContainer
 from ..util import open_file, normalize
@@ -32,7 +32,8 @@ class SeededSegmentation(BatchJobOnContainer):
         self.seed_key = seed_key
         self.mask_key = mask_key
 
-    def process_mask_and_seeds(self, seeds, mask, erode_mask, dilate_seeds):
+    def process_mask_and_seeds(self, seeds, mask,
+                               erode_mask, dilate_seeds, ensure_seeds):
         if dilate_seeds > 0:
             seeds = dilation(seeds, disk(dilate_seeds))
 
@@ -41,12 +42,19 @@ class SeededSegmentation(BatchJobOnContainer):
             bg_id = None
         # process without mask
         else:
+            # ensure that seeds are not masked out
+            if ensure_seeds:
+                mask[seeds > 0] = 1
+
+            # invert the mask an erode it
             mask = np.logical_not(mask)
             if erode_mask > 0:
-                mask = erosion(mask, disk(erode_mask))
-            x, y = np.where(mask)
+                mask = binary_erosion(mask, disk(erode_mask))
+
+            # set the mask to the background id
             bg_id = seeds.max() + 1
-            seeds[x, y] = bg_id
+            seeds[mask] = bg_id
+
         return seeds, mask, bg_id
 
     def process_pmap(self, pmap, invert_pmap, sigma):
@@ -57,7 +65,8 @@ class SeededSegmentation(BatchJobOnContainer):
             pmap = gaussian(pmap, sigma)
         return pmap
 
-    def segment_image(self, in_path, out_path, invert_pmap, sigma, erode_mask, dilate_seeds, **kwargs):
+    def segment_image(self, in_path, out_path, invert_pmap, sigma,
+                      erode_mask, dilate_seeds, ensure_seeds, **kwargs):
         with open_file(in_path, 'r') as f:
             pmap = self.read_input(f, self.pmap_key)
             seeds = self.read_input(f, self.seed_key)
@@ -67,21 +76,23 @@ class SeededSegmentation(BatchJobOnContainer):
                 mask = self.read_input(f, self.mask_key).astype('bool')
 
         pmap = self.process_pmap(pmap, invert_pmap, sigma)
-        seeds, mask, bg_id = self.process_mask_and_seeds(seeds, mask, erode_mask, dilate_seeds)
+        seeds, mask, bg_id = self.process_mask_and_seeds(seeds, mask,
+                                                         erode_mask, dilate_seeds, ensure_seeds)
 
         labels = self.segment(pmap, seeds, **kwargs)
 
         # set masked area back to zero
         if mask is not None:
-            labels = np.where(labels == bg_id, 0, labels).astype('uint32')
+            labels[labels == bg_id] = 0
 
         with open_file(out_path, 'a') as f:
             self.write_result(f, self.output_key, labels)
 
     def run(self, input_files, output_files, invert_pmap=False, sigma=2.,
-            erode_mask=0, dilate_seeds=0, n_jobs=1, **kwargs):
+            erode_mask=0, dilate_seeds=0, ensure_seeds=True, n_jobs=1, **kwargs):
 
         _segment = partial(self.segment_image, invert_pmap=invert_pmap, sigma=sigma,
-                           erode_mask=erode_mask, dilate_seeds=dilate_seeds, **kwargs)
+                           erode_mask=erode_mask, dilate_seeds=dilate_seeds,
+                           ensure_seeds=ensure_seeds, **kwargs)
         with futures.ThreadPoolExecutor(n_jobs) as tp:
             list(tqdm(tp.map(_segment, input_files, output_files), total=len(input_files)))
