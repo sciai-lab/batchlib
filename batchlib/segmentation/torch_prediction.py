@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 from batchlib.base import BatchJobOnContainer
 from batchlib.segmentation.unet import UNet2D
-from batchlib.util import open_file, files_to_jobs, standardize
+from batchlib.util import open_file, files_to_jobs, standardize, DelayedKeyboardInterrupt
 
 
 # TODO
@@ -64,12 +64,13 @@ class TorchPrediction(BatchJobOnContainer):
 
         for out_path, pred in zip(out_batch, prediction):
             assert pred.shape[0] == len(self._output_exp_key)
-            with open_file(out_path, 'a') as f:
-                for channel_id, (key, channel) in enumerate(zip(self._output_exp_key, pred)):
-                    threshold = threshold_channels.get(channel_id, None)
-                    if threshold is not None:
-                        channel = (channel > threshold).astype('uint8')
-                    self.write_result(f, key, channel)
+            with DelayedKeyboardInterrupt():
+                with open_file(out_path, 'a') as f:
+                    for channel_id, (key, channel) in enumerate(zip(self._output_exp_key, pred)):
+                        threshold = threshold_channels.get(channel_id, None)
+                        if threshold is not None:
+                            channel = (channel > threshold).astype('uint8')
+                        self.write_result(f, key, channel)
 
     # load from pickled model or from state dict
     def load_model(self, device):

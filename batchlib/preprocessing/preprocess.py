@@ -109,6 +109,8 @@ class Preprocess(BatchJobOnContainer):
         im = imageio.volread(in_path)
         im = np.asarray(im)
 
+        # note: we don't delay the keyboard interruption here, because this code
+        # is usually not executed in the main thread
         with open_file(out_path, 'a') as f:
 
             for chan_id, name in enumerate(self.channel_names):

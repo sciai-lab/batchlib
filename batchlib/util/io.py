@@ -1,4 +1,5 @@
 import os
+import signal
 from glob import glob
 from time import sleep
 
@@ -14,6 +15,20 @@ except ImportError:
 
 H5_EXTS = ['.h5', '.hdf', '.hdf5']
 Z5_EXTS = ['.zr', '.zarr', '.n5']
+
+
+class DelayedKeyboardInterrupt:
+    def __enter__(self):
+        self.signal_received = False
+        self.old_handler = signal.signal(signal.SIGINT, self.handler)
+
+    def handler(self, sig, frame):
+        self.signal_received = (sig, frame)
+
+    def __exit__(self, type, value, traceback):
+        signal.signal(signal.SIGINT, self.old_handler)
+        if self.signal_received:
+            self.old_handle(*self.signal_received)
 
 
 def is_dataset(obj):
@@ -36,8 +51,8 @@ def open_file(path, mode='r', h5_timeout=5, h5_retry=10):
     ext = os.path.splitext(path)[1]
 
     if ext.lower() in H5_EXTS:
-        # this solves some h5 opening errors
         n_tries = 0
+        # this solves some h5 opening errors
         while n_tries < h5_retry:
             try:
                 return h5py.File(path, mode=mode)
