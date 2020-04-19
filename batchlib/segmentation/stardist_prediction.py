@@ -8,6 +8,17 @@ from batchlib.base import BatchJobOnContainer
 from batchlib.util import open_file, normalize_percentile
 
 
+def limit_gpu_memory(fraction, allow_growth=False):
+    import tensorflow as tf
+    from keras import backend as K
+    config = tf.ConfigProto()
+    if fraction is not None:
+        config.gpu_options.per_process_gpu_memory_fraction = fraction
+    config.gpu_options.allow_growth = bool(allow_growth)
+    session = tf.Session(config=config)
+    K.tensorflow_backend.set_session(session)
+
+
 class StardistPrediction(BatchJobOnContainer):
     """
     """
@@ -56,11 +67,6 @@ class StardistPrediction(BatchJobOnContainer):
         os.remove(tmp_path_prob)
         os.remove(tmp_path_dist)
 
-    def clear_gpu(self):
-        from numba import cuda
-        cuda.select_device(0)
-        cuda.close()
-
     def run(self, input_files, output_files, gpu_id=None, n_jobs=1):
 
         # set number of OMP threads to 1, so we can properly parallelize over
@@ -73,11 +79,9 @@ class StardistPrediction(BatchJobOnContainer):
             os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
         else:
             os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
-
-            # NOTE: the memory consumption on gpu can be limited like this,
-            # but we don't need this for now
-            # from csbdeep.utils.tf import limit_gpu_memory
-            # limit_gpu_memory(.5)
+            # limit the gpu memory demand, so we can run tasks with pytorch later
+            # (otherwise tf will block all gpu memory for the rest of the python process)
+            limit_gpu_memory(.25)
 
         from stardist.models import StarDist2D
         model = StarDist2D(None, name=self.model_name, basedir=self.model_root)
@@ -90,6 +94,3 @@ class StardistPrediction(BatchJobOnContainer):
         _segment = partial(self.segment_image, model=model)
         with futures.ThreadPoolExecutor(n_jobs) as tp:
             list(tqdm(tp.map(_segment, output_files), total=len(output_files)))
-
-        if gpu_id is not None:
-            self.clear_gpu()

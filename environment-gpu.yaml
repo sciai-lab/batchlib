@@ -10,7 +10,6 @@ dependencies:
     - imageio
     - h5py
     - napari
-    - numba
     - pip
     - pytorch
     - scikit-image
