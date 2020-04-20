@@ -53,7 +53,7 @@ def run_instance_analysis2(config):
         if config.use_unique_output_folder:
             config.folder += '_' + name
 
-    this_folder = os.path.split(__file__[0])
+    this_folder = os.path.split(__file__)[0]
     model_root = os.path.join(this_folder, '../misc/models/stardist')
     model_name = '2D_dsb2018'
 
@@ -160,6 +160,8 @@ def parser():
     parser.add('--stardist_on_cpu', default=False, action='store_true')
 
     # folder options
+    # this parameter is not necessary here any more, but for now we need it to be
+    # compatible with the pixel-wise workflow
     parser.add("--root", default='/home/covid19/antibodies-nuclei')
     parser.add("--output_root_name", default='data-processed')
     parser.add("--use_unique_output_folder", default=False)

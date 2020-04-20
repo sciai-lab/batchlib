@@ -128,8 +128,9 @@ class BatchJob(ABC):
             self.update_status(folder, status, invalid_inputs=invalid_inputs)
 
             if ignore_invalid_inputs:
-                logger.warning(msg)
+                logger.warning(f'{self.name}: invalid inputs due to {msg}')
             else:
+                logger.error(f'{self.name}: invalid inputs due to {msg}')
                 raise RuntimeError(msg)
 
         # force recompute means we just recompute for everything without
@@ -171,16 +172,19 @@ class BatchJob(ABC):
             self.update_status(folder, status, failed_outputs=failed_outputs)
 
             if ignore_failed_outputs:
-                logger.warning(msg)
+                logger.warning(f'{self.name}: failed outputs due to {msg}')
             else:
+                logger.error(f'{self.name}: failed outputs due to {msg}')
                 raise RuntimeError(msg)
 
     def __call__(self, folder, input_folder=None, force_recompute=False,
                  ignore_invalid_inputs=False, ignore_failed_outputs=False,
                  executable=None, **kwargs):
 
+        logger.info(f'{self.name}: called on the folder {folder}')
         # make the work dir, that stores all batchlib status and log files
         work_dir = os.path.join(folder, 'batchlib')
+        logger.info(f'{self.name}: status files will be written to {work_dir}')
         os.makedirs(work_dir, exist_ok=True)
 
         # we lock the execution, so that a job with the same name cannot run on
@@ -193,20 +197,25 @@ class BatchJob(ABC):
 
             # the actual input folder we use
             input_folder_ = folder if input_folder is None else input_folder
+            logger.info(f'{self.name}: input folder is {input_folder_}')
 
             # validate and get the input files to be processed
             input_files = self.get_inputs(folder, input_folder_, status,
                                           force_recompute, ignore_invalid_inputs)
             if len(input_files) == 0:
+                logger.info(f'{self.name}: no inputs left to process')
                 return status.get('state', 'processed')
 
             # get the output files corresponding to the input files
             output_files = self.to_outputs(input_files, folder)
+            assert len(input_files) == len(output_files)
 
             # monkey patch the folder, so that we can get this in the run method
             self.folder = folder
 
-            logger.info(f'Running job: {self.name}. Input files: {input_files}')
+            logger.info(f'{self.name}: call run method with {len(input_files)} inputs.')
+            logger.debug(f'{self.name}: with the following inputs:\n {input_files}')
+            logger.debug(f'{self.name}: and the following outputs:\n {output_files}')
             # run the actual computation
             self.run(input_files, output_files, **kwargs)
 
