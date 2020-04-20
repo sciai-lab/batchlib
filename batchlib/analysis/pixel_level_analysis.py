@@ -4,6 +4,8 @@ from concurrent import futures
 
 import numpy as np
 from tqdm import tqdm
+import scipy.stats
+import math
 
 from batchlib.util.logging import get_logger
 from ..base import BatchJobWithSubfolder
@@ -36,6 +38,7 @@ def difference_over_sum(a, b):
     else:
         return 0.
 
+
 def get_colorbar_range(key):
     colorbar_range = None
 
@@ -47,6 +50,7 @@ def get_colorbar_range(key):
 
     return colorbar_range
 
+
 def all_plots(json_files, out_path):
     # load first json file to get list of key
     with open(json_files[0], "r") as key_file:
@@ -54,41 +58,37 @@ def all_plots(json_files, out_path):
 
     for key in keys:
 
-        ratios_per_well = {}
-        ratios_per_file = {}
+        stats_per_file = {}
 
         for jf in json_files:
-            well_name = jf.split("/")[-1].split("_")[0]
             file_name = jf.split("/")[-1]
 
-            if well_name not in ratios_per_well:
-                ratios_per_well[well_name] = []
-
             with open(jf, "r") as jf:
-                ratio = json.load(jf)[key]
-
-            if ratio != 0:
-                ratios_per_well[well_name].append(float(ratio))
-                ratios_per_file[file_name] = float(ratio)
+                input_dict = json.load(jf)
+                if key in input_dict:
+                    stat = input_dict[key]
+                    if not math.isnan(stat):
+                        stats_per_file[file_name] = float(stat)
 
         root_path = os.path.dirname(os.path.abspath(json_files[0]))
         outfile = os.path.join(root_path, f"plates_{key}.png")
 
-        well_plot(ratios_per_file,
+        well_plot(stats_per_file,
                   figsize=(14, 6),
                   print_medians=True,
-                  colorbar_range=get_colorbar_range(key),
+                  # colorbar_range=get_colorbar_range(key),
                   outfile=outfile,
                   title=out_path + "\n" + key)
 
         outfile = os.path.join(root_path, f"plates_{key}_median.png")
 
-        well_plot(ratios_per_file,
+        well_plot(stats_per_file,
                   figsize=(14, 6),
                   outfile=outfile,
                   print_medians=True,
-                  colorbar_range=get_colorbar_range(key),
-                  title=out_path + "\n" + key)
+                  wedge_width=0.,
+                  # colorbar_range=get_colorbar_range(key),
+                  title=out_path + "\n" + key + " median over wells")
 
 
 class PixellevelAnalysis(BatchJobWithSubfolder):
@@ -127,32 +127,71 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
             infected = self.read_input(f, self.infected_key)
             not_infected = self.read_input(f, self.not_infected_key)
 
+            # TODO: this is generated as part of the segmentation analysis
+            # needs to become part of the pixel computation pipeline
+            if "mask" in f:
+                background_mask = self.read_input(f, "mask") == 0
+                background_intensity = serum[background_mask].mean()
+            else:
+                background_intensity = 0
+
         infected = infected > 0.5
         not_infected = not_infected > 0.5
 
-        return infected, not_infected, serum
+        return infected, not_infected, serum, background_intensity
 
     def all_stats(self, input_file, output_file):
 
-        infected, not_infected, serum = self.load_sample(input_file)
+        infected, not_infected, serum, bg_intensity = self.load_sample(input_file)
         result = {}
 
         infected_serum_intensity = compute_weighted_serum(infected, serum, "mean")
         not_infected_serum_intensity = compute_weighted_serum(not_infected, serum, "mean")
 
-        result["ratio_of_mean_over_mean"] = ratio(infected_serum_intensity,
-                                                  not_infected_serum_intensity)
-        result["dos_of_mean_over_mean"] = difference_over_sum(infected_serum_intensity,
-                                                              not_infected_serum_intensity)
+        # save intensities
+        result["infected_serum_intensity"] = float(infected_serum_intensity)
+        result["not_infected_serum_intensity"] = float(not_infected_serum_intensity)
+        result["background"] = float(bg_intensity)
 
-        # compute statistics for different choices of quantiles (q = 0.5 == median)
-        for q in [0.5]:
-            infected_serum_intensity = compute_weighted_serum(infected, serum, q)
-            not_infected_serum_intensity = compute_weighted_serum(not_infected, serum, 1 - q)
-            result[f"ratio_of_q{q:0.1f}_over_q{(1-q):0.1f}"] = ratio(infected_serum_intensity,
-                                                                     not_infected_serum_intensity)
-            result[f"dos_of_q{q:0.1f}_over_q{(1-q):0.1f}"] = difference_over_sum(infected_serum_intensity,
-                                                                                 not_infected_serum_intensity)
+        # compute some propper statistic tests
+        if infected.sum() > 10 and not_infected.sum() > 10:
+            ks_v, ks_p = scipy.stats.ks_2samp(serum[infected], serum[not_infected])
+            result["ks_test_KS_value"] = ks_v
+            result["ks_test_p_value"] = ks_p
+
+            ttest_v, ttest_p = scipy.stats.ttest_ind(serum[infected], serum[not_infected], equal_var=False)
+            result["ttest_test_ttest_value"] = ttest_v
+            result["ttest_test_p_value"] = ttest_p
+
+            ranksum_v, ranksum_p = scipy.stats.ranksums(serum[infected], serum[not_infected])
+            result["ranksum_test_ranksum_value"] = ranksum_v
+            result["ranksum_test_p_value"] = ranksum_p
+
+        for correct_background in [True, False]:
+
+            inf_intensity = result["infected_serum_intensity"]
+            not_inf_intensity = result["not_infected_serum_intensity"]
+            suffix = ""
+
+            if correct_background:
+                inf_intensity = inf_intensity - result["background"]
+                not_inf_intensity = not_inf_intensity - result["background"]
+                suffix += "_bgsub"
+
+            # compute statistics
+            result[f"ratio_of_mean_over_mean{suffix}"] = ratio(inf_intensity,
+                                                               not_inf_intensity)
+            result[f"dos_of_mean_over_mean{suffix}"] = difference_over_sum(inf_intensity,
+                                                                           not_inf_intensity)
+
+            # # compute statistics for different choices of quantiles (q = 0.5 == median)
+            # for q in [0.5]:
+            #     infected_serum_intensity = compute_weighted_serum(infected, serum, q)
+            #     not_infected_serum_intensity = compute_weighted_serum(not_infected, serum, 1 - q)
+            #     result[f"ratio_of_q{q:0.1f}_over_q{(1-q):0.1f}_{suffix}"] = ratio(infected_serum_intensity,
+            #                                                                       not_infected_serum_intensity)
+            #     result[f"dos_of_q{q:0.1f}_over_q{(1-q):0.1f}_{suffix}"] = difference_over_sum(infected_serum_intensity,
+            #                                                                                   not_infected_serum_intensity)
 
         with open(output_file, 'w') as fp:
             json.dump(result, fp)
