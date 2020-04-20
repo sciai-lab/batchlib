@@ -40,6 +40,7 @@ def run_plates(folders):
         except Exception as e:
             print(f'\nException while evaluating folder {folder}.')
             print(e)
+            raise e
             print('\ncontinuing..\n')
     print('all plates processed')
 

@@ -1,6 +1,8 @@
 from tqdm.auto import tqdm
 import torch
 import numpy as np
+import json
+import math
 import pickle
 import os
 from functools import partial
@@ -38,7 +40,6 @@ def divide_by_background_of_marker(cell_properties, bg_label=0):
     bg_ind = list(cell_properties['labels']).index(bg_label)
     cell_properties = deepcopy(cell_properties)
     mean_bg = cell_properties['marker']['means'][bg_ind]
-    print(mean_bg)
     for key in cell_properties['marker'].keys():
         cell_properties['marker'][key] -= 550
         cell_properties['marker'][key] /= (mean_bg - 550)
@@ -253,10 +254,15 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
         per_cell_statistics = substract_background_of_marker(per_cell_statistics_to_save)
         per_cell_statistics = remove_background_of_cell_properties(per_cell_statistics)
         measures = get_measures(per_cell_statistics, 250, split_statistic='top50')
-        print(measures.keys())
         result = dict(per_cell_statistics=per_cell_statistics, measures=measures)
         with open(out_file, 'wb') as f:
             pickle.dump(result, f)
+
+        # also save the measures in json
+        measures = {key: float(value) if not math.isnan(value) else value
+                    for key, value in result['measures'].items()}
+        with open(out_file[:-6] + 'json', 'w') as fp:
+            json.dump(measures, fp)
 
     def run(self, input_files, output_files, gpu_id=None):
         with torch.no_grad():
