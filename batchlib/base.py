@@ -206,6 +206,7 @@ class BatchJob(ABC):
             # monkey patch the folder, so that we can get this in the run method
             self.folder = folder
 
+            logger.info(f'Running job: {self.name}. Input files: {input_files}')
             # run the actual computation
             self.run(input_files, output_files, **kwargs)
 

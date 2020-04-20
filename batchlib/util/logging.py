@@ -3,6 +3,8 @@ import os
 import sys
 import glob
 
+ROOT_LOGGER_NAME = 'Workflow'
+
 LOGGING_FORMATTER = logging.Formatter('%(asctime)s [%(threadName)s] %(levelname)s %(name)s - %(message)s')
 
 # log level can be passed via env var LOGLEVEL during the workflow execution
@@ -12,14 +14,27 @@ numeric_level = getattr(logging, LOG_LEVEL)
 handlers = {}
 
 
+def _get_root_logger(name):
+    return logging.getLogger(name.split('.')[0])
+
+
+def _check_logger_name(name):
+    root_name = name.split('.')[0]
+    if root_name != ROOT_LOGGER_NAME:
+        logging.warning(f"Logger '{name}' is not a child of root logger '{ROOT_LOGGER_NAME}'. "
+                        f"Log events will only be directed to STDERR.")
+
+
 def get_logger(name):
+    _check_logger_name(name)
     logger = logging.getLogger(name)
     # make sure to propagate messages to parent logger, so that job loggers propagate events to workflow logger
     logger.propagate = True
     logger.setLevel(numeric_level)
 
-    # make sure that console handler is registered only once
-    if not logger.hasHandlers():
+    # make sure that console handler is registered only once in the root logger
+    is_root = name.split('.')[0] == name
+    if is_root and not logger.hasHandlers():
         # Always log to stdout
         stream_handler = logging.StreamHandler(sys.stdout)
         stream_handler.setFormatter(LOGGING_FORMATTER)

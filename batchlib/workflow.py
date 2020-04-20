@@ -3,7 +3,7 @@ import logging
 import os
 
 from batchlib.util.logging import get_logger, add_file_handler, remove_file_handler
-from .util import get_file_lock
+from batchlib.util import get_file_lock
 
 logger = get_logger('Workflow')
 
@@ -98,7 +98,7 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
             try:
                 state = job(folder, **run_kwargs)
             except Exception as e:
-                logger.error('Job error', exc_info=True)
+                logger.error(f'{job.name} error', exc_info=True)
                 status[job_name] = 'errored'
                 _dump_status(status_file, status)
                 raise e

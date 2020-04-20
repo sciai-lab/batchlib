@@ -69,3 +69,22 @@ In addition, the group `data` contains metadata to display the image in the [pla
     - For image data, intermediate formats are either `h5` or `n5`. Use the methods `read_input` / `write_result` to read / write data in the batchlib data model.
     - Use `batchlib.io.open_file` in your job instead of `h5py.File` to support both `h5` and `n5`
     - Jobs should always be runnable with cpu only and should default to running on the cpu. gpu support should be activated via kwarg in run method.
+
+### Logging
+Global log level can be passed via an environment variable `LOGLEVEL` during the workflow execution, e.g.
+```sh
+LOGLEVEL=DEBUG python instance_analysis_workflow2.py -c configs/test_instance_analysis_2.conf --root /path/to/antibodies-nuclei
+```
+
+The workflow logger (named `Workflow`) is where all of the file/console handlers are registered, so make sure any new
+logger is a child of the `Workflow` logger, e.g. `Workflow.MyJob`. All log events in the child loggers will automatically
+be propagated to the parent `Workfow` logger. As an example:
+```python
+log1 = get_logger('Workflow') # get root logger
+add_file_handler(log1, 'work_dir', 'workflow_name')
+
+# in the job class or somewhere else
+l2 = get_logger('Workflow.Job1') # this is the child logger of the 'Workfow' logger
+l2.info('some message') # the message will be propagated to all the handlers registered in the parent logger
+```
+
