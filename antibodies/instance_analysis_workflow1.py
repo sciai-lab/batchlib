@@ -33,7 +33,7 @@ def run_instance_analysis1(config):
     ilastik_bin = os.path.join(config.root, 'ilastik/run_ilastik.sh')
     ilastik_project = os.path.join(config.root, 'ilastik/boundaries_and_foreground.ilp')
 
-    model_root = os.path.join(config.root, 'stardist/models/pretrained')
+    model_root = os.path.join(os.path.split(__file__[0]), '../misc/models/stardist')
     model_name = '2D_dsb2018'
 
     barrel_corrector_path = os.path.join(os.path.split(__file__)[0],

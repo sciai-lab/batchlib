@@ -53,13 +53,14 @@ def run_instance_analysis2(config):
         if config.use_unique_output_folder:
             config.folder += '_' + name
 
-    model_root = os.path.join(config.root, 'stardist/models/pretrained')
+    this_folder = os.path.split(__file__[0])
+    model_root = os.path.join(this_folder, '../misc/models/stardist')
     model_name = '2D_dsb2018'
 
-    barrel_corrector_path = os.path.join(os.path.split(__file__)[0], '../misc/', config.barrel_corrector)
+    barrel_corrector_path = os.path.join(this_folder, '../misc/', config.barrel_corrector)
 
-    torch_model_path = os.path.join(config.root,
-                                    'unet_segmentation/sample_models/fg_boundaries_best_checkpoint.pytorch')
+    torch_model_path = os.path.join(this_folder, '../misc/models/torch',
+                                    'fg_and_boundaries_V1.torch')
     torch_model_class = UNet2D
     torch_model_kwargs = {
         'in_channels': 1,
@@ -182,8 +183,8 @@ def parser():
     parser.add("--ignore_invalid_inputs", default=None)
     parser.add("--ignore_failed_outputs", default=None)
 
-    default_scale_factors = None
-    # default_scale_factors = [1, 2, 4, 8]
+    # default_scale_factors = None
+    default_scale_factors = [1, 2, 4, 8]
     parser.add("--scale_factors", default=default_scale_factors)
 
     return parser
