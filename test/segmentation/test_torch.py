@@ -6,7 +6,6 @@ from shutil import rmtree
 class TestStardist(unittest.TestCase):
     in_folder = '../../data/test_data/test'
     folder = './out'
-    root = '/home/pape/Work/covid/antibodies-nuclei'
 
     def tearDown(self):
         try:
@@ -33,10 +32,8 @@ class TestStardist(unittest.TestCase):
         in_key = 'serum'
         out_key = ['foreground', 'boundaries']
 
-        model_path = os.path.join(self.root,
-                                  'unet_segmentation',
-                                  'sample_models',
-                                  'fg_boundaries_best_checkpoint.pytorch')
+        model_path = os.path.join(os.path.split(__file__)[0],
+                                  '../../misc/models/torch/fg_and_boundaries_V1.torch')
         model_class = UNet2D
         model_kwargs = {
             'in_channels': 1,
