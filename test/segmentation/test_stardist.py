@@ -6,7 +6,6 @@ from shutil import rmtree
 class TestStardist(unittest.TestCase):
     in_folder = '../../data/test_data/test'
     folder = './out'
-    root = '/home/pape/Work/covid/antibodies-nuclei'
 
     def tearDown(self):
         try:
@@ -29,7 +28,7 @@ class TestStardist(unittest.TestCase):
         from batchlib.segmentation.stardist_prediction import StardistPrediction
         self.prepare()
 
-        model_root = os.path.join(self.root, 'stardist/models/pretrained')
+        model_root = os.path.join(os.path.split(__file__)[0], '../misc/models/stardist')
         model_name = '2D_dsb2018'
 
         in_key = 'nuclei'

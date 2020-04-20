@@ -25,10 +25,10 @@ class TestWorkflow(unittest.TestCase):
         n_jobs = 4
         batch_size = 1
 
-        # TODO these should go into this repository
-        model_root = os.path.join(self.root, 'stardist/models/pretrained')
+        model_root = os.path.join(os.path.split(__file__)[0], '../misc/models/stardist')
         model_name = '2D_dsb2018'
 
+        # TODO this should go into this repository
         torch_name = 'unet_segmentation/sample_models/fg_boundaries_best_checkpoint.pytorch'
         torch_model_path = os.path.join(self.root, torch_name)
         torch_model_class = UNet2D
