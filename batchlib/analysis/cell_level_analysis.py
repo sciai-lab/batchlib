@@ -25,6 +25,7 @@ def remove_background_of_cell_properties(cell_properties, bg_label=0):
 
 def substract_background_of_marker(cell_properties, bg_label=0, marker_key='marker'):
     bg_ind = list(cell_properties['labels']).index(bg_label)
+    assert bg_ind is not None
     cell_properties = deepcopy(cell_properties)
     mean_bg = cell_properties[marker_key]['means'][bg_ind]
     for key in cell_properties[marker_key].keys():
@@ -61,12 +62,17 @@ def join_cell_properties(*cell_property_list):
             for key, value in cell_property_list[0].items()}
 
 
-def split_by_marker_threshold(cell_properties, threshold, statistic, marker_key='marker'):
+def split_by_marker_threshold(cell_properties, threshold, statistic, marker_key='marker', return_infected_ind=False):
     # returns not infected, infected cell properties
     infected_ind = cell_properties[marker_key][statistic] > threshold
     not_infected_ind = 1 - infected_ind
-    return index_cell_properties(cell_properties, not_infected_ind), \
-           index_cell_properties(cell_properties, infected_ind)
+    if not return_infected_ind:
+        return index_cell_properties(cell_properties, not_infected_ind), \
+               index_cell_properties(cell_properties, infected_ind)
+    else:
+
+        return index_cell_properties(cell_properties, not_infected_ind), \
+               index_cell_properties(cell_properties, infected_ind), infected_ind
 
 
 def compute_global_statistics(cell_properties):
@@ -169,7 +175,8 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
                  nuc_seg_key='nucleus_segmentation',
                  cell_seg_key='cell_segmentation',
                  output_folder='instancewise_analysis',
-                 identifier=None, input_pattern='*.h5'):
+                 identifier=None, input_pattern='*.h5',
+                 ):
 
         self.serum_key = serum_key
         self.marker_key = marker_key
@@ -248,18 +255,27 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
 
     # this is what should be run for each h5 file
     def save_all_stats(self, in_file, out_file, device):
+        infected_threshold = 250  # TODO put this and other params into args of __init__
+        split_statistic = 'top50'
         sample = self.load_sample(in_file, device=device)
         per_cell_statistics_to_save = self.eval_cells(*sample)
 
         per_cell_statistics = substract_background_of_marker(per_cell_statistics_to_save)
         per_cell_statistics = remove_background_of_cell_properties(per_cell_statistics)
-        measures = get_measures(per_cell_statistics, 250, split_statistic='top50')
-        result = dict(per_cell_statistics=per_cell_statistics, measures=measures)
+        measures = get_measures(per_cell_statistics, infected_threshold, split_statistic=split_statistic)
+
+        infected_ind = split_by_marker_threshold(per_cell_statistics, infected_threshold, split_statistic,
+                                                 return_infected_ind=True)[-1]
+        infected_ind_with_bg = np.zeros_like(per_cell_statistics_to_save['marker']['means'])
+        infected_ind_with_bg[per_cell_statistics_to_save['labels'] > 0] = infected_ind
+        print(infected_ind_with_bg)
+
+        result = dict(per_cell_statistics=per_cell_statistics_to_save, infected_ind=infected_ind_with_bg, measures=measures)
         with open(out_file, 'wb') as f:
             pickle.dump(result, f)
 
-        # also save the measures in json
-        measures = {key: float(value) if not math.isnan(value) else value
+        # also save the measures in jsons
+        measures = {key: (float(value) if (value is not None and np.isreal(value)) else None)
                     for key, value in result['measures'].items()}
         with open(out_file[:-6] + 'json', 'w') as fp:
             json.dump(measures, fp)
