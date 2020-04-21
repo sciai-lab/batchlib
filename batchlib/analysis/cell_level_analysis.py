@@ -1,17 +1,18 @@
-from tqdm.auto import tqdm
-import torch
-import numpy as np
 import json
-import math
-import pickle
 import os
-from functools import partial
+import pickle
 from copy import copy, deepcopy
+from functools import partial
 
-from ..util.io import open_file
-from ..util.plate_visualizations import well_plot, make_per_well_dict
+import numpy as np
+import torch
+from tqdm.auto import tqdm
+
+from batchlib.util.logging import get_logger
 from ..base import BatchJobWithSubfolder
+from ..util.io import open_file
 
+logger = get_logger('Workflow.BatchJob.CellLevelAnalysis')
 
 def index_cell_properties(cell_properties, ind):
     return {key: {inner_key: inner_value[ind.astype(np.bool)]
@@ -176,12 +177,14 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
                  cell_seg_key='cell_segmentation',
                  output_folder='instancewise_analysis',
                  identifier=None, input_pattern='*.h5',
+                 outlier_predicate=lambda im: False
                  ):
 
         self.serum_key = serum_key
         self.marker_key = marker_key
         self.nuc_seg_key = nuc_seg_key
         self.cell_seg_key = cell_seg_key
+        self.outlier_predicate = outlier_predicate
 
         # all inputs should be 2d
         input_ndim = [2, 2, 2, 2]
@@ -290,4 +293,7 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
             _save_all_stats = partial(self.save_all_stats, device=device)
             for input_file, output_file in tqdm(list(zip(input_files, output_files)),
                                                 desc='running cell-level analysis on images'):
+                if self.outlier_predicate(input_file):
+                    logger.info(f'Excluding outlier from analysis: {input_file}')
+                    continue
                 _save_all_stats(input_file, output_file)

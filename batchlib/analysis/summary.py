@@ -25,7 +25,9 @@ class Summary(BatchJobOnContainer):
                  serum_per_cell_mean_key='serum_per_cell_mean',
                  score_key='ratio_of_median_of_means',
                  analysis_folder='instancewise_analysis_corrected',
-                 input_pattern='*.h5', **super_kwargs):
+                 input_pattern='*.h5',
+                 outlier_predicate=lambda im: False,
+                 **super_kwargs):
         self.cell_seg_key = cell_seg_key
         self.serum_key = serum_key
         self.marker_key = marker_key
@@ -35,6 +37,7 @@ class Summary(BatchJobOnContainer):
 
         self.infected_cell_mask_key = infected_cell_mask_key
         self.serum_per_cell_mean_key = serum_per_cell_mean_key
+        self.outlier_predicate = outlier_predicate
 
         input_ndim = [2]
 
@@ -66,15 +69,17 @@ class Summary(BatchJobOnContainer):
                         'num_infected_cells',
                         'num_not_infected_cells',
                         'background_percentage',
+                        'outlier',
                         ] + list(measures[0].keys())
 
         column_dict = {site_name: [measures[i][self.score_key],
                                    num_cells[i],
                                    num_infected_cells[i],
                                    num_not_infected_cells[i],
-                                   background_percentages[i]
+                                   background_percentages[i],
+                                   self.outlier_predicate(im_name)
                                    ] + list(measures[i].values())
-                       for i, site_name in enumerate(site_names)}
+                       for i, (im_name, site_name) in enumerate(zip(im_names, site_names))}
         # replace None with "NaN"
         column_dict = {site_name: [value if value is not None else 'NaN'
                                    for value in values]

@@ -2,7 +2,7 @@ import os
 import unittest
 from pathlib import Path
 
-from batchlib.outliers.outlier import Outliers
+from batchlib.outliers.outlier import Outliers, plate_name_from_input_folder
 
 
 class TestOutliers(unittest.TestCase):
@@ -35,3 +35,10 @@ class TestOutliers(unittest.TestCase):
         for k, v in plate_count.items():
             print(f'{k}: {v}')
         print(f'\nTotal outlier count: {total_outlier_count / total_count}')
+
+    def test_plate_name_from_input_folder(self):
+        input_folder = '/home/covid19/data/20200410_145132_254'
+
+        plate_name = plate_name_from_input_folder(input_folder)
+
+        assert plate_name is not None

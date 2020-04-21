@@ -41,6 +41,8 @@ def run_instance_analysis1(config):
 
     n_threads_il = None if config.n_cpus == 1 else 4
 
+    outlier_predicate = get_outlier_predicate(config)
+
     job_dict = {
         Preprocess.from_folder: {'build': {'input_folder': config.input_folder,
                                            'barrel_corrector_path': barrel_corrector_path},
@@ -68,7 +70,8 @@ def run_instance_analysis1(config):
                                   'n_jobs': config.n_cpus}},
         CellLevelAnalysis: {'build': {'raw_key': config.in_key,
                                       'nuc_seg_key': config.nuc_key,
-                                      'cell_seg_key': config.seg_key},
+                                      'cell_seg_key': config.seg_key,
+                                      'outlier_predicate': outlier_predicate},
                             'run': {'gpu_id': config.gpu}}
     }
 
@@ -116,6 +119,13 @@ def parse_instance_config1():
 
     default_scale_factors = [1, 2, 4, 8]
     parser.add("--scale_factors", default=default_scale_factors)
+
+    # tagged outliers from a given plate
+    # if plate_name is empty we will try to infer it from the 'input_folder' name
+    parser.add("--plate_name", default=None, nargs='+', type=str, help="The name (or names) of the imaged plate")
+    # if outliers_dir is empty, ../misc/tagged_outliers will be used
+    parser.add("--outliers_dir", default=None, type=str,
+               help="Path to the directory where containing CSV files with marked outliers")
 
     return parser.parse_args()
 

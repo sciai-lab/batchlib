@@ -8,6 +8,7 @@ from glob import glob
 
 from batchlib import run_workflow
 from batchlib.analysis import PixellevelAnalysis, all_plots
+from batchlib.outliers.outlier import get_outlier_predicate
 from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import IlastikPrediction
 from batchlib.util.logging import get_logger
@@ -59,6 +60,8 @@ def run_pixel_analysis1(config):
 
     barrel_corrector_path = os.path.join(os.path.split(__file__)[0], '../misc/', config.barrel_corrector)
 
+    outlier_predicate = get_outlier_predicate(config)
+
     job_dict = {
         Preprocess.from_folder: {'build': {'input_folder': config.input_folder,
                                            'barrel_corrector_path': barrel_corrector_path,
@@ -75,7 +78,8 @@ def run_pixel_analysis1(config):
         PixellevelAnalysis: {'build': {'serum_key': serum_ana_in_key,
                                        'infected_key': config.out_key_infected,
                                        'not_infected_key': config.out_key_not_infected,
-                                       'output_folder': analysis_folder},
+                                       'output_folder': analysis_folder,
+                                       'outlier_predicate': outlier_predicate},
                              'run': {'n_jobs': config.n_cpus}}
     }
 
@@ -145,6 +149,13 @@ def parser():
     parser.add("--force_recompute", default=None)
     parser.add("--ignore_invalid_inputs", default=None)
     parser.add("--ignore_failed_outputs", default=None)
+
+    # tagged outliers from a given plate
+    # if plate_name is empty we will try to infer it from the 'input_folder' name
+    parser.add("--plate_name", default=None, nargs='+', type=str, help="The name (or names) of the imaged plate")
+    # if outliers_dir is empty, ../misc/tagged_outliers will be used
+    parser.add("--outliers_dir", default=None, type=str,
+               help="Path to the directory where containing CSV files with marked outliers")
 
     return parser
 
