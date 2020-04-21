@@ -40,11 +40,10 @@ class Summary(BatchJobOnContainer):
 
         super().__init__(input_pattern=input_pattern, output_ext=None,
                          input_key=[cell_seg_key], input_ndim=input_ndim,
-                         output_key=None,
+                         output_key=[infected_cell_mask_key, serum_per_cell_mean_key],
                          **super_kwargs)
 
     def write_summary_table(self, table_out_path):
-        print('table', table_out_path, '\n')
         im_names, site_names = get_image_and_site_names(self.folder,
                                                         self.input_pattern)
 
@@ -110,7 +109,11 @@ class Summary(BatchJobOnContainer):
         for path in output_files:
             self.write_summary_information(path)
 
-    # FIXME this is just a hack, remove once this is properly implemented!
     def check_output(self, path):
-        return True
+        # TODO check summary information
+        return super(BatchJobOnContainer, self).check_output(path)
+
+    def check_outputs(self, output_files, folder, status, ignore_failed_outputs):
+        # TODO check summary table
+        return super(BatchJobOnContainer, self).check_outputs(output_files, folder, status, ignore_failed_outputs)
 

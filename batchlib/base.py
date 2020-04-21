@@ -178,7 +178,6 @@ class BatchJob(ABC):
     def __call__(self, folder, input_folder=None, force_recompute=False,
                  ignore_invalid_inputs=False, ignore_failed_outputs=False,
                  executable=None, **kwargs):
-
         # make the work dir, that stores all batchlib status and log files
         work_dir = os.path.join(folder, 'batchlib')
         os.makedirs(work_dir, exist_ok=True)

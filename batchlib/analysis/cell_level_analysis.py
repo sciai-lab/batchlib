@@ -268,7 +268,6 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
                                                  return_infected_ind=True)[-1]
         infected_ind_with_bg = np.zeros_like(per_cell_statistics_to_save['marker']['means'])
         infected_ind_with_bg[per_cell_statistics_to_save['labels'] > 0] = infected_ind
-        print(infected_ind_with_bg)
 
         result = dict(per_cell_statistics=per_cell_statistics_to_save, infected_ind=infected_ind_with_bg, measures=measures)
         with open(out_file, 'wb') as f:
