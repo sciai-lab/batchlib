@@ -17,6 +17,9 @@ def get_outlier_predicate(config):
 
     if hasattr(config, 'plate_name') and config.plate_name is not None:
         plate_name = config.plate_name
+        if isinstance(plate_name, list):
+            plate_name = plate_name[0]
+        logger.info(f'Using plate name: {plate_name}')
     else:
         logger.info(f"Trying to parse 'plate_name' from the input folder: {config.input_folder}")
         plate_name = plate_name_from_input_folder(config.input_folder)
@@ -26,8 +29,7 @@ def get_outlier_predicate(config):
             # return default predicate, i.e. treat all images as non-outliers
             return lambda im: False
 
-    # TODO: change Outliers interface
-    return Outliers(root_table_dir=outliers_dir, plate_name=plate_name)
+    return OutlierPredicate(root_table_dir=outliers_dir, plate_name=plate_name)
 
 
 def plate_name_from_input_folder(input_folder):
@@ -40,21 +42,30 @@ def plate_name_from_input_folder(input_folder):
     return None
 
 
-class Outliers:
-    def __init__(self, root_table_dir):
+class OutlierPredicate:
+    def __init__(self, root_table_dir, plate_name=None):
         """
         Parses CSV files stored in 'root_table_dir', where each CSV corresponds to a given plate, and stores
         the results in a dictionary of the form {PLATE_NAME: TAGGER_STATE}, where TAGGER_STATE is a dict
-        containing all images in a given PLATE_NAME together with their labels: (0 - accepted, 1 - outlier, -1 - skipped)
+        containing all images in a given PLATE_NAME together with their labels: (0 - accepted, 1 - outlier, -1 - skipped).
+
+        If plate_name is provided only image names from this plate will be considered for outlier detection.
         """
 
         self.outliers = {}
 
+        # parse outliers
         for csv_file in glob.glob(os.path.join(root_table_dir, '*.csv')):
             assert '_tagger_state.csv' in csv_file
-            plate_name = os.path.split(csv_file)[1]
-            plate_name = plate_name[:plate_name.find('_tagger')]
-            self.outliers[plate_name] = self._load_state(csv_file)
+            pn = os.path.split(csv_file)[1]
+            pn = pn[:pn.find('_tagger')]
+            self.outliers[pn] = self._load_state(csv_file)
+
+        self.plate_name = plate_name
+        if plate_name is not None:
+            assert isinstance(plate_name, str)
+            assert plate_name in self.outliers, \
+                f'Plate name: {pn} not found. Loaded plates: {list(self.outliers.keys())}'
 
     @staticmethod
     def _load_state(csv_file):
@@ -71,6 +82,9 @@ class Outliers:
                 state[filename] = label
         return state
 
+    def __call__(self, img_file):
+        return self.is_outlier(self.plate_name, img_file)
+
     def is_outlier(self, plate_name, img_file):
         """
         Returns True if a given image (img_file) from a given plate (plate_name) is an outlier, False otherwise.
@@ -80,9 +94,13 @@ class Outliers:
         assert plate_name in self.outliers, f'Well name: {plate_name} not found. Loaded plates: {list(self.outliers.keys())}'
         plate_state = self.outliers[plate_name]
 
+        # take only the file
+        img_file = os.path.split(img_file)[1]
         # skip file extension if any
         img_file = os.path.splitext(img_file)[0]
-        assert img_file in plate_state, f'Cannot find image file: {img_file} in plate: {plate_name}'
+        if not img_file in plate_state:
+            logger.warning(f'Cannot find image file: {img_file} in plate: {plate_name}')
+            return False
 
         label = plate_state[img_file]
 
