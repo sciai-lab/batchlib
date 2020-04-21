@@ -106,7 +106,3 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
 
             status[job_name] = state
             _dump_status(status_file, status)
-
-        # remove workflow's file handler from the main logger and tf logger
-        fh = remove_file_handler(logger, name)
-        logging.getLogger('tensorflow').removeHandler(fh)

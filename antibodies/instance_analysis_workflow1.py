@@ -33,7 +33,7 @@ def run_instance_analysis1(config):
     ilastik_bin = os.path.join(config.root, 'ilastik/run_ilastik.sh')
     ilastik_project = os.path.join(config.root, 'ilastik/boundaries_and_foreground.ilp')
 
-    model_root = os.path.join(os.path.split(__file__[0]), '../misc/models/stardist')
+    model_root = os.path.join(os.path.split(__file__)[0], '../misc/models/stardist')
     model_name = '2D_dsb2018'
 
     barrel_corrector_path = os.path.join(os.path.split(__file__)[0],
@@ -114,9 +114,7 @@ def parse_instance_config1():
     parser.add('--nuc_key', default='nucleus_segmentation', type=str)
     parser.add('--seg_key', default='cell_segmentation_ilastik', type=str)
 
-    # TODO add default scale factors
-    default_scale_factors = None
-    # default_scale_factors = [1, 2, 4, 8]
+    default_scale_factors = [1, 2, 4, 8]
     parser.add("--scale_factors", default=default_scale_factors)
 
     return parser.parse_args()

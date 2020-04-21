@@ -9,7 +9,7 @@ Batch processing for image-analysis on high-throughput screening data; developed
 - activate the environment and install `batchlib` using `setup.py`, e.g. via running `pip install -e .` in this directory to install in development mode
 - to check your installation, go to the `antibodies` directory and run the following example:
 ``` sh
-python instance_analysis_workflow2.py -c configs/test_instance_analysis_2.conf --root /path/to/antibodies-nuclei
+python instance_analysis_workflow2.py -c configs/test_instance_analysis_2.conf
 ```
 
 This should run through without throwing an error and create a folder `test` locally containing 9 h5 files with the results per image.
@@ -71,9 +71,10 @@ In addition, the group `data` contains metadata to display the image in the [pla
     - Jobs should always be runnable with cpu only and should default to running on the cpu. gpu support should be activated via kwarg in run method.
 
 ### Logging
+
 Global log level can be passed via an environment variable `LOGLEVEL` during the workflow execution, e.g.
 ```sh
-LOGLEVEL=DEBUG python instance_analysis_workflow2.py -c configs/test_instance_analysis_2.conf --root /path/to/antibodies-nuclei
+LOGLEVEL=DEBUG python instance_analysis_workflow2.py -c configs/test_instance_analysis_2.conf
 ```
 
 The workflow logger (named `Workflow`) is where all of the file/console handlers are registered, so make sure any new
@@ -87,4 +88,3 @@ add_file_handler(log1, 'work_dir', 'workflow_name')
 l2 = get_logger('Workflow.Job1') # this is the child logger of the 'Workfow' logger
 l2.info('some message') # the message will be propagated to all the handlers registered in the parent logger
 ```
-
