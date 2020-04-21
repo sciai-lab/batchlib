@@ -111,9 +111,9 @@ class Summary(BatchJobOnContainer):
 
     def check_output(self, path):
         # TODO check summary information
-        return super(BatchJobOnContainer, self).check_output(path)
+        return super(Summary, self).check_output(path)
 
     def check_outputs(self, output_files, folder, status, ignore_failed_outputs):
         # TODO check summary table
-        return super(BatchJobOnContainer, self).check_outputs(output_files, folder, status, ignore_failed_outputs)
+        return super(Summary, self).check_outputs(output_files, folder, status, ignore_failed_outputs)
 
