@@ -50,13 +50,35 @@ class Summary(BatchJobOnContainer):
         im_names, site_names = get_image_and_site_names(self.folder,
                                                         self.input_pattern)
 
+        # get per image results and statistics
         results = [self.load_result(os.path.join(self.folder, im_name + '.h5')) for im_name in im_names]
         measures = [result['measures'] for result in results]
+        num_cells = [len(result['infected_ind']) for result in results]
+        num_infected_cells = [np.sum(result['infected_ind']) for result in results]
+        num_not_infected_cells = [total-infected for total, infected in zip(num_cells, num_infected_cells)]
 
-        score1 = 'score1'
-        column_names = [score1] + list(measures[0].keys())
-        column_dict = {site_name: [measures[i][self.score_key]] + list(measures[i].values())
+        bg_inds = [np.argwhere(result['per_cell_statistics']['labels'] == 0)[0, 0]
+                   if 0 in result['per_cell_statistics']['labels'] else -1
+                   for result in results]
+        img_size = results[0]['per_cell_statistics']['marker']['sizes'].sum()
+        background_percentages = [result['per_cell_statistics']['marker']['sizes'][bg_ind] / img_size
+                                  for result, bg_ind in zip(results, bg_inds)]
+
+        column_names = ['score1',
+                        'num_cells',
+                        'num_infected_cells',
+                        'num_not_infected_cells',
+                        'background_percentage',
+                        ] + list(measures[0].keys())
+
+        column_dict = {site_name: [measures[i][self.score_key],
+                                   num_cells[i],
+                                   num_infected_cells[i],
+                                   num_not_infected_cells[i],
+                                   background_percentages[i]
+                                   ] + list(measures[i].values())
                        for i, site_name in enumerate(site_names)}
+
         write_table(self.folder, column_dict, column_names,
                     out_path=table_out_path,
                     pattern=self.input_pattern)
