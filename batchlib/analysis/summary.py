@@ -26,12 +26,15 @@ class Summary(BatchJobOnContainer):
                  marker_key='marker',
                  infected_cell_mask_key='infected_cell_mask',
                  serum_per_cell_mean_key='serum_per_cell_mean',
+                 score_key='ratio_of_median_of_means',
                  analysis_folder='instancewise_analysis_corrected',
                  input_pattern='*.h5', **super_kwargs):
         self.cell_seg_key = cell_seg_key
         self.serum_key = serum_key
         self.marker_key = marker_key
         self.analysis_folder = analysis_folder
+
+        self.score_key = score_key  # the main score for the table
 
         self.infected_cell_mask_key = infected_cell_mask_key
         self.serum_per_cell_mean_key = serum_per_cell_mean_key
@@ -47,12 +50,13 @@ class Summary(BatchJobOnContainer):
         im_names, site_names = get_image_and_site_names(self.folder,
                                                         self.input_pattern)
 
-        column_names = [self.load_result(os.path.join(self.folder, im_names[0] + '.h5')).keys()]
-        column_dict = {
-            site_name: list(self.load_result(os.path.join(self.folder, im_name + '.h5'))['measures'].values())
-            for site_name, im_name in zip(site_names, im_names)
-        }
+        results = [self.load_result(os.path.join(self.folder, im_name + '.h5')) for im_name in im_names]
+        measures = [result['measures'] for result in results]
 
+        score1 = 'score1'
+        column_names = [score1] + list(measures[0].keys())
+        column_dict = {site_name: [measures[i][self.score_key]] + list(measures[i].values())
+                       for i, site_name in enumerate(site_names)}
         write_table(self.folder, column_dict, column_names,
                     out_path=table_out_path,
                     pattern=self.input_pattern)
