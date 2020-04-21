@@ -136,7 +136,8 @@ class Summary(BatchJobOnContainer):
             self.write_summary_information(path)
 
     def check_output(self, path):
-        # TODO check summary information
+        if not os.path.isfile(os.path.join(os.path.dirname(path), 'analysis.csv')):
+            return False
         return super(Summary, self).check_output(path)
 
     def check_outputs(self, output_files, folder, status, ignore_failed_outputs):
