@@ -51,12 +51,13 @@ def get_colorbar_range(key):
     return colorbar_range
 
 
-def all_plots(json_files, out_path):
-    # load first json file to get list of key
-    with open(json_files[0], "r") as key_file:
-        keys = [k for k in json.load(key_file).keys()]  # if k.startswith("ratio_of")]
+def all_plots(json_files, out_path, keys=None):
+    if keys == None:
+        # load first json file to get list of key
+        with open(json_files[0], "r") as key_file:
+            keys = [k for k in json.load(key_file).keys()]  # if k.startswith("ratio_of")]
 
-    for key in keys:
+    for key in tqdm(keys, desc='making plots'):
 
         stats_per_file = {}
 
@@ -67,7 +68,7 @@ def all_plots(json_files, out_path):
                 input_dict = json.load(jf)
                 if key in input_dict:
                     stat = input_dict[key]
-                    if not math.isnan(stat):
+                    if stat is not None and not math.isnan(stat):
                         stats_per_file[file_name] = float(stat)
 
         root_path = os.path.dirname(os.path.abspath(json_files[0]))

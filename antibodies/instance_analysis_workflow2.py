@@ -2,11 +2,14 @@
 
 import os
 import time
+from glob import glob
 
 import configargparse
 
 from batchlib import run_workflow
 from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
+from batchlib.analysis.pixel_level_analysis import all_plots
+from batchlib.analysis.summary import Summary
 from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
@@ -108,13 +111,18 @@ def run_instance_analysis2(config):
                                       'nuc_seg_key': config.nuc_key,
                                       'cell_seg_key': config.seg_key,
                                       'output_folder': analysis_folder},
-                            'run': {'gpu_id': config.gpu}}
+                            'run': {'gpu_id': config.gpu}},
+        Summary: {'build': {'serum_key': serum_ana_in_key,
+                            'marker_key': marker_ana_in_key,
+                            'cell_seg_key': config.seg_key,
+                            'analysis_folder': analysis_folder},
+                  'run': {}}
     }
 
     if config.skip_analysis:
         job_dict.pop(CellLevelAnalysis)
-
     t0 = time.time()
+
     run_workflow(name,
                  config.folder,
                  job_dict,
@@ -122,6 +130,14 @@ def run_instance_analysis2(config):
                  force_recompute=config.force_recompute,
                  ignore_invalid_inputs=config.ignore_invalid_inputs,
                  ignore_failed_outputs=config.ignore_failed_outputs)
+
+    # run all plots on the output files
+    if not config.skip_analysis:
+        output_folder = os.path.join(config.folder, analysis_folder)
+        json_pattern = os.path.join(output_folder, "*.json")
+        all_json_files = glob(json_pattern)
+        all_plots(all_json_files, output_folder, keys=['ratio_of_median_of_means'])
+
     t0 = time.time() - t0
     logger.info(f"Run {name} in {t0}s")
     return name, t0
