@@ -8,7 +8,6 @@ from ..util import (get_image_and_site_names, open_file,
                     write_table, write_image_information)
 
 
-# TODO implement everything
 class Summary(BatchJobOnContainer):
     """ Write summary of analysis per file.
 
@@ -18,8 +17,6 @@ class Summary(BatchJobOnContainer):
     - summary information written to hdf5 attributes
     - table with all analysis scores and intermediate results
     """
-
-    # TODO need to pass all relevant input / output keys
     def __init__(self,
                  cell_seg_key='cell_segmentation',
                  serum_key='serum',
@@ -78,6 +75,10 @@ class Summary(BatchJobOnContainer):
                                    background_percentages[i]
                                    ] + list(measures[i].values())
                        for i, site_name in enumerate(site_names)}
+        # replace None with "NaN"
+        column_dict = {site_name: [value if value is not None else 'NaN'
+                                   for value in values]
+                       for site_name, values in column_dict.items()}
 
         write_table(self.folder, column_dict, column_names,
                     out_path=table_out_path,
@@ -141,6 +142,6 @@ class Summary(BatchJobOnContainer):
         return super(Summary, self).check_output(path)
 
     def check_outputs(self, output_files, folder, status, ignore_failed_outputs):
-        # TODO check summary table
+        # TODO check summary table?
         return super(Summary, self).check_outputs(output_files, folder, status, ignore_failed_outputs)
 
