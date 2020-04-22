@@ -10,6 +10,7 @@ import napari
 
 from evaluation import RESULTS
 from evaluation.makestatistics import compute_stats
+from batchlib.util import open_file
 
 KEYS_TO_USE = {'marker': {'data_type': 'image', 'visible': False},
                'nuclei': {'data_type': 'image', 'visible': True},
@@ -27,9 +28,9 @@ def write_csv(csv_path, dataset, name, value):
 
 def load_stack(h5_path):
     stack = {}
-    with h5py.File(h5_path, "r") as f:
+    with open_file(h5_path, "r") as f:
         for key, value in KEYS_TO_USE.items():
-            stack[key] = f[key][list(f[key].keys())[-1]][...]
+            stack[key] = f[key]['s0'][...]
     return stack
 
 
