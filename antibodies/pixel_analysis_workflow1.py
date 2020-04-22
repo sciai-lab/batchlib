@@ -138,8 +138,7 @@ def parser():
     parser.add("--segmentation_on_corrected", default=True)
     parser.add("--analysis_on_corrected", default=True)
 
-    default_scale_factors = None
-    # default_scale_factors = [1, 2, 4, 8]
+    default_scale_factors = [1, 2, 4, 8]
     parser.add("--scale_factors", default=default_scale_factors)
 
     # runtime options

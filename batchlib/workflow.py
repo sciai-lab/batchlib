@@ -95,6 +95,7 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
             run_kwargs = _update_run_kwargs(run_kwargs, force_recompute,
                                             ignore_invalid_inputs, ignore_failed_outputs)
 
+            logger.info(f"Running job of class {job_class.__name__}")
             try:
                 state = job(folder, **run_kwargs)
             except Exception as e:
@@ -105,7 +106,3 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
 
             status[job_name] = state
             _dump_status(status_file, status)
-
-        # remove workflow's file handler from the main logger and tf logger
-        fh = remove_file_handler(logger, name)
-        logging.getLogger('tensorflow').removeHandler(fh)
