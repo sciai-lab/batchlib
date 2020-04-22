@@ -53,7 +53,7 @@ def run_instance_analysis2(config):
         if config.use_unique_output_folder:
             config.folder += '_' + name
 
-    this_folder = os.path.split(__file__[0])
+    this_folder = os.path.split(__file__)[0]
     model_root = os.path.join(this_folder, '../misc/models/stardist')
     model_name = '2D_dsb2018'
 
