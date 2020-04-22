@@ -1,4 +1,4 @@
-from .image import barrel_correction, normalize, standardize, normalize_percentile
+from .image import barrel_correction, normalize, standardize, normalize_percentile, seg_to_edges
 from .io import (open_file, downscale_image, is_dataset, is_group,
                  write_viewer_settings, write_table, write_image_information,
                  get_image_and_site_names, DelayedKeyboardInterrupt)
