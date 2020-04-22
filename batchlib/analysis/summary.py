@@ -156,7 +156,6 @@ class CellLevelSummary(Summary):
                                    num_cells[i],
                                    num_infected_cells[i],
                                    num_not_infected_cells[i],
-                                   background_percentages[i],
                                    fraction_infected_cells[i],
                                    background_percentages[i],
                                    self.outlier_predicate(im_name)
