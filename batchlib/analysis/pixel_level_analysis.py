@@ -52,7 +52,7 @@ def get_colorbar_range(key):
 
 
 def all_plots(json_files, out_path, keys=None):
-    if keys == None:
+    if keys is None:
         # load first json file to get list of key
         with open(json_files[0], "r") as key_file:
             keys = [k for k in json.load(key_file).keys()]  # if k.startswith("ratio_of")]
@@ -102,8 +102,7 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
                  not_infected_key='local_not_infected',
                  input_pattern='*.h5',
                  output_folder="pixelwise_analysis",
-                 identifier=None,
-                 outlier_predicate=lambda im: False):
+                 identifier=None):
 
         self.serum_key = serum_key
         self.infected_key = infected_key
@@ -124,7 +123,6 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
                          input_ndim=input_ndim)
 
         self.identifier = identifier
-        self.outlier_predicate = outlier_predicate
 
     def load_sample(self, path):
         with open_file(path, mode='r') as f:
@@ -146,9 +144,6 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
         return infected, not_infected, serum, background_intensity
 
     def all_stats(self, input_file, output_file):
-        if self.outlier_predicate(input_file):
-            logger.info(f'Excluding outlier from analysis: {input_file}')
-            return
 
         infected, not_infected, serum, bg_intensity = self.load_sample(input_file)
         result = {}

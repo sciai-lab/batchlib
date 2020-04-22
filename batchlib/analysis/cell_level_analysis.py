@@ -14,6 +14,7 @@ from ..util.io import open_file
 
 logger = get_logger('Workflow.BatchJob.CellLevelAnalysis')
 
+
 def index_cell_properties(cell_properties, ind):
     return {key: {inner_key: inner_value[ind.astype(np.bool)]
                   for inner_key, inner_value in value.items()} if isinstance(value, dict) else None
@@ -21,7 +22,7 @@ def index_cell_properties(cell_properties, ind):
 
 
 def remove_background_of_cell_properties(cell_properties, bg_label=0):
-    return index_cell_properties(cell_properties, np.array(cell_properties['labels'])!=bg_label)
+    return index_cell_properties(cell_properties, np.array(cell_properties['labels']) != bg_label)
 
 
 def substract_background_of_marker(cell_properties, bg_label=0, marker_key='marker'):
@@ -177,14 +178,12 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
                  cell_seg_key='cell_segmentation',
                  output_folder='instancewise_analysis',
                  identifier=None, input_pattern='*.h5',
-                 outlier_predicate=lambda im: False
                  ):
 
         self.serum_key = serum_key
         self.marker_key = marker_key
         self.nuc_seg_key = nuc_seg_key
         self.cell_seg_key = cell_seg_key
-        self.outlier_predicate = outlier_predicate
 
         # all inputs should be 2d
         input_ndim = [2, 2, 2, 2]
@@ -272,7 +271,9 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
         infected_ind_with_bg = np.zeros_like(per_cell_statistics_to_save['marker']['means'])
         infected_ind_with_bg[per_cell_statistics_to_save['labels'] > 0] = infected_ind
 
-        result = dict(per_cell_statistics=per_cell_statistics_to_save, infected_ind=infected_ind_with_bg, measures=measures)
+        result = dict(per_cell_statistics=per_cell_statistics_to_save,
+                      infected_ind=infected_ind_with_bg,
+                      measures=measures)
         with open(out_file, 'wb') as f:
             pickle.dump(result, f)
 
@@ -293,7 +294,4 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
             _save_all_stats = partial(self.save_all_stats, device=device)
             for input_file, output_file in tqdm(list(zip(input_files, output_files)),
                                                 desc='running cell-level analysis on images'):
-                if self.outlier_predicate(input_file):
-                    logger.info(f'Excluding outlier from analysis: {input_file}')
-                    continue
                 _save_all_stats(input_file, output_file)

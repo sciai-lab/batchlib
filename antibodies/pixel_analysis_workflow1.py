@@ -62,6 +62,7 @@ def run_pixel_analysis1(config):
 
     outlier_predicate = get_outlier_predicate(config)
 
+    # TODO add pixel-level summary
     job_dict = {
         Preprocess.from_folder: {'build': {'input_folder': config.input_folder,
                                            'barrel_corrector_path': barrel_corrector_path,
@@ -78,8 +79,7 @@ def run_pixel_analysis1(config):
         PixellevelAnalysis: {'build': {'serum_key': serum_ana_in_key,
                                        'infected_key': config.out_key_infected,
                                        'not_infected_key': config.out_key_not_infected,
-                                       'output_folder': analysis_folder,
-                                       'outlier_predicate': outlier_predicate},
+                                       'output_folder': analysis_folder},
                              'run': {'n_jobs': config.n_cpus}}
     }
 

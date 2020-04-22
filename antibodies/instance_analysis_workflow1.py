@@ -41,8 +41,6 @@ def run_instance_analysis1(config):
 
     n_threads_il = None if config.n_cpus == 1 else 4
 
-    outlier_predicate = get_outlier_predicate(config)
-
     job_dict = {
         Preprocess.from_folder: {'build': {'input_folder': config.input_folder,
                                            'barrel_corrector_path': barrel_corrector_path},
@@ -70,8 +68,7 @@ def run_instance_analysis1(config):
                                   'n_jobs': config.n_cpus}},
         CellLevelAnalysis: {'build': {'raw_key': config.in_key,
                                       'nuc_seg_key': config.nuc_key,
-                                      'cell_seg_key': config.seg_key,
-                                      'outlier_predicate': outlier_predicate},
+                                      'cell_seg_key': config.seg_key},
                             'run': {'gpu_id': config.gpu}}
     }
 
