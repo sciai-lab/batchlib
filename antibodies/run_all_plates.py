@@ -1,6 +1,7 @@
 #! /home/covid19/software/miniconda3/envs/antibodies-gpu/bin/python
 
 from glob import glob
+import traceback
 import os
 import sys
 from instance_analysis_workflow2 import run_instance_analysis2, parse_instance_config2
@@ -39,8 +40,7 @@ def run_plates(folders):
             run_pixel1(folder, use_unique_output_folder=False)
         except Exception as e:
             print(f'\nException while evaluating folder {folder}.')
-            print(e)
-            raise e
+            print(traceback.format_exc())
             print('\ncontinuing..\n')
     print('all plates processed')
 

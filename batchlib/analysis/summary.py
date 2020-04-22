@@ -56,6 +56,7 @@ class Summary(BatchJobOnContainer):
         num_cells = [len(result['infected_ind']) for result in results]
         num_infected_cells = [np.sum(result['infected_ind']) for result in results]
         num_not_infected_cells = [total-infected for total, infected in zip(num_cells, num_infected_cells)]
+        fraction_infected_cells = [infected / total for total, infected in zip(num_cells, num_infected_cells)]
 
         bg_inds = [np.argwhere(result['per_cell_statistics']['labels'] == 0)[0, 0]
                    if 0 in result['per_cell_statistics']['labels'] else -1
@@ -68,6 +69,7 @@ class Summary(BatchJobOnContainer):
                         'num_cells',
                         'num_infected_cells',
                         'num_not_infected_cells',
+                        'fraction_infected',
                         'background_percentage',
                         'outlier',
                         ] + list(measures[0].keys())
@@ -76,6 +78,8 @@ class Summary(BatchJobOnContainer):
                                    num_cells[i],
                                    num_infected_cells[i],
                                    num_not_infected_cells[i],
+                                   background_percentages[i],
+                                   fraction_infected_cells[i],
                                    background_percentages[i],
                                    self.outlier_predicate(im_name)
                                    ] + list(measures[i].values())
@@ -149,4 +153,3 @@ class Summary(BatchJobOnContainer):
     def check_outputs(self, output_files, folder, status, ignore_failed_outputs):
         # TODO check summary table?
         return super(Summary, self).check_outputs(output_files, folder, status, ignore_failed_outputs)
-
