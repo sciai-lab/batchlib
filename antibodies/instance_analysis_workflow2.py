@@ -206,7 +206,7 @@ def parser():
     parser.add("--ignore_failed_outputs", default=None)
 
     # default_scale_factors = None
-    default_scale_factors = [1, 2, 4, 8]
+    default_scale_factors = [1, 2, 4, 8, 16]
     parser.add("--scale_factors", default=default_scale_factors)
 
     # tagged outliers from a given plate
