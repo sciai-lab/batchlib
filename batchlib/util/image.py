@@ -1,5 +1,6 @@
-from numbers import Number
 import numpy as np
+from numbers import Number
+from scipy.ndimage import convolve
 
 try:
     import numexpr
@@ -57,3 +58,11 @@ def normalize_mi_ma(x, mi, ma, clip=False, eps=1e-20, dtype=np.float32):
         x = np.clip(x, 0, 1)
 
     return x
+
+
+def seg_to_edges(segmentation):
+    """ Make 2d edges from 2d segmentation
+    """
+    gy = convolve(segmentation + 1, np.array([-1., 0., 1.]).reshape(1, 3))
+    gx = convolve(segmentation + 1, np.array([-1., 0., 1.]).reshape(3, 1))
+    return ((gx ** 2 + gy ** 2) > 0)

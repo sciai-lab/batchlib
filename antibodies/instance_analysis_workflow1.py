@@ -117,6 +117,13 @@ def parse_instance_config1():
     default_scale_factors = [1, 2, 4, 8]
     parser.add("--scale_factors", default=default_scale_factors)
 
+    # tagged outliers from a given plate
+    # if plate_name is empty we will try to infer it from the 'input_folder' name
+    parser.add("--plate_name", default=None, nargs='+', type=str, help="The name of the imaged plate")
+    # if outliers_dir is empty, ../misc/tagged_outliers will be used
+    parser.add("--outliers_dir", default=None, type=str,
+               help="Path to the directory containing CSV files with marked outliers")
+
     return parser.parse_args()
 
 

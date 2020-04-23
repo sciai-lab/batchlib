@@ -86,6 +86,19 @@ def get_image_and_site_names(folder, pattern):
     return im_names, site_names
 
 
+def read_table(path):
+    table = pd.read_csv(path, sep='\t')
+    columns = table.columns
+    if (columns[0] != 'image') or (columns[1] != 'site-name'):
+        raise ValueError("Invalid table columns")
+    column_names = columns[2:]
+
+    table = table.values[:, 1:]
+    column_dict = {row[0]: row[1:].astype('float32').tolist() for row in table}
+
+    return column_dict, column_names
+
+
 def write_table(folder, column_dict, column_names, out_path, pattern='*.h5'):
 
     im_names, site_names = get_image_and_site_names(folder, pattern)
@@ -189,21 +202,26 @@ def downsample_image_data(path, scale_factors, out_path):
         _copy_attrs(fin, fout)
 
 
-def write_image_information(path, image_information=None, well_information=None):
+def write_image_information(path, image_information=None, well_information=None, overwrite=False):
     # neither image nor well information ? -> do nothing
     if image_information is None and well_information is None:
         return
 
     with open_file(path, 'a') as f:
+        attrs = f.attrs
+
+        def _write_info(info_key, info_val):
+            if not isinstance(info_val, str):
+                raise ValueError("Expect %s to be str, got %s" % type(info_key, info_val))
+            if not overwrite and info_key in attrs:
+                info_val = info_val + "; " + attrs[info_key]
+            attrs[info_key] = info_val
+
         if image_information is not None:
-            if not isinstance(image_information, str):
-                raise ValueError("Expect image_information to be str, got %s" % type(image_information))
-            f.attrs['ImageInformation'] = image_information
+            _write_info('ImageInformation', image_information)
 
         if well_information is not None:
-            if not isinstance(well_information, str):
-                raise ValueError("Expect well_information to be str, got %s" % type(well_information))
-            f.attrs['WellInformation'] = well_information
+            _write_info('WellInformation', well_information)
 
 
 def write_viewer_settings(ds, image, color=None, alpha=1., visible=False, skip=None,

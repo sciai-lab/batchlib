@@ -4,9 +4,9 @@ import json
 from abc import ABC
 from glob import glob
 
-from batchlib.util.logging import get_logger
 from .util import (downscale_image, is_group, is_dataset,
-                   open_file, get_file_lock, write_viewer_settings)
+                   open_file, get_file_lock, get_logger,
+                   write_viewer_settings)
 
 logger = get_logger('Workflow.BatchJob')
 
@@ -155,7 +155,7 @@ class BatchJob(ABC):
 
         return input_files
 
-    def check_outputs(self, output_files, folder, status, ignore_failed_outputs):
+    def validate_outputs(self, output_files, folder, status, ignore_failed_outputs):
         # NOTE output validation can be expensive, so we might want to parallelize in the future
         # validate the outputs and update the status
         failed_outputs = self.get_invalid_outputs(output_files)
@@ -219,8 +219,8 @@ class BatchJob(ABC):
             # run the actual computation
             self.run(input_files, output_files, **kwargs)
 
-            # check if all outputs were computed properly
-            self.check_outputs(output_files, folder, status, ignore_failed_outputs)
+            # validate if all outputs were computed properly
+            self.validate_outputs(output_files, folder, status, ignore_failed_outputs)
 
             # if everything went through, we set the state to 'processed'
             status = self.update_status(folder, status, processed=True)

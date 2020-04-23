@@ -9,7 +9,8 @@ import configargparse
 from batchlib import run_workflow
 from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
 from batchlib.analysis.pixel_level_analysis import all_plots
-from batchlib.analysis.summary import Summary
+from batchlib.analysis.summary import CellLevelSummary
+from batchlib.outliers.outlier import get_outlier_predicate
 from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
@@ -77,6 +78,8 @@ def run_instance_analysis2(config):
      marker_ana_in_key, serum_ana_in_key) = get_input_keys(config)
     analysis_folder = 'instancewise_analysis_corrected' if config.analysis_on_corrected else 'instancewise_analysis'
 
+    outlier_predicate = get_outlier_predicate(config)
+
     job_dict = {
         Preprocess.from_folder: {'build': {'input_folder': config.input_folder,
                                            'barrel_corrector_path': barrel_corrector_path,
@@ -112,11 +115,13 @@ def run_instance_analysis2(config):
                                       'cell_seg_key': config.seg_key,
                                       'output_folder': analysis_folder},
                             'run': {'gpu_id': config.gpu}},
-        Summary: {'build': {'serum_key': serum_ana_in_key,
-                            'marker_key': marker_ana_in_key,
-                            'cell_seg_key': config.seg_key,
-                            'analysis_folder': analysis_folder},
-                  'run': {}}
+        CellLevelSummary: {'build': {'serum_key': serum_ana_in_key,
+                                     'marker_key': marker_ana_in_key,
+                                     'cell_seg_key': config.seg_key,
+                                     'analysis_folder': analysis_folder,
+                                     'outlier_predicate': outlier_predicate,
+                                     'scale_factors': config.scale_factors},
+                           'run': {}}
     }
 
     if config.skip_analysis:
@@ -202,8 +207,15 @@ def parser():
     parser.add("--ignore_failed_outputs", default=None)
 
     # default_scale_factors = None
-    default_scale_factors = [1, 2, 4, 8]
+    default_scale_factors = [1, 2, 4, 8, 16]
     parser.add("--scale_factors", default=default_scale_factors)
+
+    # tagged outliers from a given plate
+    # if plate_name is empty we will try to infer it from the 'input_folder' name
+    parser.add("--plate_name", default=None, nargs='+', type=str, help="The name of the imaged plate")
+    # if outliers_dir is empty, ../misc/tagged_outliers will be used
+    parser.add("--outliers_dir", default=None, type=str,
+               help="Path to the directory containing CSV files with marked outliers")
 
     return parser
 

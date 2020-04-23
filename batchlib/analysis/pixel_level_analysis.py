@@ -52,7 +52,7 @@ def get_colorbar_range(key):
 
 
 def all_plots(json_files, out_path, keys=None):
-    if keys == None:
+    if keys is None:
         # load first json file to get list of key
         with open(json_files[0], "r") as key_file:
             keys = [k for k in json.load(key_file).keys()]  # if k.startswith("ratio_of")]
@@ -103,6 +103,7 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
                  input_pattern='*.h5',
                  output_folder="pixelwise_analysis",
                  identifier=None):
+
         self.serum_key = serum_key
         self.infected_key = infected_key
         self.not_infected_key = not_infected_key
@@ -120,6 +121,7 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
                                     self.infected_key,
                                     self.not_infected_key],
                          input_ndim=input_ndim)
+
         self.identifier = identifier
 
     def load_sample(self, path):

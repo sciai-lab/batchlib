@@ -1,16 +1,18 @@
-from tqdm.auto import tqdm
-import torch
-import numpy as np
 import json
-import math
-import pickle
 import os
-from functools import partial
+import pickle
 from copy import copy, deepcopy
+from functools import partial
 
-from ..util.io import open_file
-from ..util.plate_visualizations import well_plot, make_per_well_dict
+import numpy as np
+import torch
+from tqdm.auto import tqdm
+
+from batchlib.util.logging import get_logger
 from ..base import BatchJobWithSubfolder
+from ..util.io import open_file
+
+logger = get_logger('Workflow.BatchJob.CellLevelAnalysis')
 
 
 def index_cell_properties(cell_properties, ind):
@@ -20,7 +22,7 @@ def index_cell_properties(cell_properties, ind):
 
 
 def remove_background_of_cell_properties(cell_properties, bg_label=0):
-    return index_cell_properties(cell_properties, np.array(cell_properties['labels'])!=bg_label)
+    return index_cell_properties(cell_properties, np.array(cell_properties['labels']) != bg_label)
 
 
 def substract_background_of_marker(cell_properties, bg_label=0, marker_key='marker'):
@@ -269,7 +271,9 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
         infected_ind_with_bg = np.zeros_like(per_cell_statistics_to_save['marker']['means'])
         infected_ind_with_bg[per_cell_statistics_to_save['labels'] > 0] = infected_ind
 
-        result = dict(per_cell_statistics=per_cell_statistics_to_save, infected_ind=infected_ind_with_bg, measures=measures)
+        result = dict(per_cell_statistics=per_cell_statistics_to_save,
+                      infected_ind=infected_ind_with_bg,
+                      measures=measures)
         with open(out_file, 'wb') as f:
             pickle.dump(result, f)
 
