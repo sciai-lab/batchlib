@@ -86,6 +86,19 @@ def get_image_and_site_names(folder, pattern):
     return im_names, site_names
 
 
+def read_table(path):
+    table = pd.read_csv(path, sep='\t')
+    columns = table.columns
+    if (columns[0] != 'image') or (columns[1] != 'site-name'):
+        raise ValueError("Invalid table columns")
+    column_names = columns[2:]
+
+    table = table.values[:, 1:]
+    column_dict = {row[0]: row[1:].astype('float32').tolist() for row in table}
+
+    return column_dict, column_names
+
+
 def write_table(folder, column_dict, column_names, out_path, pattern='*.h5'):
 
     im_names, site_names = get_image_and_site_names(folder, pattern)

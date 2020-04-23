@@ -7,7 +7,7 @@ from tqdm.auto import tqdm
 
 from ..base import BatchJobOnContainer
 from ..util import (get_image_and_site_names, get_logger,
-                    open_file, seg_to_edges,
+                    open_file, seg_to_edges, read_table,
                     write_table, write_image_information)
 
 logger = get_logger('Workflow.BatchJob.Summary')
@@ -56,10 +56,12 @@ class Summary(BatchJobOnContainer, ABC):
                                    for value in values]
                        for site_name, values in column_dict.items()}
 
-        # TODO if this table already exists, then extend the
-        # column_dict and the column_names
+        # if this table already exists, then extend the column_dict and the column_names
         if os.path.exists(self.table_path):
-            raise NotImplementedError
+            old_column_dict, old_column_names = read_table(self.table_path)
+            column_names = old_column_names + column_names
+            column_dict = {site_name: old_column_dict[site_name] + column_dict[site_name]
+                           for site_name in column_dict.keys()}
 
         logger.info(f'{self.name}: save analysis table to {self.table_path}')
         write_table(self.folder, column_dict, column_names,
@@ -152,7 +154,7 @@ class CellLevelSummary(Summary):
         background_percentages = [result['per_cell_statistics']['marker']['sizes'][bg_ind] / img_size
                                   for result, bg_ind in zip(results, bg_inds)]
 
-        column_names = ['score',
+        column_names = ['cell_based_score',
                         'num_cells',
                         'num_infected_cells',
                         'num_not_infected_cells',
