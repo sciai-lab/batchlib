@@ -9,7 +9,7 @@ import configargparse
 from batchlib import run_workflow
 from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
 from batchlib.analysis.pixel_level_analysis import all_plots
-from batchlib.analysis.summary import Summary
+from batchlib.analysis.summary import CellLevelSummary
 from batchlib.outliers.outlier import get_outlier_predicate
 from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import SeededWatershed
@@ -115,12 +115,13 @@ def run_instance_analysis2(config):
                                       'cell_seg_key': config.seg_key,
                                       'output_folder': analysis_folder},
                             'run': {'gpu_id': config.gpu}},
-        Summary: {'build': {'serum_key': serum_ana_in_key,
-                            'marker_key': marker_ana_in_key,
-                            'cell_seg_key': config.seg_key,
-                            'analysis_folder': analysis_folder,
-                            'outlier_predicate': outlier_predicate},
-                  'run': {}}
+        CellLevelSummary: {'build': {'serum_key': serum_ana_in_key,
+                                     'marker_key': marker_ana_in_key,
+                                     'cell_seg_key': config.seg_key,
+                                     'analysis_folder': analysis_folder,
+                                     'outlier_predicate': outlier_predicate,
+                                     'scale_factors': config.scale_factors},
+                           'run': {}}
     }
 
     if config.skip_analysis:

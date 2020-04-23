@@ -6,9 +6,11 @@ import pickle
 from tqdm.auto import tqdm
 
 from ..base import BatchJobOnContainer
-from ..util import (get_image_and_site_names, open_file,
-                    seg_to_edges,
+from ..util import (get_image_and_site_names, get_logger,
+                    open_file, seg_to_edges,
                     write_table, write_image_information)
+
+logger = get_logger('Workflow.BatchJob.Summary')
 
 
 class Summary(BatchJobOnContainer, ABC):
@@ -22,8 +24,9 @@ class Summary(BatchJobOnContainer, ABC):
     def __init__(self, input_pattern, input_key, output_key,
                  input_ndim=None, output_ndim=None,
                  table_name=None, **super_kwargs):
-        super().__init__(self, input_pattern=input_pattern, output_ext=None,
+        super().__init__(input_pattern=input_pattern, output_ext=None,
                          input_key=input_key, input_ndim=input_ndim,
+                         output_key=output_key, output_ndim=output_ndim,
                          **super_kwargs)
         self.table_name = table_name
 
@@ -35,10 +38,15 @@ class Summary(BatchJobOnContainer, ABC):
         return os.path.join(folder, table_name)
 
     # in addition to the normal 'check_outputs', we make sure that the table exists
-    def check_outputs(self, output_files, folder, status, ignore_failed_outputs):
+    def validate_outputs(self, output_files, folder, status, ignore_failed_outputs):
         if not os.path.isfile(self.table_path):
-            return False
-        return super().check_outputs(output_files, folder, status, ignore_failed_outputs)
+            msg = f'{self.name}: failed to compute table at {self.table_path}'
+            if ignore_failed_outputs:
+                logger.warning(msg)
+            else:
+                logger.error(msg)
+                raise RuntimeError(msg)
+        super().validate_outputs(output_files, folder, status, ignore_failed_outputs)
 
     def write_summary_table(self):
         column_dict, column_names = self.make_summary_table()
@@ -53,6 +61,7 @@ class Summary(BatchJobOnContainer, ABC):
         if os.path.exists(self.table_path):
             raise NotImplementedError
 
+        logger.info(f'{self.name}: save analysis table to {self.table_path}')
         write_table(self.folder, column_dict, column_names,
                     out_path=self.table_path,
                     pattern=self.input_pattern)
