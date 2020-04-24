@@ -4,6 +4,7 @@ import json
 from abc import ABC
 from glob import glob
 
+from .config import get_default_chunks, get_default_extension
 from .util import (downscale_image, is_group, is_dataset,
                    open_file, get_file_lock, get_logger,
                    write_viewer_settings)
@@ -252,10 +253,12 @@ class BatchJobOnContainer(BatchJob, ABC):
     """
     supported_container_extensions = {'.h5', '.hdf5', '.zarr', '.zr', '.n5'}
 
-    def __init__(self, input_pattern, output_ext=None, identifier=None,
+    def __init__(self, input_pattern=None, output_ext=None, identifier=None,
                  input_key=None, output_key=None,
                  input_ndim=None, output_ndim=None,
                  viewer_settings={}, scale_factors=None):
+
+        input_pattern = '*' + get_default_extension() if input_pattern is None else input_pattern
         super().__init__(input_pattern=input_pattern,
                          output_ext=output_ext,
                          identifier=identifier)
@@ -280,8 +283,9 @@ class BatchJobOnContainer(BatchJob, ABC):
         self.viewer_settings = viewer_settings
 
     def _write_single_scale(self, g, out_key, image):
+        chunks = get_default_chunks(image)
         ds = g.require_dataset(out_key, shape=image.shape, dtype=image.dtype,
-                               compression='gzip')
+                               compression='gzip', chunks=chunks)
         ds[:] = image
         return ds
 
@@ -407,12 +411,12 @@ class BatchJobWithSubfolder(BatchJobOnContainer, ABC):
     and writes ouput to a sub-folder.
     """
 
-    def __init__(self, input_pattern, output_ext=None,
+    def __init__(self, input_pattern=None, output_ext=None,
                  identifier=None, output_folder="",
                  input_key=None, input_ndim=None):
         self.output_folder = output_folder
 
-        super().__init__(input_pattern, output_ext=output_ext,
+        super().__init__(input_pattern=input_pattern, output_ext=output_ext,
                          input_key=input_key, input_ndim=input_ndim,
                          identifier=identifier)
 

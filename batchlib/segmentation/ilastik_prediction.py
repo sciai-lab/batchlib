@@ -18,7 +18,7 @@ class IlastikPrediction(BatchJobOnContainer):
     """
     """
     def __init__(self, ilastik_bin, ilastik_project,
-                 input_key, output_key, input_pattern='*.h5',
+                 input_key, output_key,
                  keep_channels=None, input_ndim=None, output_ndim=None,
                  **super_kwargs):
         if keep_channels is not None:
@@ -32,8 +32,7 @@ class IlastikPrediction(BatchJobOnContainer):
 
         self.keep_channels = keep_channels
 
-        super().__init__(input_pattern,
-                         input_key=input_key, output_key=output_key,
+        super().__init__(input_key=input_key, output_key=output_key,
                          input_ndim=input_ndim, output_ndim=output_ndim,
                          **super_kwargs)
 

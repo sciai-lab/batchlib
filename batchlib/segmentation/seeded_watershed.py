@@ -15,12 +15,9 @@ from .seeded_segmentation import SeededSegmentation
 class SeededWatershed(SeededSegmentation):
     """
     """
-    def __init__(self, pmap_key, seed_key, output_key,
-                 mask_key=None, input_pattern='*.h5',
-                 **super_kwargs):
+    def __init__(self, pmap_key, seed_key, output_key, mask_key=None, **super_kwargs):
         super().__init__(pmap_key, seed_key, output_key,
-                         mask_key=mask_key, input_pattern=input_pattern,
-                         **super_kwargs)
+                         mask_key=mask_key, **super_kwargs)
 
     def segment(self, pmap, seeds):
         return watershed(pmap, seeds)

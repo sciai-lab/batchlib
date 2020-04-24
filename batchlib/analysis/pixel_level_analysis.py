@@ -100,7 +100,6 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
                  serum_key='serum',
                  infected_key='local_infected',
                  not_infected_key='local_not_infected',
-                 input_pattern='*.h5',
                  output_folder="pixelwise_analysis",
                  identifier=None):
 
@@ -114,8 +113,7 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
         # identifier allows to run different instances of this job on the same folder
         output_ext = '.json'
 
-        super().__init__(input_pattern,
-                         output_ext=output_ext,
+        super().__init__(output_ext=output_ext,
                          output_folder=output_folder,
                          input_key=[self.serum_key,
                                     self.infected_key,

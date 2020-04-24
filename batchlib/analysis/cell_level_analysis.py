@@ -177,8 +177,7 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
                  nuc_seg_key='nucleus_segmentation',
                  cell_seg_key='cell_segmentation',
                  output_folder='instancewise_analysis',
-                 identifier=None, input_pattern='*.h5',
-                 ):
+                 identifier=None):
 
         self.serum_key = serum_key
         self.marker_key = marker_key
@@ -191,8 +190,7 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
         # identifier allows to run different instances of this job on the same folder
         output_ext = '.pickle' if identifier is None else f'_{identifier}.pickle'
 
-        super().__init__(input_pattern,
-                         output_ext=output_ext,
+        super().__init__(output_ext=output_ext,
                          output_folder=output_folder,
                          input_key=[self.serum_key,
                                     self.marker_key,

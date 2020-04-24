@@ -9,6 +9,7 @@ import numpy as np
 from tqdm import tqdm
 
 from ..base import BatchJobOnContainer
+from ..config import get_default_extension
 from ..util import barrel_correction, open_file
 
 
@@ -30,9 +31,9 @@ def parse_channel_names(input_name):
 class Preprocess(BatchJobOnContainer):
     """ Preprocess folder with tifs from high-throughput experiment
     """
-    semantic_viewer_settings = {'nuclei': {'color': 'Blue'},
-                                'serum': {'color': 'Green'},
-                                'marker': {'color': 'Red'}}
+    semantic_viewer_settings = {'nuclei': {'color': 'Blue', 'visible': True},
+                                'serum': {'color': 'Green', 'visible': True},
+                                'marker': {'color': 'Red', 'visible': True}}
 
     @staticmethod
     def validate_barrel_corector(path, channel_names):
@@ -44,7 +45,7 @@ class Preprocess(BatchJobOnContainer):
             raise ValueError("Could not find all channel names in the barrel corrector file")
 
     @classmethod
-    def from_folder(cls, input_folder, output_ext='.h5',
+    def from_folder(cls, input_folder, output_ext=None,
                     barrel_corrector_path=None, **super_kwargs):
 
         # load channel name -> semantic name mapping
@@ -79,8 +80,10 @@ class Preprocess(BatchJobOnContainer):
                    barrel_corrector_path=barrel_corrector_path, **super_kwargs)
 
     def __init__(self, channel_names, channel_mapping,
-                 output_ext='.h5', barrel_corrector_path=None,
+                 output_ext=None, barrel_corrector_path=None,
                  **super_kwargs):
+
+        output_ext = get_default_extension() if output_ext is None else output_ext
 
         self.validate_barrel_corector(barrel_corrector_path, channel_names)
         self.barrel_corrector_path = barrel_corrector_path
