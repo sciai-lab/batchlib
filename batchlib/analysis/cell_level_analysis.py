@@ -5,11 +5,12 @@ from copy import copy, deepcopy
 from functools import partial
 
 import numpy as np
+import skimage.morphology
 import torch
 from tqdm.auto import tqdm
 
 from batchlib.util.logging import get_logger
-from ..base import BatchJobWithSubfolder
+from ..base import BatchJobWithSubfolder, BatchJobOnContainer
 from ..util.io import open_file
 
 logger = get_logger('Workflow.BatchJob.CellLevelAnalysis')
@@ -166,6 +167,36 @@ def get_measures(cell_properties, infected_threshold, split_statistic='top50'):
     else:
         split = split_by_marker_threshold(cell_properties, infected_threshold, split_statistic)
     return compute_ratios(*split)
+
+
+class DenoiseChannel(BatchJobOnContainer):
+    def __init__(self, key_to_denoise, output_key=None, output_ext='.h5'):
+        super(DenoiseChannel, self).__init__(
+            output_ext=output_ext,
+            input_key=key_to_denoise,
+            output_key=output_key if output_key is not None else key_to_denoise + '_denoised'
+        )
+
+    def denoise(self, img):
+        raise NotImplementedError
+
+    def run(self, input_files, output_files):
+        for input_file, output_file in zip(tqdm(input_files, f'denoising {self.input_key} -> {self.output_key}'),
+                                           output_files):
+            with open_file(input_file, 'r') as f:
+                img = self.read_input(f, self.input_key)
+            img = self.denoise(img)
+            with open_file(output_file, 'a') as f:
+                self.write_result(f, self.output_key, img)
+
+
+class DenoiseByGrayscaleOpening(DenoiseChannel):
+    def __init__(self, radius=5, **super_kwargs):
+        super(DenoiseByGrayscaleOpening, self).__init__(**super_kwargs)
+        self.structuring_element = skimage.morphology.disk(radius)
+
+    def denoise(self, img):
+        return skimage.morphology.opening(img, selem=self.structuring_element)
 
 
 class CellLevelAnalysis(BatchJobWithSubfolder):
