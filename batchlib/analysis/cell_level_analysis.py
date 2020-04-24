@@ -177,12 +177,16 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
                  nuc_seg_key='nucleus_segmentation',
                  cell_seg_key='cell_segmentation',
                  output_folder='instancewise_analysis',
+                 infected_threshold=250, split_statistic='top50',
                  identifier=None):
 
         self.serum_key = serum_key
         self.marker_key = marker_key
         self.nuc_seg_key = nuc_seg_key
         self.cell_seg_key = cell_seg_key
+
+        self.infected_threshold = infected_threshold
+        self.split_statistic = split_statistic
 
         # all inputs should be 2d
         input_ndim = [2, 2, 2, 2]
@@ -255,8 +259,8 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
 
     # this is what should be run for each h5 file
     def save_all_stats(self, in_file, out_file, device):
-        infected_threshold = 250  # TODO put this and other params into args of __init__
-        split_statistic = 'top50'
+        infected_threshold = self.infected_threshold  # TODO put this and other params into args of __init__
+        split_statistic = self.split_statistic
         sample = self.load_sample(in_file, device=device)
         per_cell_statistics_to_save = self.eval_cells(*sample)
 
