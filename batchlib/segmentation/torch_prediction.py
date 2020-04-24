@@ -19,12 +19,10 @@ class TorchPrediction(BatchJobOnContainer):
 
     def __init__(self, input_key, output_key, model_path,
                  model_class=None, model_kwargs={},
-                 input_channel=None, input_pattern='*.h5',
-                 **super_kwargs):
+                 input_channel=None, **super_kwargs):
         self.input_channel = input_channel
         input_ndim = 2 if self.input_channel is None else 3
-        super().__init__(input_pattern,
-                         input_key=input_key, output_key=output_key,
+        super().__init__(input_key=input_key, output_key=output_key,
                          input_ndim=input_ndim, output_ndim=2,
                          **super_kwargs)
 

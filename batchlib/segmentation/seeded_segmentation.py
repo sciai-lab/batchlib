@@ -17,15 +17,13 @@ from ..util import open_file, normalize
 class SeededSegmentation(BatchJobOnContainer):
     """
     """
-    def __init__(self, pmap_key, seed_key, output_key,
-                 mask_key=None, input_pattern='*.h5', **super_kwargs):
+    def __init__(self, pmap_key, seed_key, output_key, mask_key=None, **super_kwargs):
 
         input_keys = [pmap_key, seed_key]
         if mask_key is not None:
             input_keys.append(mask_key)
 
-        super().__init__(input_pattern,
-                         input_key=input_keys, output_key=output_key,
+        super().__init__(input_key=input_keys, output_key=output_key,
                          input_ndim=2, output_ndim=2, **super_kwargs)
 
         self.pmap_key = pmap_key

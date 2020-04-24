@@ -6,6 +6,7 @@ import pickle
 from tqdm.auto import tqdm
 
 from ..base import BatchJobOnContainer
+from ..config import get_default_extension
 from ..util import (get_image_and_site_names, get_logger,
                     open_file, seg_to_edges, read_table,
                     write_table, write_image_information)
@@ -21,10 +22,10 @@ class Summary(BatchJobOnContainer, ABC):
     - write_summary_images: write additional images
     - write_image_information: write image/well level analysis summary
     """
-    def __init__(self, input_pattern, input_key, output_key,
+    def __init__(self, input_key, output_key,
                  input_ndim=None, output_ndim=None,
                  table_name=None, **super_kwargs):
-        super().__init__(input_pattern=input_pattern, output_ext=None,
+        super().__init__(output_ext=None,
                          input_key=input_key, input_ndim=input_ndim,
                          output_key=output_key, output_ndim=output_ndim,
                          **super_kwargs)
@@ -104,7 +105,6 @@ class CellLevelSummary(Summary):
                  edge_key='cell_segmentation_edges',
                  score_key='ratio_of_median_of_means',
                  analysis_folder='instancewise_analysis_corrected',
-                 input_pattern='*.h5',
                  outlier_predicate=lambda im: False,
                  table_name=None,
                  **super_kwargs):
@@ -130,8 +130,7 @@ class CellLevelSummary(Summary):
         output_key = [infected_cell_mask_key, serum_per_cell_mean_key, edge_key]
         output_ndim = [2, 2, 2]
 
-        super().__init__(input_pattern=input_pattern,
-                         input_key=input_key, input_ndim=input_ndim,
+        super().__init__(input_key=input_key, input_ndim=input_ndim,
                          output_key=output_key, output_ndim=output_ndim,
                          table_name=table_name, **super_kwargs)
 
@@ -140,7 +139,8 @@ class CellLevelSummary(Summary):
                                                         self.input_pattern)
 
         # get per image results and statistics
-        results = [self.load_result(os.path.join(self.folder, im_name + '.h5')) for im_name in im_names]
+        ext = get_default_extension()
+        results = [self.load_result(os.path.join(self.folder, im_name + ext)) for im_name in im_names]
         measures = [result['measures'] for result in results]
         num_cells = [len(result['infected_ind']) for result in results]
         num_infected_cells = [np.sum(result['infected_ind']) for result in results]
@@ -184,7 +184,8 @@ class CellLevelSummary(Summary):
                                 well_information=well_info)
 
     def load_result(self, in_path):
-        assert in_path.endswith('.h5')
+        ext = get_default_extension()
+        assert in_path.endswith(ext)
         # load result of cell level analysis
         split_path = os.path.abspath(in_path).split(os.sep)
         result_path = os.path.join('/', *split_path[:-1], self.analysis_folder, split_path[-1][:-3] + '.pickle')
@@ -209,7 +210,7 @@ class CellLevelSummary(Summary):
         for label, intensity in zip(filter(lambda x: x != 0, labels), result['per_cell_statistics']['serum']['means']):
             mean_serum_image[cell_seg == label] = intensity
 
-        seg_edges = seg_to_edges(cell_seg)
+        seg_edges = seg_to_edges(cell_seg).astype('uint8')
 
         with open_file(in_path, 'a') as f:
             # we need to use nearest down-sampling for the mean serum images,
