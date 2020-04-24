@@ -124,7 +124,7 @@ class Preprocess(BatchJobOnContainer):
 
                 # save the raw image channel
                 chan = im[chan_id]
-                self.write_result(f, semantic_name, chan)
+                self.write_image(f, semantic_name, chan)
 
                 # apply and save the barrel corrected channel,
                 # if we have a barrel corrector
@@ -135,7 +135,8 @@ class Preprocess(BatchJobOnContainer):
                     # get the settings for this image channel
                     this_settings = self.viewer_settings[semantic_name].copy()
                     this_settings.update({'visible': False})
-                    self.write_result(f, semantic_name + '_corrected', chan, settings=this_settings)
+                    self.write_image(f, semantic_name + '_corrected', chan,
+                                     settings=this_settings)
 
     def load_barrel_corrector(self):
         if self.barrel_corrector_path is None:

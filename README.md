@@ -66,7 +66,7 @@ In addition, the group `data` contains metadata to display the image in the [pla
 - Implement `self.run` with function signature `run(self, input_files, output_files, **kwargs)`
 - Constraints:
     - Output should be a single file per input file. If you need multiple files per input, create a sub-directory and store them in there.
-    - For image data, intermediate formats are either `h5` or `n5`. Use the methods `read_input` / `write_result` to read / write data in the batchlib data model.
+    - For image data, intermediate formats are either `h5` or `n5`. Use the methods `read_image` / `write_image` to read / write data in the batchlib data model.
     - Use `batchlib.io.open_file` in your job instead of `h5py.File` to support both `h5` and `n5`
     - Jobs should always be runnable with cpu only and should default to running on the cpu. gpu support should be activated via kwarg in run method.
 
