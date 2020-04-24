@@ -65,14 +65,14 @@ class IlastikPrediction(BatchJobOnContainer):
 
         # load and resave the data
         with open_file(tmp_path, 'r') as f:
-            # note: we read from ilastik here, so we don't need `read_input`
+            # note: we read from ilastik here, so we don't need `read_image`
             # beacuse this will not be multi-scale
             ds = f[tmp_key]
             data = ds[:]
 
         if isinstance(self.output_key, str):
             with open_file(out_path, 'a') as f:
-                self.write_result(f, self.output_key, data)
+                self.write_image(f, self.output_key, data)
         else:
             n_channels = len(data)
             keep_channels = list(range(n_channels)) if self.keep_channels is None else self.keep_channels
@@ -84,7 +84,7 @@ class IlastikPrediction(BatchJobOnContainer):
                     if chan_id not in keep_channels:
                         continue
                     key = self.output_key[current_key_id]
-                    self.write_result(f, key, chan)
+                    self.write_image(f, key, chan)
                     current_key_id += 1
 
         # clean up
@@ -96,7 +96,7 @@ class IlastikPrediction(BatchJobOnContainer):
             data = []
             with open_file(path, 'r') as f:
                 for key in self.input_key:
-                    data.append(self.read_input(f, key)[None])
+                    data.append(self.read_image(f, key)[None])
             data = np.concatenate(data, axis=0)
 
             tmp_path = os.path.splitext(path)[0] + '_tmp.h5'

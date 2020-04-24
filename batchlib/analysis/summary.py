@@ -200,7 +200,7 @@ class CellLevelSummary(Summary):
         infected_labels = labels[result['infected_ind'] != 0]
 
         with open_file(in_path, 'r') as f:
-            cell_seg = self.read_input(f, self.cell_seg_key)
+            cell_seg = self.read_image(f, self.cell_seg_key)
 
         infected_mask = np.zeros_like(cell_seg)
         for label in infected_labels:
@@ -215,7 +215,7 @@ class CellLevelSummary(Summary):
         with open_file(in_path, 'a') as f:
             # we need to use nearest down-sampling for the mean serum images,
             # because while these are float values, they should not be interpolated
-            self.write_result(f, self.serum_per_cell_mean_key, mean_serum_image,
-                              settings={'use_nearest': True})
-            self.write_result(f, self.infected_cell_mask_key, infected_mask)
-            self.write_result(f, self.edge_key, seg_edges)
+            self.write_image(f, self.serum_per_cell_mean_key, mean_serum_image,
+                             settings={'use_nearest': True})
+            self.write_image(f, self.infected_cell_mask_key, infected_mask)
+            self.write_image(f, self.edge_key, seg_edges)

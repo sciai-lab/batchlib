@@ -124,14 +124,14 @@ class PixellevelAnalysis(BatchJobWithSubfolder):
 
     def load_sample(self, path):
         with open_file(path, mode='r') as f:
-            serum = self.read_input(f, self.serum_key)
-            infected = self.read_input(f, self.infected_key)
-            not_infected = self.read_input(f, self.not_infected_key)
+            serum = self.read_image(f, self.serum_key)
+            infected = self.read_image(f, self.infected_key)
+            not_infected = self.read_image(f, self.not_infected_key)
 
             # TODO: this is generated as part of the segmentation analysis
             # needs to become part of the pixel computation pipeline
             if "mask" in f:
-                background_mask = self.read_input(f, "mask") == 0
+                background_mask = self.read_image(f, "mask") == 0
                 background_intensity = serum[background_mask].mean()
             else:
                 background_intensity = 0

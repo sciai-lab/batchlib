@@ -201,10 +201,10 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
 
     def load_sample(self, path, device):
         with open_file(path, 'r') as f:
-            serum = self.read_input(f, self.serum_key)
-            marker = self.read_input(f, self.marker_key)
-            nucleus_seg = self.read_input(f, self.nuc_seg_key)
-            cell_seg = self.read_input(f, self.cell_seg_key)
+            serum = self.read_image(f, self.serum_key)
+            marker = self.read_image(f, self.marker_key)
+            nucleus_seg = self.read_image(f, self.nuc_seg_key)
+            cell_seg = self.read_image(f, self.cell_seg_key)
 
         marker = torch.FloatTensor(marker.astype(np.float32)).to(device)
         serum = torch.FloatTensor(serum.astype(np.float32)).to(device)

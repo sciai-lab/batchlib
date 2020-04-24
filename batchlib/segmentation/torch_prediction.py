@@ -35,7 +35,7 @@ class TorchPrediction(BatchJobOnContainer):
         inputs = []
         for in_path in in_batch:
             with open_file(in_path, 'r') as f:
-                im = self.read_input(f, self.input_key, channel=self.input_channel)
+                im = self.read_image(f, self.input_key, channel=self.input_channel)
 
                 assert im.ndim == 2
                 # TODO this should not be hard-coded to the model class, but passed as an extra parameter.
@@ -68,7 +68,7 @@ class TorchPrediction(BatchJobOnContainer):
                         threshold = threshold_channels.get(channel_id, None)
                         if threshold is not None:
                             channel = (channel > threshold).astype('uint8')
-                        self.write_result(f, key, channel)
+                        self.write_image(f, key, channel)
 
     # load from pickled model or from state dict
     def load_model(self, device):
