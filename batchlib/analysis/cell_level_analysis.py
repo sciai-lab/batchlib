@@ -11,6 +11,7 @@ from tqdm.auto import tqdm
 
 from batchlib.util.logging import get_logger
 from ..base import BatchJobWithSubfolder, BatchJobOnContainer
+from ..config import get_default_extension
 from ..util.io import open_file
 
 logger = get_logger('Workflow.BatchJob.CellLevelAnalysis')
@@ -199,31 +200,24 @@ class DenoiseByGrayscaleOpening(DenoiseChannel):
         return skimage.morphology.opening(img, selem=self.structuring_element)
 
 
-class CellLevelAnalysis(BatchJobWithSubfolder):
-    """
-    """
+class InstanceFeatureExtraction(BatchJobWithSubfolder):
     def __init__(self,
                  serum_key='serum',
                  marker_key='marker',
                  nuc_seg_key='nucleus_segmentation',
                  cell_seg_key='cell_segmentation',
-                 output_folder='instancewise_analysis',
-                 infected_threshold=250, split_statistic='top50',
-                 identifier=None):
+                 output_folder='instancewise_analysis'):
 
         self.serum_key = serum_key
         self.marker_key = marker_key
         self.nuc_seg_key = nuc_seg_key
         self.cell_seg_key = cell_seg_key
 
-        self.infected_threshold = infected_threshold
-        self.split_statistic = split_statistic
-
         # all inputs should be 2d
         input_ndim = [2, 2, 2, 2]
 
         # identifier allows to run different instances of this job on the same folder
-        output_ext = '.pickle' if identifier is None else f'_{identifier}.pickle'
+        output_ext = '_features.pickle'
 
         super().__init__(output_ext=output_ext,
                          output_folder=output_folder,
@@ -231,8 +225,7 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
                                     self.marker_key,
                                     self.nuc_seg_key,
                                     self.cell_seg_key],
-                         input_ndim=input_ndim,
-                         identifier=identifier)
+                         input_ndim=input_ndim)
 
     def load_sample(self, path, device):
         with open_file(path, 'r') as f:
@@ -290,11 +283,59 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
 
     # this is what should be run for each h5 file
     def save_all_stats(self, in_file, out_file, device):
-        infected_threshold = self.infected_threshold  # TODO put this and other params into args of __init__
-        split_statistic = self.split_statistic
         sample = self.load_sample(in_file, device=device)
-        per_cell_statistics_to_save = self.eval_cells(*sample)
+        per_cell_statistics = self.eval_cells(*sample)
 
+        with open(out_file, 'wb') as f:
+            pickle.dump(per_cell_statistics, f)
+
+    def run(self, input_files, output_files, gpu_id=None):
+        with torch.no_grad():
+            if gpu_id is not None:
+                os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
+                device = torch.device(0)
+            else:
+                device = torch.device('cpu')
+            _save_all_stats = partial(self.save_all_stats, device=device)
+            for input_file, output_file in tqdm(list(zip(input_files, output_files)),
+                                                desc='extracting cell-level features'):
+                _save_all_stats(input_file, output_file)
+
+
+class CellLevelAnalysis(BatchJobWithSubfolder):
+    """
+    """
+    def __init__(self,
+                 output_folder='instancewise_analysis',
+                 infected_threshold=250, split_statistic='top50',
+                 identifier=None):
+
+        self.infected_threshold = infected_threshold
+        self.split_statistic = split_statistic
+
+        # identifier allows to run different instances of this job on the same folder
+        output_ext = '.pickle' if identifier is None else f'_{identifier}.pickle'
+
+        super().__init__(output_ext=output_ext,
+                         output_folder=output_folder,
+                         identifier=identifier)
+
+    def load_result(self, in_path):
+        ext = get_default_extension()
+        assert in_path.endswith(ext)
+        # load result of cell level feature extraction
+        split_path = os.path.abspath(in_path).split(os.sep)
+        result_path = os.path.join('/', *split_path[:-1], self.output_folder, split_path[-1][:-3] + '_features.pickle')
+        assert os.path.isfile(result_path), f'Cell feature file missing: {result_path}'
+        with open(result_path, 'rb') as f:
+            return pickle.load(f)
+
+    # this is what should be run for each h5 file
+    def save_all_stats(self, in_file, out_file):
+        infected_threshold = self.infected_threshold
+        split_statistic = self.split_statistic
+
+        per_cell_statistics_to_save = self.load_result(in_file)
         per_cell_statistics = substract_background_of_marker(per_cell_statistics_to_save)
         per_cell_statistics = remove_background_of_cell_properties(per_cell_statistics)
         measures = get_measures(per_cell_statistics, infected_threshold, split_statistic=split_statistic)
@@ -316,15 +357,7 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
         with open(out_file[:-6] + 'json', 'w') as fp:
             json.dump(measures, fp)
 
-    def run(self, input_files, output_files, gpu_id=None):
-        with torch.no_grad():
-            if gpu_id is not None:
-                os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
-                device = torch.device(0)
-            else:
-                device = torch.device('cpu')
-
-            _save_all_stats = partial(self.save_all_stats, device=device)
-            for input_file, output_file in tqdm(list(zip(input_files, output_files)),
-                                                desc='running cell-level analysis on images'):
-                _save_all_stats(input_file, output_file)
+    def run(self, input_files, output_files):
+        for input_file, output_file in tqdm(list(zip(input_files, output_files)),
+                                            desc='running cell-level analysis on images'):
+            self.save_all_stats(input_file, output_file)

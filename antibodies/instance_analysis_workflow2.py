@@ -7,7 +7,7 @@ from glob import glob
 import configargparse
 
 from batchlib import run_workflow
-from batchlib.analysis.cell_level_analysis import CellLevelAnalysis, DenoiseByGrayscaleOpening
+from batchlib.analysis.cell_level_analysis import InstanceFeatureExtraction, CellLevelAnalysis, DenoiseByGrayscaleOpening
 from batchlib.analysis.pixel_level_analysis import all_plots
 from batchlib.analysis.summary import CellLevelSummary
 from batchlib.outliers.outlier import get_outlier_predicate
@@ -116,12 +116,14 @@ def run_instance_analysis2(config):
                                                'run': {}}
         marker_ana_in_key = marker_ana_in_key + '_denoised'
 
-    job_dict[CellLevelAnalysis] = {'build': {'serum_key': serum_ana_in_key,
+    job_dict[InstanceFeatureExtraction] = {'build': {'serum_key': serum_ana_in_key,
                                              'marker_key': marker_ana_in_key,
                                              'nuc_seg_key': config.nuc_key,
                                              'cell_seg_key': config.seg_key,
                                              'output_folder': analysis_folder},
                                    'run': {'gpu_id': config.gpu}}
+    job_dict[CellLevelAnalysis] = {'build': {'output_folder': analysis_folder},
+                                   'run': {}}
     job_dict[CellLevelSummary] = {'build': {'serum_key': serum_ana_in_key,
                                             'marker_key': marker_ana_in_key,
                                              'cell_seg_key': config.seg_key,
