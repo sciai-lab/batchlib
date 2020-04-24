@@ -151,6 +151,13 @@ def compute_ratios(not_infected_properties, infected_properties):
         result[f'ratio_of_{key_result}'] = serum_ratio(key1, key2)
         result[f'dos_of_{key_result}'] = diff_over_sum(key1, key2)
         result[f'diff_of_{key_result}'] = diff(key1, key2)
+
+    # add infected / non-infected global statistics
+    for key, value in infected_global_properties['serum'].items():
+        result[f'infected_{key}'] = value
+    for key, value in not_infected_global_properties['serum'].items():
+        result[f'not_infected_{key}'] = value
+
     result['infected_mean'] = infected_global_properties['serum']['global_mean']
     result['infected_median'] = infected_global_properties['serum']['q0.5_of_cell_means']
     result['not_infected_mean'] = not_infected_global_properties['serum']['global_mean']
