@@ -66,19 +66,6 @@ def join_cell_properties(*cell_property_list):
             for key, value in cell_property_list[0].items()}
 
 
-def split_by_marker_threshold(cell_properties, threshold, statistic, marker_key='marker', return_infected_ind=False):
-    # returns not infected, infected cell properties
-    infected_ind = cell_properties[marker_key][statistic] > threshold
-    not_infected_ind = 1 - infected_ind
-    if not return_infected_ind:
-        return index_cell_properties(cell_properties, not_infected_ind), \
-               index_cell_properties(cell_properties, infected_ind)
-    else:
-
-        return index_cell_properties(cell_properties, not_infected_ind), \
-               index_cell_properties(cell_properties, infected_ind), infected_ind
-
-
 def compute_global_statistics(cell_properties):
     result = dict()
     for channel, properties in cell_properties.items():
@@ -163,18 +150,6 @@ def compute_ratios(not_infected_properties, infected_properties):
     result['not_infected_mean'] = not_infected_global_properties['serum']['global_mean']
     result['not_infected_median'] = not_infected_global_properties['serum']['q0.5_of_cell_means']
     return result
-
-
-def get_measures(cell_properties, infected_threshold, split_statistic='top50'):
-    if isinstance(infected_threshold, (list, tuple, np.ndarray)):
-        assert len(infected_threshold) == 2
-        split = [
-            split_by_marker_threshold(cell_properties, infected_threshold[0], split_statistic)[0],
-            split_by_marker_threshold(cell_properties, infected_threshold[1], split_statistic)[1]
-        ]
-    else:
-        split = split_by_marker_threshold(cell_properties, infected_threshold, split_statistic)
-    return compute_ratios(*split)
 
 
 class DenoiseChannel(BatchJobOnContainer):
@@ -337,18 +312,26 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
         with open(result_path, 'rb') as f:
             return pickle.load(f)
 
+    def preprocess_per_cell_statistics(self, per_cell_statistics):
+        per_cell_statistics = substract_background_of_marker(per_cell_statistics)
+        per_cell_statistics = remove_background_of_cell_properties(per_cell_statistics)
+        return per_cell_statistics
+
+    def get_infected_ind(self, per_cell_statistics):
+        return per_cell_statistics['marker'][self.split_statistic] > self.infected_threshold
+
     # this is what should be run for each h5 file
     def save_all_stats(self, in_file, out_file):
-        infected_threshold = self.infected_threshold
-        split_statistic = self.split_statistic
-
         per_cell_statistics_to_save = self.load_result(in_file)
-        per_cell_statistics = substract_background_of_marker(per_cell_statistics_to_save)
-        per_cell_statistics = remove_background_of_cell_properties(per_cell_statistics)
-        measures = get_measures(per_cell_statistics, infected_threshold, split_statistic=split_statistic)
+        per_cell_statistics = self.preprocess_per_cell_statistics(deepcopy(per_cell_statistics_to_save))
 
-        infected_ind = split_by_marker_threshold(per_cell_statistics, infected_threshold, split_statistic,
-                                                 return_infected_ind=True)[-1]
+        infected_ind = self.get_infected_ind(per_cell_statistics)
+
+        not_infected_ind = 1 - infected_ind
+        not_infected_cell_statistics = index_cell_properties(per_cell_statistics, not_infected_ind)
+        infected_cell_statistics = index_cell_properties(per_cell_statistics, infected_ind)
+        measures = compute_ratios(not_infected_cell_statistics, infected_cell_statistics)
+
         infected_ind_with_bg = np.zeros_like(per_cell_statistics_to_save['marker']['means'])
         infected_ind_with_bg[per_cell_statistics_to_save['labels'] > 0] = infected_ind
 
