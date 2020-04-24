@@ -30,9 +30,9 @@ def parse_channel_names(input_name):
 class Preprocess(BatchJobOnContainer):
     """ Preprocess folder with tifs from high-throughput experiment
     """
-    semantic_viewer_settings = {'nuclei': {'color': 'Blue'},
-                                'serum': {'color': 'Green'},
-                                'marker': {'color': 'Red'}}
+    semantic_viewer_settings = {'nuclei': {'color': 'Blue', 'visible': True},
+                                'serum': {'color': 'Green', 'visible': True},
+                                'marker': {'color': 'Red', 'visible': True}}
 
     @staticmethod
     def validate_barrel_corector(path, channel_names):
