@@ -200,6 +200,9 @@ class BatchJob(ABC):
             input_folder_ = folder if input_folder is None else input_folder
             logger.info(f'{self.name}: input folder is {input_folder_}')
 
+            # monkey patch the folder, so that we can get this in the run and input / output validation methods
+            self.folder = folder
+
             # validate and get the input files to be processed
             input_files = self.get_inputs(folder, input_folder_, status,
                                           force_recompute, ignore_invalid_inputs)
@@ -210,9 +213,6 @@ class BatchJob(ABC):
             # get the output files corresponding to the input files
             output_files = self.to_outputs(input_files, folder)
             assert len(input_files) == len(output_files)
-
-            # monkey patch the folder, so that we can get this in the run method
-            self.folder = folder
 
             logger.info(f'{self.name}: call run method with {len(input_files)} inputs.')
             logger.debug(f'{self.name}: with the following inputs:\n {input_files}')

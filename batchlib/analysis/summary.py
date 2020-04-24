@@ -49,6 +49,10 @@ class Summary(BatchJobOnContainer, ABC):
                 raise RuntimeError(msg)
         super().validate_outputs(output_files, folder, status, ignore_failed_outputs)
 
+    # make sure that everything is recomputed if the table does not exist
+    def check_output(self, path):
+        return super().check_output(path) and os.path.isfile(self.table_path)
+
     def write_summary_table(self):
         column_dict, column_names = self.make_summary_table()
 
