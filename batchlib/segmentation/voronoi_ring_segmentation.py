@@ -31,7 +31,8 @@ class VoronoiRingSegmentation(BatchJobOnContainer):
         return voronoi_ring_seg
 
     def run(self, input_files, output_files):
-        for in_path, out_path in tqdm(zip(input_files, output_files), total=len(input_files)):
+        for in_path, out_path in tqdm(zip(input_files, output_files), total=len(input_files),
+                                      desc='Computing voronoi ring segmentations'):
             labels = self.segment_image(in_path)
             with open_file(out_path, 'a') as f:
                 self.write_result(f, self.output_key, labels)

@@ -37,17 +37,17 @@ def substract_background_of_marker(cell_properties, bg_label=0, marker_key='mark
     return cell_properties
 
 
-def substract_background_of_serum(cell_properties, bg_label=0):
-    return substract_background_of_marker(cell_properties, marker_key='serum')
+def substract_background_of_serum(cell_properties, bg_label=0, serum_key='serum'):
+    return substract_background_of_marker(cell_properties, marker_key=serum_key)
 
 
-def divide_by_background_of_marker(cell_properties, bg_label=0):
+def divide_by_background_of_marker(cell_properties, marker_key, bg_label=0):
     bg_ind = list(cell_properties['labels']).index(bg_label)
     cell_properties = deepcopy(cell_properties)
-    mean_bg = cell_properties['marker']['means'][bg_ind]
-    for key in cell_properties['marker'].keys():
-        cell_properties['marker'][key] -= 550
-        cell_properties['marker'][key] /= (mean_bg - 550)
+    mean_bg = cell_properties[marker_key]['means'][bg_ind]
+    for key in cell_properties[marker_key].keys():
+        cell_properties[marker_key][key] -= 550
+        cell_properties[marker_key][key] /= (mean_bg - 550)
     return cell_properties
 
 
@@ -94,7 +94,7 @@ def compute_global_statistics(cell_properties):
     return result
 
 
-def compute_ratios(not_infected_properties, infected_properties):
+def compute_ratios(not_infected_properties, infected_properties, serum_key='serum'):
     # input should be the return value of eval_cells
     not_infected_global_properties = compute_global_statistics(not_infected_properties)
     infected_global_properties = compute_global_statistics(infected_properties)
@@ -103,7 +103,7 @@ def compute_ratios(not_infected_properties, infected_properties):
     def serum_ratio(key, key2=None):
         key2 = key if key2 is None else key
         try:
-            result = (infected_global_properties['serum'][key2]) / (not_infected_global_properties['serum'][key])
+            result = (infected_global_properties[serum_key][key2]) / (not_infected_global_properties[serum_key][key])
         except Exception:
             result = None
         return result
@@ -111,7 +111,7 @@ def compute_ratios(not_infected_properties, infected_properties):
     def diff_over_sum(key, key2=None):
         key2 = key if key2 is None else key
         try:
-            inf, not_inf = infected_global_properties['serum'][key], not_infected_global_properties['serum'][key2]
+            inf, not_inf = infected_global_properties[serum_key][key], not_infected_global_properties[serum_key][key2]
             result = (inf - not_inf) / (inf + not_inf)
         except Exception:
             result = None
@@ -120,7 +120,7 @@ def compute_ratios(not_infected_properties, infected_properties):
     def diff(key, key2=None):
         key2 = key if key2 is None else key
         try:
-            inf, not_inf = infected_global_properties['serum'][key], not_infected_global_properties['serum'][key2]
+            inf, not_inf = infected_global_properties[serum_key][key], not_infected_global_properties[serum_key][key2]
             result = inf - not_inf
         except Exception:
             result = None
@@ -140,15 +140,15 @@ def compute_ratios(not_infected_properties, infected_properties):
         result[f'diff_of_{key_result}'] = diff(key1, key2)
 
     # add infected / non-infected global statistics
-    for key, value in infected_global_properties['serum'].items():
+    for key, value in infected_global_properties[serum_key].items():
         result[f'infected_{key}'] = value
-    for key, value in not_infected_global_properties['serum'].items():
+    for key, value in not_infected_global_properties[serum_key].items():
         result[f'not_infected_{key}'] = value
 
-    result['infected_mean'] = infected_global_properties['serum']['global_mean']
-    result['infected_median'] = infected_global_properties['serum']['q0.5_of_cell_means']
-    result['not_infected_mean'] = not_infected_global_properties['serum']['global_mean']
-    result['not_infected_median'] = not_infected_global_properties['serum']['q0.5_of_cell_means']
+    result['infected_mean'] = infected_global_properties[serum_key]['global_mean']
+    result['infected_median'] = infected_global_properties[serum_key]['q0.5_of_cell_means']
+    result['not_infected_mean'] = not_infected_global_properties[serum_key]['global_mean']
+    result['not_infected_median'] = not_infected_global_properties[serum_key]['q0.5_of_cell_means']
     return result
 
 
@@ -184,14 +184,12 @@ class DenoiseByGrayscaleOpening(DenoiseChannel):
 
 class InstanceFeatureExtraction(BatchJobWithSubfolder):
     def __init__(self,
-                 serum_key='serum',
-                 marker_key='marker',
+                 channel_keys=('serum', 'marker'),
                  nuc_seg_key='nucleus_segmentation',
                  cell_seg_key='cell_segmentation',
                  output_folder='instancewise_analysis'):
 
-        self.serum_key = serum_key
-        self.marker_key = marker_key
+        self.channel_keys = tuple(channel_keys)
         self.nuc_seg_key = nuc_seg_key
         self.cell_seg_key = cell_seg_key
 
@@ -203,62 +201,60 @@ class InstanceFeatureExtraction(BatchJobWithSubfolder):
 
         super().__init__(output_ext=output_ext,
                          output_folder=output_folder,
-                         input_key=[self.serum_key,
-                                    self.marker_key,
-                                    self.nuc_seg_key,
-                                    self.cell_seg_key],
+                         input_key=list(self.channel_keys + (self.nuc_seg_key, self.cell_seg_key)),
                          input_ndim=input_ndim)
 
     def load_sample(self, path, device):
         with open_file(path, 'r') as f:
-            serum = self.read_input(f, self.serum_key)
-            marker = self.read_input(f, self.marker_key)
+            channels = [self.read_input(f, key) for key in self.channel_keys]
             nucleus_seg = self.read_input(f, self.nuc_seg_key)
             cell_seg = self.read_input(f, self.cell_seg_key)
 
-        marker = torch.FloatTensor(marker.astype(np.float32)).to(device)
-        serum = torch.FloatTensor(serum.astype(np.float32)).to(device)
+        channels = [torch.FloatTensor(channel.astype(np.float32)).to(device) for channel in channels]
         nucleus_seg = torch.LongTensor(nucleus_seg.astype(np.int32)).to(device)
         cell_seg = torch.LongTensor(cell_seg.astype(np.int32)).to(device)
 
         cell_seg[nucleus_seg != 0] = 0
 
-        return marker, serum, nucleus_seg, cell_seg
+        return channels, cell_seg
 
-    def eval_cells(self, marker, serum, nucleus_seg, cell_seg,
+    def get_per_instance_statistics(self, data, seg, labels):
+        per_cell_values = [data[seg == label] for label in labels]
+        sums = data.new([arr.sum() for arr in per_cell_values])
+        means = data.new([arr.mean() for arr in per_cell_values])
+        instance_sizes = data.new([len(arr.view(-1)) for arr in per_cell_values])
+        top50 = np.array([0 if len(t) < 50 else t.topk(50)[0][-1].item()
+                          for t in per_cell_values])
+        top30 = np.array([0 if len(t) < 30 else t.topk(30)[0][-1].item()
+                          for t in per_cell_values])
+        top10 = np.array([0 if len(t) < 10 else t.topk(10)[0][-1].item()
+                          for t in per_cell_values])
+        # convert to numpy here
+        return dict(sums=sums.cpu().numpy(),
+                    means=means.cpu().numpy(),
+                    sizes=instance_sizes.cpu().numpy(),
+                    top50=top50,
+                    top30=top30,
+                    top10=top10)
+
+    def eval_cells(self, channels, cell_seg,
                    ignore_label=0,
                    substract_mean_background=False):
         # all segs have shape H, W
-        assert marker.shape == serum.shape == nucleus_seg.shape == cell_seg.shape
+        shape = cell_seg.shape
+        for channel in list(channels):
+            assert channel.shape == shape
+
         # include background as instance with label 0
         labels = torch.sort(torch.unique(cell_seg))[0]
 
         if substract_mean_background:
-            marker -= (marker[cell_seg == ignore_label]).mean()
-            serum -= (serum[cell_seg == ignore_label]).mean()
-
-        def get_per_mask_statistics(data):
-            per_cell_values = [data[cell_seg == label] for label in labels]
-            sums = data.new([arr.sum() for arr in per_cell_values])
-            means = data.new([arr.mean() for arr in per_cell_values])
-            instance_sizes = data.new([len(arr.view(-1)) for arr in per_cell_values])
-            top50 = np.array([0 if len(t) < 50 else t.topk(50)[0][-1].item()
-                              for t in per_cell_values])
-            top30 = np.array([0 if len(t) < 30 else t.topk(30)[0][-1].item()
-                              for t in per_cell_values])
-            top10 = np.array([0 if len(t) < 10 else t.topk(10)[0][-1].item()
-                              for t in per_cell_values])
-            # convert to numpy here
-            return dict(sums=sums.cpu().numpy(),
-                        means=means.cpu().numpy(),
-                        sizes=instance_sizes.cpu().numpy(),
-                        top50=top50,
-                        top30=top30,
-                        top10=top10)
+            for channel in channels:
+                channel -= (channel[cell_seg == ignore_label]).mean()
 
         cell_properties = dict()
-        cell_properties['marker'] = get_per_mask_statistics(marker)
-        cell_properties['serum'] = get_per_mask_statistics(serum)
+        for key, channel in zip(self.channel_keys, channels):
+            cell_properties[key] = self.get_per_instance_statistics(channel, cell_seg, labels)
         cell_properties['labels'] = labels.cpu().numpy()
 
         return cell_properties
@@ -288,10 +284,12 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
     """
     """
     def __init__(self,
+                 serum_key='serum', marker_key='marker',
                  output_folder='instancewise_analysis',
                  infected_threshold=250, split_statistic='top50',
                  identifier=None):
-
+        self.serum_key = serum_key
+        self.marker_key = marker_key
         self.infected_threshold = infected_threshold
         self.split_statistic = split_statistic
 
@@ -313,12 +311,12 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
             return pickle.load(f)
 
     def preprocess_per_cell_statistics(self, per_cell_statistics):
-        per_cell_statistics = substract_background_of_marker(per_cell_statistics)
+        per_cell_statistics = substract_background_of_marker(per_cell_statistics, marker_key=self.marker_key)
         per_cell_statistics = remove_background_of_cell_properties(per_cell_statistics)
         return per_cell_statistics
 
     def get_infected_ind(self, per_cell_statistics):
-        return per_cell_statistics['marker'][self.split_statistic] > self.infected_threshold
+        return per_cell_statistics[self.marker_key][self.split_statistic] > self.infected_threshold
 
     # this is what should be run for each h5 file
     def save_all_stats(self, in_file, out_file):
@@ -330,9 +328,9 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
         not_infected_ind = 1 - infected_ind
         not_infected_cell_statistics = index_cell_properties(per_cell_statistics, not_infected_ind)
         infected_cell_statistics = index_cell_properties(per_cell_statistics, infected_ind)
-        measures = compute_ratios(not_infected_cell_statistics, infected_cell_statistics)
+        measures = compute_ratios(not_infected_cell_statistics, infected_cell_statistics, serum_key=self.serum_key)
 
-        infected_ind_with_bg = np.zeros_like(per_cell_statistics_to_save['marker']['means'])
+        infected_ind_with_bg = np.zeros_like(per_cell_statistics_to_save[self.marker_key]['means'])
         infected_ind_with_bg[per_cell_statistics_to_save['labels'] > 0] = infected_ind
 
         result = dict(per_cell_statistics=per_cell_statistics_to_save,

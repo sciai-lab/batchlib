@@ -15,6 +15,7 @@ from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
+from batchlib.segmentation.voronoi_ring_segmentation import VoronoiRingSegmentation
 from batchlib.segmentation.unet import UNet2D
 from batchlib.util.logging import get_logger
 
@@ -116,20 +117,26 @@ def run_instance_analysis2(config):
                                                'run': {}}
         marker_ana_in_key = marker_ana_in_key + '_denoised'
 
-    job_dict[InstanceFeatureExtraction] = {'build': {'serum_key': serum_ana_in_key,
-                                             'marker_key': marker_ana_in_key,
+    job_dict[VoronoiRingSegmentation] = {'build': {'input_key': config.nuc_key,
+                                                   'output_key': 'ring_segmentation',
+                                                   'ring_width': 10},
+                                         'run': {}}
+
+    job_dict[InstanceFeatureExtraction] = {'build': {'channel_keys': (serum_ana_in_key, marker_ana_in_key),
                                              'nuc_seg_key': config.nuc_key,
                                              'cell_seg_key': config.seg_key,
                                              'output_folder': analysis_folder},
                                    'run': {'gpu_id': config.gpu}}
-    job_dict[CellLevelAnalysis] = {'build': {'output_folder': analysis_folder},
+    job_dict[CellLevelAnalysis] = {'build': {'serum_key': serum_ana_in_key,
+                                             'marker_key': marker_ana_in_key,
+                                             'output_folder': analysis_folder},
                                    'run': {}}
     job_dict[CellLevelSummary] = {'build': {'serum_key': serum_ana_in_key,
                                             'marker_key': marker_ana_in_key,
-                                             'cell_seg_key': config.seg_key,
-                                             'analysis_folder': analysis_folder,
-                                             'outlier_predicate': outlier_predicate,
-                                             'scale_factors': config.scale_factors},
+                                            'cell_seg_key': config.seg_key,
+                                            'analysis_folder': analysis_folder,
+                                            'outlier_predicate': outlier_predicate,
+                                            'scale_factors': config.scale_factors},
                                   'run': {}}
 
     if config.skip_analysis:
