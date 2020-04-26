@@ -66,12 +66,12 @@ class SeededSegmentation(BatchJobOnContainer):
     def segment_image(self, in_path, out_path, invert_pmap, sigma,
                       erode_mask, dilate_seeds, ensure_seeds, **kwargs):
         with open_file(in_path, 'r') as f:
-            pmap = self.read_input(f, self.pmap_key)
-            seeds = self.read_input(f, self.seed_key)
+            pmap = self.read_image(f, self.pmap_key)
+            seeds = self.read_image(f, self.seed_key)
             if self.mask_key is None:
                 mask = None
             else:
-                mask = self.read_input(f, self.mask_key).astype('bool')
+                mask = self.read_image(f, self.mask_key).astype('bool')
 
         pmap = self.process_pmap(pmap, invert_pmap, sigma)
         seeds, mask, bg_id = self.process_mask_and_seeds(seeds, mask,
@@ -84,7 +84,7 @@ class SeededSegmentation(BatchJobOnContainer):
             labels[labels == bg_id] = 0
 
         with open_file(out_path, 'a') as f:
-            self.write_result(f, self.output_key, labels)
+            self.write_image(f, self.output_key, labels)
 
     def run(self, input_files, output_files, invert_pmap=False, sigma=2.,
             erode_mask=0, dilate_seeds=0, ensure_seeds=True, n_jobs=1, **kwargs):

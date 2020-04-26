@@ -167,10 +167,10 @@ class DenoiseChannel(BatchJobOnContainer):
         for input_file, output_file in zip(tqdm(input_files, f'denoising {self.input_key} -> {self.output_key}'),
                                            output_files):
             with open_file(input_file, 'r') as f:
-                img = self.read_input(f, self.input_key)
+                img = self.read_image(f, self.input_key)
             img = self.denoise(img)
             with open_file(output_file, 'a') as f:
-                self.write_result(f, self.output_key, img)
+                self.write_image(f, self.output_key, img)
 
 
 class DenoiseByGrayscaleOpening(DenoiseChannel):
@@ -187,7 +187,8 @@ class InstanceFeatureExtraction(BatchJobWithSubfolder):
                  channel_keys=('serum', 'marker'),
                  nuc_seg_key='nucleus_segmentation',
                  cell_seg_key='cell_segmentation',
-                 output_folder='instancewise_analysis'):
+                 output_folder='instancewise_analysis',
+                 identifier=None):
 
         self.channel_keys = tuple(channel_keys)
         self.nuc_seg_key = nuc_seg_key
@@ -197,18 +198,19 @@ class InstanceFeatureExtraction(BatchJobWithSubfolder):
         input_ndim = [2, 2, 2, 2]
 
         # identifier allows to run different instances of this job on the same folder
-        output_ext = '_features.pickle'
+        output_ext = '_features.pickle' if identifier is None else f'_{identifier}_features.pickle'
 
         super().__init__(output_ext=output_ext,
                          output_folder=output_folder,
                          input_key=list(self.channel_keys + (self.nuc_seg_key, self.cell_seg_key)),
-                         input_ndim=input_ndim)
+                         input_ndim=input_ndim,
+                         identifier=identifier)
 
     def load_sample(self, path, device):
         with open_file(path, 'r') as f:
-            channels = [self.read_input(f, key) for key in self.channel_keys]
-            nucleus_seg = self.read_input(f, self.nuc_seg_key)
-            cell_seg = self.read_input(f, self.cell_seg_key)
+            channels = [self.read_image(f, key) for key in self.channel_keys]
+            nucleus_seg = self.read_image(f, self.nuc_seg_key)
+            cell_seg = self.read_image(f, self.cell_seg_key)
 
         channels = [torch.FloatTensor(channel.astype(np.float32)).to(device) for channel in channels]
         nucleus_seg = torch.LongTensor(nucleus_seg.astype(np.int32)).to(device)

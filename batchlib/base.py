@@ -4,6 +4,8 @@ import json
 from abc import ABC
 from glob import glob
 
+import numpy as np
+
 from .config import get_default_chunks, get_default_extension
 from .util import (downscale_image, is_group, is_dataset,
                    open_file, get_file_lock, get_logger,
@@ -271,7 +273,8 @@ class BatchJobOnContainer(BatchJob, ABC):
         # the input and output dimensions
         # the _exp_ variables are the normalized versions we need in the checks
         self.input_ndim, self._input_exp_ndim = self.check_ndim(input_ndim, self._input_exp_key)
-        self.output_ndim, self._output_exp_ndim = self.check_ndim(output_ndim, self._output_exp_key)
+        self.output_ndim, self._output_exp_ndim = self.check_ndim(output_ndim,
+                                                                  self._output_exp_key)
 
         self.check_scale_factors(scale_factors)
         self.scale_factors = scale_factors
@@ -307,32 +310,78 @@ class BatchJobOnContainer(BatchJob, ABC):
             prev_scale_factor = scale_factor
         return g
 
-    def write_result(self, f, out_key, image, settings=None):
+    #
+    # read and write images
+    #
+
+    def write_image(self, f, key, image, settings=None):
         # get the viewer and donw-sampling settings
         if settings is None:
-            settings = self.viewer_settings.get(out_key, {})
+            settings = self.viewer_settings.get(key, {})
 
         # dimensionality is not to
         # -> this is not in image format and we just writ the data
         if image.ndim != 2:
-            g = self._write_single_scale(f, out_key, image)
+            g = self._write_single_scale(f, key, image)
         # otherwise, write in  multi-scale format
         else:
             use_nearest = settings.get('use_nearest', None)
-            g = self._write_multi_scale(f, out_key, image, use_nearest)
+            g = self._write_multi_scale(f, key, image, use_nearest)
 
         assert isinstance(settings, dict)
         write_viewer_settings(g, image,
                               scale_factors=self.scale_factors,
                               **settings)
 
-    def read_input(self, f, key, channel=None, scale=0):
+    def read_image(self, f, key, channel=None, scale=0):
         ds = f[key]
         if is_group(ds):
             ds = ds['s%i' % scale]
         assert is_dataset(ds)
         data = ds[:] if channel is None else ds[channel]
         return data
+
+    #
+    # read and write tables
+    #
+
+    def write_table(self, f, name, column_names, table):
+        if len(column_names) != table.shape[1]:
+            raise ValueError("Number of columns does not match")
+        if column_names[0] != 'label_id':
+            raise ValueError("Expect label ids in first column")
+
+        # cast all values to numpy string
+        table_ = table.astype('S10')
+
+        # make the dataset
+        key = 'tables/%s' % name
+        ds = f.require_dataset(key, shape=table_.shape, compression='gzip', dtype='S10')
+        ds[:] = table_
+        ds.attrs['columns'] = column_names
+
+    def read_table(self, f, name):
+        key = 'tables/%s' % name
+        ds = f[key]
+
+        column_names = ds.attrs['columns']
+        table = ds[:]
+
+        def _cast(column):
+            try:
+                return column.astype('int')
+            except ValueError:
+                pass
+            try:
+                return column.astype('float')
+            except ValueError:
+                pass
+            return column
+
+        # cast table columns back to proper dtypes
+        columns = [_cast(col) for col in table.T]
+        table = np.array(columns).T
+        return column_names, table
 
     @staticmethod
     def check_scale_factors(scale_factors):
@@ -353,7 +402,8 @@ class BatchJobOnContainer(BatchJob, ABC):
         supported_ext = BatchJobOnContainer.supported_container_extensions
         if ext.lower() not in supported_ext:
             ext_str = ", ".join(supported_ext)
-            raise ValueError("Invalid container extension %s, expected one of %s" % (ext, ext_str))
+            raise ValueError("Invalid container extension %s, expected one of %s" % (ext,
+                                                                                     ext_str))
 
         if not isinstance(keys, (str, list)):
             raise ValueError("Invalid data keys")
