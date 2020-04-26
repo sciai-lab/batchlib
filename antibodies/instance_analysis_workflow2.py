@@ -122,25 +122,11 @@ def run_instance_analysis2(config):
                           'run': {}}))
         marker_ana_in_key = marker_ana_in_key + '_denoised'
 
-    job_list.append((VoronoiRingSegmentation,
-                     {'build': {'input_key': config.nuc_key,
-                                'output_key': 'ring_segmentation',
-                                'ring_width': 10},
-                      'run': {}}))
-
     job_list.append((InstanceFeatureExtraction,
                      {'build': {'channel_keys': (serum_ana_in_key, marker_ana_in_key),
                                 'nuc_seg_key': config.nuc_key,
                                 'cell_seg_key': config.seg_key,
                                 'output_folder': analysis_folder},
-                      'run': {'gpu_id': config.gpu}}))
-
-    job_list.append((InstanceFeatureExtraction,
-                     {'build': {'channel_keys': (serum_ana_in_key, marker_ana_in_key),
-                                'nuc_seg_key': config.nuc_key,
-                                'cell_seg_key': 'ring_segmentation',
-                                'output_folder': analysis_folder,
-                                'identifier': 'ring'},
                       'run': {'gpu_id': config.gpu}}))
 
     job_list.append((CellLevelAnalysis,
@@ -158,9 +144,53 @@ def run_instance_analysis2(config):
                                 'scale_factors': config.scale_factors},
                       'run': {}}))
 
+    # second variant
+    if config.run_local_infected_ring_based:
+        analysis_folder += '_ring'
+        job_list.append((VoronoiRingSegmentation,
+                         {'build': {'input_key': config.nuc_key,
+                                    'output_key': 'ring_segmentation',
+                                    'ring_width': 10},
+                          'run': {}}))
+
+        job_list.append((InstanceFeatureExtraction,
+                         {'build': {'channel_keys': (serum_ana_in_key, marker_ana_in_key),
+                                    'nuc_seg_key': config.nuc_key,
+                                    'cell_seg_key': config.seg_key,
+                                    'output_folder': analysis_folder},
+                          'run': {'gpu_id': config.gpu}}))
+
+        job_list.append((InstanceFeatureExtraction,
+                         {'build': {'channel_keys': (serum_ana_in_key, 'local_infected'),
+                                    'nuc_seg_key': config.nuc_key,
+                                    'cell_seg_key': 'ring_segmentation',
+                                    'output_folder': analysis_folder,
+                                    'identifier': 'ring'},
+                          'run': {'gpu_id': config.gpu}}))
+
+        job_list.append((CellLevelAnalysis,
+                         {'build': {'serum_key': serum_ana_in_key,
+                                    'features_for_infected_decision_identifier': 'ring',
+                                    'infected_threshold': 0.6,
+                                    'split_statistic': 'means',
+                                    'subtract_marker_background': False,
+                                    'marker_key': marker_ana_in_key,
+                                    'output_folder': analysis_folder,
+                                    'identifier': None},
+                          'run': {}}))
+
+        job_list.append((CellLevelSummary,
+                         {'build': {'serum_key': serum_ana_in_key,
+                                    'marker_key': marker_ana_in_key,
+                                    'cell_seg_key': config.seg_key,
+                                    'analysis_folder': analysis_folder,
+                                    'outlier_predicate': outlier_predicate,
+                                    'scale_factors': config.scale_factors,
+                                    'table_name': 'ring_based_infected_analysis.csv'},
+                          'run': {}}))
+
     if config.skip_analysis:
-        assert job_list[-1][0] is CellLevelAnalysis
-        del job_list[-1]
+        raise NotImplementedError
 
     t0 = time.time()
 
@@ -231,6 +261,9 @@ def parser():
 
     # whether to skip the final analysis (this is to circumvent a bug regarding tensorflow not freeing the memory)
     parser.add_argument('--skip_analysis', dest='skip_analysis', default=False, action='store_true')
+
+    parser.add_argument('--run_local_infected_ring_based', dest='run_local_infected_ring_based',
+                        default=False, action='store_true')
 
     # whether to run the segmentation / analysis on the corrected or on the corrected data
     parser.add("--segmentation_on_corrected", default=True)

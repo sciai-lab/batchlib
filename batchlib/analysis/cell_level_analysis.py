@@ -286,15 +286,25 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
     """
     """
     def __init__(self,
-                 serum_key='serum', marker_key='marker',
+                 serum_key='serum', marker_key='marker', infected_decision_marker_key=None,
                  output_folder='instancewise_analysis',
+                 features_for_infected_decision_identifier=None,
+                 features_for_evaluation_identifier=None,
                  infected_threshold=250, split_statistic='top50',
+                 subtract_marker_background=True,
                  identifier=None):
         self.serum_key = serum_key
         self.marker_key = marker_key
+        self.infected_decision_marker_key = infected_decision_marker_key if infected_decision_marker_key is not None \
+            else marker_key
+
+        self.features_for_infected_decision_identifier = features_for_infected_decision_identifier
+        self.features_for_evaluation_identifier = features_for_evaluation_identifier
+
         self.infected_threshold = infected_threshold
         self.split_statistic = split_statistic
 
+        self.subtract_marker_background = subtract_marker_background
         # identifier allows to run different instances of this job on the same folder
         output_ext = '.pickle' if identifier is None else f'_{identifier}.pickle'
 
@@ -302,18 +312,23 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
                          output_folder=output_folder,
                          identifier=identifier)
 
-    def load_result(self, in_path):
+    def load_result(self, in_path, identifier=None):
         ext = get_default_extension()
         assert in_path.endswith(ext)
         # load result of cell level feature extraction
         split_path = os.path.abspath(in_path).split(os.sep)
-        result_path = os.path.join('/', *split_path[:-1], self.output_folder, split_path[-1][:-3] + '_features.pickle')
+        result_path = os.path.join(
+            '/', *split_path[:-1], self.output_folder,
+            split_path[-1][:-3] + ('_features.pickle' if identifier is None else f'_{identifier}_features.pickle')
+        )
         assert os.path.isfile(result_path), f'Cell feature file missing: {result_path}'
         with open(result_path, 'rb') as f:
             return pickle.load(f)
 
-    def preprocess_per_cell_statistics(self, per_cell_statistics):
-        per_cell_statistics = substract_background_of_marker(per_cell_statistics, marker_key=self.marker_key)
+    def preprocess_per_cell_statistics(self, per_cell_statistics, marker_key=None):
+        marker_key = marker_key if marker_key is not None else self.marker_key
+        if self.subtract_marker_background:
+            per_cell_statistics = substract_background_of_marker(per_cell_statistics, marker_key=marker_key)
         per_cell_statistics = remove_background_of_cell_properties(per_cell_statistics)
         return per_cell_statistics
 
@@ -322,10 +337,16 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
 
     # this is what should be run for each h5 file
     def save_all_stats(self, in_file, out_file):
-        per_cell_statistics_to_save = self.load_result(in_file)
+        # TODO: only save the measures and not again the cell-level features
+        per_cell_statistics_to_save = self.load_result(in_file, self.features_for_evaluation_identifier)
         per_cell_statistics = self.preprocess_per_cell_statistics(deepcopy(per_cell_statistics_to_save))
-
-        infected_ind = self.get_infected_ind(per_cell_statistics)
+        if self.features_for_evaluation_identifier != self.features_for_infected_decision_identifier:
+            pcs_for_infected_identification = self.load_result(in_file, self.features_for_infected_decision_identifier)
+            pcs_for_infected_identification = self.preprocess_per_cell_statistics(
+                pcs_for_infected_identification, marker_key=self.infected_decision_marker_key)
+        else:
+            pcs_for_infected_identification = deepcopy(per_cell_statistics)
+        infected_ind = self.get_infected_ind(pcs_for_infected_identification)
 
         not_infected_ind = 1 - infected_ind
         not_infected_cell_statistics = index_cell_properties(per_cell_statistics, not_infected_ind)
