@@ -7,7 +7,7 @@ from glob import glob
 import configargparse
 
 from batchlib import run_workflow
-from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
+from batchlib.analysis.cell_level_analysis import CellLevelAnalysis, DenoiseByGrayscaleOpening
 from batchlib.analysis.pixel_level_analysis import all_plots
 from batchlib.analysis.summary import CellLevelSummary
 from batchlib.outliers.outlier import get_outlier_predicate
@@ -108,21 +108,27 @@ def run_instance_analysis2(config):
                                     'scale_factors': config.scale_factors},
                           'run': {'erode_mask': 20,
                                   'dilate_seeds': 3,
-                                  'n_jobs': config.n_cpus}},
-        CellLevelAnalysis: {'build': {'serum_key': serum_ana_in_key,
-                                      'marker_key': marker_ana_in_key,
-                                      'nuc_seg_key': config.nuc_key,
-                                      'cell_seg_key': config.seg_key,
-                                      'output_folder': analysis_folder},
-                            'run': {'gpu_id': config.gpu}},
-        CellLevelSummary: {'build': {'serum_key': serum_ana_in_key,
-                                     'marker_key': marker_ana_in_key,
-                                     'cell_seg_key': config.seg_key,
-                                     'analysis_folder': analysis_folder,
-                                     'outlier_predicate': outlier_predicate,
-                                     'scale_factors': config.scale_factors},
-                           'run': {}}
+                                  'n_jobs': config.n_cpus}}
     }
+    if config.marker_denoise_radius > 0:
+        job_dict[DenoiseByGrayscaleOpening] = {'build': {'key_to_denoise': marker_ana_in_key,
+                                                         'radius': config.marker_denoise_radius},
+                                               'run': {}}
+        marker_ana_in_key = marker_ana_in_key + '_denoised'
+
+    job_dict[CellLevelAnalysis] = {'build': {'serum_key': serum_ana_in_key,
+                                             'marker_key': marker_ana_in_key,
+                                             'nuc_seg_key': config.nuc_key,
+                                             'cell_seg_key': config.seg_key,
+                                             'output_folder': analysis_folder},
+                                   'run': {'gpu_id': config.gpu}}
+    job_dict[CellLevelSummary] = {'build': {'serum_key': serum_ana_in_key,
+                                            'marker_key': marker_ana_in_key,
+                                             'cell_seg_key': config.seg_key,
+                                             'analysis_folder': analysis_folder,
+                                             'outlier_predicate': outlier_predicate,
+                                             'scale_factors': config.scale_factors},
+                                  'run': {}}
 
     if config.skip_analysis:
         job_dict.pop(CellLevelAnalysis)
@@ -199,6 +205,9 @@ def parser():
     # whether to run the segmentation / analysis on the corrected or on the corrected data
     parser.add("--segmentation_on_corrected", default=True)
     parser.add("--analysis_on_corrected", default=True)
+
+    # marker denoising
+    parser.add("--marker_denoise_radius", default=0, type=int)
 
     # runtime options
     parser.add("--batch_size", default=4)

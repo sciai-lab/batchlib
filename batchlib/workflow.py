@@ -2,8 +2,7 @@ import json
 import logging
 import os
 
-from batchlib.util.logging import get_logger, add_file_handler, remove_file_handler
-from batchlib.util import get_file_lock
+from batchlib.util import add_file_handler, get_commit_id, get_file_lock, get_logger
 
 logger = get_logger('Workflow')
 
@@ -63,10 +62,15 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
     # add file handler to tensorboard logger
     logging.getLogger('tensorflow').addHandler(fh)
 
+    # lock the git commit
+    commit_id = get_commit_id()
+    logger.info(f"Running workflow {name} on batchlib commit {commit_id}")
+
     lock_file = os.path.join(work_dir, 'batchlib.lock')
     with get_file_lock(lock_file, lock_folder):
 
         status_file = os.path.join(work_dir, name + '.status')
+        logger.info(f"with wofkflow status file {status_file}")
         status = {}
 
         logger.info(f"Running workflow: '{name}'. Job spec: {job_dict}")

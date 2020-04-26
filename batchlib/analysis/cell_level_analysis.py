@@ -5,11 +5,12 @@ from copy import copy, deepcopy
 from functools import partial
 
 import numpy as np
+import skimage.morphology
 import torch
 from tqdm.auto import tqdm
 
 from batchlib.util.logging import get_logger
-from ..base import BatchJobWithSubfolder
+from ..base import BatchJobWithSubfolder, BatchJobOnContainer
 from ..util.io import open_file
 
 logger = get_logger('Workflow.BatchJob.CellLevelAnalysis')
@@ -168,6 +169,36 @@ def get_measures(cell_properties, infected_threshold, split_statistic='top50'):
     return compute_ratios(*split)
 
 
+class DenoiseChannel(BatchJobOnContainer):
+    def __init__(self, key_to_denoise, output_key=None, output_ext='.h5'):
+        super(DenoiseChannel, self).__init__(
+            output_ext=output_ext,
+            input_key=key_to_denoise,
+            output_key=output_key if output_key is not None else key_to_denoise + '_denoised'
+        )
+
+    def denoise(self, img):
+        raise NotImplementedError
+
+    def run(self, input_files, output_files):
+        for input_file, output_file in zip(tqdm(input_files, f'denoising {self.input_key} -> {self.output_key}'),
+                                           output_files):
+            with open_file(input_file, 'r') as f:
+                img = self.read_image(f, self.input_key)
+            img = self.denoise(img)
+            with open_file(output_file, 'a') as f:
+                self.write_image(f, self.output_key, img)
+
+
+class DenoiseByGrayscaleOpening(DenoiseChannel):
+    def __init__(self, radius=5, **super_kwargs):
+        super(DenoiseByGrayscaleOpening, self).__init__(**super_kwargs)
+        self.structuring_element = skimage.morphology.disk(radius)
+
+    def denoise(self, img):
+        return skimage.morphology.opening(img, selem=self.structuring_element)
+
+
 class CellLevelAnalysis(BatchJobWithSubfolder):
     """
     """
@@ -177,12 +208,16 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
                  nuc_seg_key='nucleus_segmentation',
                  cell_seg_key='cell_segmentation',
                  output_folder='instancewise_analysis',
+                 infected_threshold=250, split_statistic='top50',
                  identifier=None):
 
         self.serum_key = serum_key
         self.marker_key = marker_key
         self.nuc_seg_key = nuc_seg_key
         self.cell_seg_key = cell_seg_key
+
+        self.infected_threshold = infected_threshold
+        self.split_statistic = split_statistic
 
         # all inputs should be 2d
         input_ndim = [2, 2, 2, 2]
@@ -255,8 +290,8 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
 
     # this is what should be run for each h5 file
     def save_all_stats(self, in_file, out_file, device):
-        infected_threshold = 250  # TODO put this and other params into args of __init__
-        split_statistic = 'top50'
+        infected_threshold = self.infected_threshold  # TODO put this and other params into args of __init__
+        split_statistic = self.split_statistic
         sample = self.load_sample(in_file, device=device)
         per_cell_statistics_to_save = self.eval_cells(*sample)
 
