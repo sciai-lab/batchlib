@@ -22,7 +22,7 @@ class VoronoiRingSegmentation(BatchJobOnContainer):
 
     def segment_image(self, in_path):
         with open_file(in_path, 'r') as f:
-            input_seg = self.read_input(f, self.input_key)
+            input_seg = self.read_image(f, self.input_key)
         input_mask = input_seg > 0
         distance = ndi.distance_transform_edt(input_mask == 0)
         ring_mask = np.invert(morph.dilation(input_mask, morph.disk(self.ring_width)) ^ input_mask)
@@ -35,4 +35,4 @@ class VoronoiRingSegmentation(BatchJobOnContainer):
                                       desc='Computing voronoi ring segmentations'):
             labels = self.segment_image(in_path)
             with open_file(out_path, 'a') as f:
-                self.write_result(f, self.output_key, labels)
+                self.write_image(f, self.output_key, labels)
