@@ -38,7 +38,7 @@ class StardistPrediction(BatchJobOnContainer):
     # TODO can we stack images along the batch axis?
     def predict_image(self, in_path, out_path, model):
         with open_file(in_path, 'r') as f:
-            im = self.read_input(f, self.input_key, channel=self.input_channel)
+            im = self.read_image(f, self.input_key, channel=self.input_channel)
 
         im = normalize_percentile(im, 1, 99.8)
         prob, dist = model.predict(im)
@@ -60,7 +60,7 @@ class StardistPrediction(BatchJobOnContainer):
         labels = model._instances_from_prediction(shape, prob, dist)[0]
         labels = labels.astype('uint32')
         with open_file(out_path, 'a') as f:
-            self.write_result(f, self.output_key, labels)
+            self.write_image(f, self.output_key, labels)
 
         os.remove(tmp_path_prob)
         os.remove(tmp_path_dist)

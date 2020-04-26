@@ -46,8 +46,8 @@ class BoundaryAndMaskPrediction(IlastikPrediction):
         fg_mask = binary_closing(fg_mask, iterations=2).astype('uint8')
 
         with open_file(out_path, 'a') as f:
-            self.write_result(f, self.mask_key, fg_mask)
-            self.write_result(f, self.boundary_key, bd)
+            self.write_image(f, self.mask_key, fg_mask)
+            self.write_image(f, self.boundary_key, bd)
 
         # clean up
         os.remove(tmp_path)

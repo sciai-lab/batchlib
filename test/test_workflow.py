@@ -7,7 +7,6 @@ from batchlib.segmentation.unet import UNet2D
 class TestWorkflow(unittest.TestCase):
     in_folder = os.path.join(os.path.split(__file__)[0], '../data/test_data/test')
     folder = './out'
-    root = '/home/pape/Work/covid/antibodies-nuclei'
 
     def tearDown(self):
         try:
