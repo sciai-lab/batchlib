@@ -70,6 +70,11 @@ def open_file(path, mode='r', h5_timeout=5, h5_retry=10):
     raise ValueError("Invalid file extensions %s" % ext)
 
 
+def image_name_to_well_name(image_name):
+    parts = image_name.split('_')
+    return parts[1].lstrip('Point')
+
+
 def image_name_to_site_name(image_name):
     parts = image_name.split('_')
     part_a = parts[1].lstrip('Point')

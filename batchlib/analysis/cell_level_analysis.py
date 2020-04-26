@@ -184,10 +184,10 @@ class DenoiseChannel(BatchJobOnContainer):
         for input_file, output_file in zip(tqdm(input_files, f'denoising {self.input_key} -> {self.output_key}'),
                                            output_files):
             with open_file(input_file, 'r') as f:
-                img = self.read_input(f, self.input_key)
+                img = self.read_image(f, self.input_key)
             img = self.denoise(img)
             with open_file(output_file, 'a') as f:
-                self.write_result(f, self.output_key, img)
+                self.write_image(f, self.output_key, img)
 
 
 class DenoiseByGrayscaleOpening(DenoiseChannel):
