@@ -156,8 +156,8 @@ class CellLevelSummary(Summary):
         bg_inds = [np.argwhere(result['per_cell_statistics']['labels'] == 0)[0, 0]
                    if 0 in result['per_cell_statistics']['labels'] else -1
                    for result in results]
-        img_size = results[0]['per_cell_statistics']['marker']['sizes'].sum()
-        background_percentages = [result['per_cell_statistics']['marker']['sizes'][bg_ind] / img_size
+        img_size = results[0]['per_cell_statistics'][self.marker_key]['sizes'].sum()
+        background_percentages = [result['per_cell_statistics'][self.marker_key]['sizes'][bg_ind] / img_size
                                   for result, bg_ind in zip(results, bg_inds)]
 
         cell_based_scores = [m[self.score_key] for m in measures]
@@ -224,7 +224,7 @@ class CellLevelSummary(Summary):
             infected_mask[cell_seg == label] = 1
 
         mean_serum_image = np.zeros_like(cell_seg, dtype=np.float32)
-        for label, intensity in zip(filter(lambda x: x != 0, labels), result['per_cell_statistics']['serum']['means']):
+        for label, intensity in zip(filter(lambda x: x != 0, labels), result['per_cell_statistics'][self.serum_key]['means']):
             mean_serum_image[cell_seg == label] = intensity
 
         seg_edges = seg_to_edges(cell_seg).astype('uint8')
