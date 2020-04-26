@@ -1,5 +1,6 @@
 import os
 from abc import ABC
+from collections import defaultdict
 
 import numpy as np
 import pickle
@@ -9,7 +10,8 @@ from ..base import BatchJobOnContainer
 from ..config import get_default_extension
 from ..util import (get_image_and_site_names, get_logger,
                     open_file, seg_to_edges, read_table,
-                    write_table, write_image_information)
+                    write_table, write_image_information,
+                    image_name_to_well_name)
 
 logger = get_logger('Workflow.BatchJob.Summary')
 
@@ -154,7 +156,17 @@ class CellLevelSummary(Summary):
         background_percentages = [result['per_cell_statistics']['marker']['sizes'][bg_ind] / img_size
                                   for result, bg_ind in zip(results, bg_inds)]
 
+        cell_based_scores = [m[self.score_key] for m in measures]
+        per_well_scores = defaultdict(list)
+        for im_name, score in zip(im_names, cell_based_scores):
+            if self.outlier_predicate(im_name):
+                continue
+            per_well_scores[image_name_to_well_name(im_name)].append(score)
+        per_well_scores = {well: np.median(scores) for well, scores in per_well_scores.items()}
+        per_well_scores = [per_well_scores.get(image_name_to_well_name(im_name), None) for im_name in im_names]
+
         column_names = ['cell_based_score',
+                        'well_cell_based_score'
                         'num_cells',
                         'num_infected_cells',
                         'num_not_infected_cells',
@@ -163,7 +175,8 @@ class CellLevelSummary(Summary):
                         'outlier',
                         ] + list(measures[0].keys())
 
-        column_dict = {site_name: [measures[i][self.score_key] if not self.outlier_predicate(im_name) else None,
+        column_dict = {site_name: [cell_based_scores[i] if not self.outlier_predicate(im_name) else None,
+                                   per_well_scores[i],
                                    num_cells[i],
                                    num_infected_cells[i],
                                    num_not_infected_cells[i],
