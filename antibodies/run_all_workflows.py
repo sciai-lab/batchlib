@@ -20,7 +20,7 @@ def dump_times(times, folder):
 def run_all_workflows(input_folder="",
                       run_pixelwise=True,
                       run_instance1=False,
-                      run_instance2=False,
+                      run_instance2=True,
                       serialize_times=False):
 
     times = {}
