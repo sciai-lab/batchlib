@@ -1,5 +1,3 @@
-#! /home/covid19/software/miniconda3/envs/antibodies-gpu/bin/python
-
 import os
 import time
 from glob import glob
@@ -18,11 +16,34 @@ from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
 from batchlib.util.logging import get_logger
 
-logger = get_logger('Workflow.InstanceAnalysis2')
+logger = get_logger('Workflow.CellAnalysis')
 
 
-def run_instance_analysis2(config):
-    name = 'InstanceAnalysisWorkflow2'
+def get_input_keys(config):
+
+    nuc_in_key = 'nuclei'
+    serum_in_key = 'serum'
+    marker_in_key = 'marker'
+
+    if config.segmentation_on_corrected:
+        nuc_seg_in_key = nuc_in_key + '_corrected'
+        serum_seg_in_key = serum_in_key + '_corrected'
+    else:
+        nuc_seg_in_key = nuc_in_key
+        serum_seg_in_key = serum_in_key
+
+    if config.analysis_on_corrected:
+        serum_ana_in_key = serum_in_key + '_corrected'
+        marker_ana_in_key = marker_in_key + '_corrected'
+    else:
+        serum_ana_in_key = serum_in_key
+        marker_ana_in_key = marker_in_key
+
+    return nuc_seg_in_key, serum_seg_in_key, marker_ana_in_key, serum_ana_in_key
+
+
+def run_cell_analysis(config):
+    name = 'CellAnalysisWorkflow'
 
     # to allow running on the cpu
     if config.gpu < 0:
@@ -35,7 +56,9 @@ def run_instance_analysis2(config):
             config.folder += '_' + name
 
     this_folder = os.path.split(__file__)[0]
-    model_root = os.path.join(this_folder, '../misc/models/stardist')
+    misc_folder = os.path.join(this_folder, '../misc')
+
+    model_root = os.path.join(misc_folder, 'models/stardist')
     model_name = '2D_dsb2018'
 
     barrel_corrector_path = os.path.join(this_folder, '../misc/', config.barrel_corrector)
@@ -76,7 +99,7 @@ def run_instance_analysis2(config):
                                        'input_key': nuc_seg_in_key,
                                        'output_key': config.nuc_key,
                                        'scale_factors': config.scale_factors},
-                             'run': {'gpu_id': config.gpu if not config.stardist_on_cpu else None,
+                             'run': {'gpu_id': config.gpu,
                                      'n_jobs': config.n_cpus}},
         SeededWatershed: {'build': {'pmap_key': config.bd_key,
                                     'seed_key': config.nuc_key,
@@ -101,14 +124,12 @@ def run_instance_analysis2(config):
                                    'run': {'gpu_id': config.gpu}}
     job_dict[CellLevelSummary] = {'build': {'serum_key': serum_ana_in_key,
                                             'marker_key': marker_ana_in_key,
-                                             'cell_seg_key': config.seg_key,
-                                             'analysis_folder': analysis_folder,
-                                             'outlier_predicate': outlier_predicate,
-                                             'scale_factors': config.scale_factors},
+                                            'cell_seg_key': config.seg_key,
+                                            'analysis_folder': analysis_folder,
+                                            'outlier_predicate': outlier_predicate,
+                                            'scale_factors': config.scale_factors},
                                   'run': {}}
 
-    if config.skip_analysis:
-        job_dict.pop(CellLevelAnalysis)
     t0 = time.time()
 
     run_workflow(name,
@@ -120,25 +141,20 @@ def run_instance_analysis2(config):
                  ignore_failed_outputs=config.ignore_failed_outputs)
 
     # run all plots on the output files
-    if not config.skip_analysis:
-        output_folder = os.path.join(config.folder, analysis_folder)
-        json_pattern = os.path.join(output_folder, "*.json")
-        all_json_files = glob(json_pattern)
-        all_plots(all_json_files, output_folder, keys=['ratio_of_median_of_means'])
+    output_folder = os.path.join(config.folder, analysis_folder)
+    json_pattern = os.path.join(output_folder, "*.json")
+    all_json_files = glob(json_pattern)
+    all_plots(all_json_files, output_folder, keys=['ratio_of_median_of_means'])
 
     t0 = time.time() - t0
     logger.info(f"Run {name} in {t0}s")
     return name, t0
 
 
-def parse_instance_config2():
-    return parser().parse_args()
-
-
 def parser():
     doc = """Run instance analysis workflow
-    Based on ilastik pixel prediction, stardist nucleus prediction
-    and watershed segmentation.
+    Based on UNet boundary and foreground prediction,
+    stardist nucleus prediction and watershed segmentation.
     """
     fhelp = """Folder to store the results. will default to
     /home/covid19/data/data-processed/<INPUT_FOLDER_NAME>, which will be
@@ -160,9 +176,6 @@ def parser():
     parser.add('--barrel_corrector', type=str, default="barrel_corrector.h5",
                help="name of barrel corrector file in ../misc/")
 
-    # as tensorflow / pytorch gpu issue workaround
-    parser.add('--stardist_on_cpu', default=False, action='store_true')
-
     # folder options
     # this parameter is not necessary here any more, but for now we need it to be
     # compatible with the pixel-wise workflow
@@ -175,9 +188,6 @@ def parser():
     parser.add("--mask_key", default='mask', type=str)
     parser.add("--nuc_key", default='nucleus_segmentation', type=str)
     parser.add("--seg_key", default='cell_segmentation', type=str)
-
-    # whether to skip the final analysis (this is to circumvent a bug regarding tensorflow not freeing the memory)
-    parser.add_argument('--skip_analysis', dest='skip_analysis', default=False, action='store_true')
 
     # whether to run the segmentation / analysis on the corrected or on the corrected data
     parser.add("--segmentation_on_corrected", default=True)
@@ -204,8 +214,3 @@ def parser():
                help="Path to the directory containing CSV files with marked outliers")
 
     return parser
-
-
-if __name__ == '__main__':
-    config = parse_instance_config2()
-    run_instance_analysis2(config)

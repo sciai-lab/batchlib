@@ -1,6 +1,4 @@
-import json
 import os
-import pickle
 from copy import copy, deepcopy
 from functools import partial
 
@@ -10,7 +8,7 @@ import torch
 from tqdm.auto import tqdm
 
 from batchlib.util.logging import get_logger
-from ..base import BatchJobWithSubfolder, BatchJobOnContainer
+from ..base import BatchJobOnContainer
 from ..util.io import open_file
 
 logger = get_logger('Workflow.BatchJob.CellLevelAnalysis')
@@ -199,7 +197,7 @@ class DenoiseByGrayscaleOpening(DenoiseChannel):
         return skimage.morphology.opening(img, selem=self.structuring_element)
 
 
-class CellLevelAnalysis(BatchJobWithSubfolder):
+class CellLevelAnalysis(BatchJobOnContainer):
     """
     """
     def __init__(self,
@@ -222,16 +220,16 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
         # all inputs should be 2d
         input_ndim = [2, 2, 2, 2]
 
-        # identifier allows to run different instances of this job on the same folder
-        output_ext = '.pickle' if identifier is None else f'_{identifier}.pickle'
+        # table output key
+        self.output_key = cell_seg_key if identifier is None else cell_seg_key + '_' + identifier
 
-        super().__init__(output_ext=output_ext,
-                         output_folder=output_folder,
+        super().__init__(output_folder=output_folder,
                          input_key=[self.serum_key,
                                     self.marker_key,
                                     self.nuc_seg_key,
                                     self.cell_seg_key],
                          input_ndim=input_ndim,
+                         output_key=self.output_key,
                          identifier=identifier)
 
     def load_sample(self, path, device):
@@ -304,17 +302,22 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
         infected_ind_with_bg = np.zeros_like(per_cell_statistics_to_save['marker']['means'])
         infected_ind_with_bg[per_cell_statistics_to_save['labels'] > 0] = infected_ind
 
-        result = dict(per_cell_statistics=per_cell_statistics_to_save,
-                      infected_ind=infected_ind_with_bg,
-                      measures=measures)
-        with open(out_file, 'wb') as f:
-            pickle.dump(result, f)
+        # TODO get columns and table for the result
+        with open_file(out_file, 'a') as f:
+            self.write_table(f, self.output_key, columns, table)
 
-        # also save the measures in jsons
-        measures = {key: (float(value) if (value is not None and np.isreal(value)) else None)
-                    for key, value in result['measures'].items()}
-        with open(out_file[:-6] + 'json', 'w') as fp:
-            json.dump(measures, fp)
+        # result = dict(per_cell_statistics=per_cell_statistics_to_save,
+        #               infected_ind=infected_ind_with_bg,
+        #               measures=measures)
+        # with open(out_file, 'wb') as f:
+        #     pickle.dump(result, f)
+
+        # FIXME I think we need this for the plots, so they should also read from the h5
+        # # also save the measures in jsons
+        # measures = {key: (float(value) if (value is not None and np.isreal(value)) else None)
+        #             for key, value in result['measures'].items()}
+        # with open(out_file[:-6] + 'json', 'w') as fp:
+        #     json.dump(measures, fp)
 
     def run(self, input_files, output_files, gpu_id=None):
         with torch.no_grad():
