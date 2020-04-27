@@ -358,13 +358,13 @@ class BatchJobOnContainer(BatchJob, ABC):
         key = 'tables/%s' % name
         ds = f.require_dataset(key, shape=table_.shape, compression='gzip', dtype='S10')
         ds[:] = table_
-        ds.attrs['columns'] = column_names
+        ds.attrs['columns'] = [np.string_(col_name) for col_name in column_names]
 
     def read_table(self, f, name):
         key = 'tables/%s' % name
         ds = f[key]
 
-        column_names = ds.attrs['columns']
+        column_names = [col_name.decode('utf-8') for col_name in ds.attrs['columns']]
         table = ds[:]
 
         def _cast(column):
