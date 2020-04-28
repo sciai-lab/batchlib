@@ -128,7 +128,6 @@ def run_instance_analysis2(config):
     job_dict[CellLevelSummary] = {'build': {'serum_key': serum_ana_in_key,
                                             'marker_key': marker_ana_in_key,
                                              'cell_seg_key': config.seg_key,
-                                             'analysis_folder': analysis_folder,
                                              'outlier_predicate': outlier_predicate,
                                              'scale_factors': config.scale_factors},
                                   'run': {}}

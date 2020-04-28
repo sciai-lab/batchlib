@@ -65,10 +65,11 @@ class Summary(BatchJobOnContainer, ABC):
 
         # if this table already exists, then extend the column_dict and the column_names
         if os.path.exists(self.table_path):
-            old_column_dict, old_column_names = read_table(self.table_path)
-            column_names = old_column_names + column_names
-            column_dict = {site_name: old_column_dict[site_name] + column_dict[site_name]
-                           for site_name in column_dict.keys()}
+            assert False  # FIXME this is currently not working, the table is not loaded in the same format..
+            # old_column_dict, old_column_names = read_table(self.table_path)
+            # column_names = old_column_names + column_names
+            # column_dict = {site_name: old_column_dict[site_name] + column_dict[site_name]
+            #                for site_name in column_dict.keys()}
 
         logger.info(f'{self.name}: save analysis table to {self.table_path}')
         write_table(self.folder, column_dict, column_names,
@@ -106,20 +107,17 @@ class CellLevelSummary(Summary):
                  cell_seg_key='cell_segmentation',
                  serum_key='serum',
                  marker_key='marker',
+                 measures_identifier=None,
                  infected_cell_mask_key='infected_cell_mask',
                  serum_per_cell_mean_key='serum_per_cell_mean',
                  edge_key='cell_segmentation_edges',
                  score_key='ratio_of_median_of_means',
-                 analysis_folder='instancewise_analysis_corrected',
                  outlier_predicate=lambda im: False,
                  table_name=None,
                  **super_kwargs):
         self.cell_seg_key = cell_seg_key
         self.serum_key = serum_key
         self.marker_key = marker_key
-
-        # TODO we should switch to h5 tables and then don't need this any more
-        self.analysis_folder = analysis_folder
 
         self.outlier_predicate = outlier_predicate
         self.score_key = score_key  # the main score for the table
@@ -130,13 +128,15 @@ class CellLevelSummary(Summary):
 
         self.outlier_predicate = outlier_predicate
 
-        input_key = [cell_seg_key, serum_key, marker_key]
-        input_ndim = [2, 2, 2]
-
+        self.measures_table_key = cell_seg_key + '/measures' + \
+                                  ('' if measures_identifier is None else '_' + measures_identifier)
+        self.cell_feature_table_keys = [cell_seg_key + '/' + channel for channel in (serum_key, marker_key)]
+        input_key = [cell_seg_key, serum_key, marker_key] + \
+                    ['tables/' + key for key in [self.measures_table_key] + self.cell_feature_table_keys]
         output_key = [infected_cell_mask_key, serum_per_cell_mean_key, edge_key]
         output_ndim = [2, 2, 2]
 
-        super().__init__(input_key=input_key, input_ndim=input_ndim,
+        super().__init__(input_key=input_key,
                          output_key=output_key, output_ndim=output_ndim,
                          table_name=table_name, **super_kwargs)
 
@@ -201,14 +201,24 @@ class CellLevelSummary(Summary):
                                 well_information=well_info)
 
     def load_result(self, in_path):
-        ext = get_default_extension()
-        assert in_path.endswith(ext)
-        # load result of cell level analysis
-        split_path = os.path.abspath(in_path).split(os.sep)
-        result_path = os.path.join('/', *split_path[:-1], self.analysis_folder, split_path[-1][:-3] + '.pickle')
-        assert os.path.isfile(result_path), f'Result file missing: {result_path}'
-        with open(result_path, 'rb') as f:
-            return pickle.load(f)
+        # TODO: parsing this again as a dict is not very elegant..
+        with open_file(in_path, 'r') as f:
+            def read_table_as_dict(table_key):
+                column_names, columns = self.read_table(f, table_key)
+                return {key: values for key, values in zip(column_names, columns.T)}
+            serum_dict = read_table_as_dict(self.cell_feature_table_keys[0])
+            marker_dict = read_table_as_dict(self.cell_feature_table_keys[1])
+            measures_dict = {str(key): values[0] for key, values in read_table_as_dict(self.measures_table_key).items()}
+        assert np.all(serum_dict['label_id'] == marker_dict['label_id'])
+        return {
+            'infected_ind': np.ones(len(serum_dict['label_id'])),  # FIXME save and load the actual infected indices
+            'measures': measures_dict,
+            'per_cell_statistics': {
+                'labels': serum_dict['label_id'],
+                self.serum_key: serum_dict,
+                self.marker_key: marker_dict
+            }
+        }
 
     def write_summary_images(self, in_path, out_path):
         result = self.load_result(in_path)

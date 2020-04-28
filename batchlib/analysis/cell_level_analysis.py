@@ -316,7 +316,7 @@ class CellLevelAnalysis(BatchJobOnContainer):
     def validate_input(self, path):
         return True  # FIXME fix input validation for tables (e.g. do not search for 's0' in groups)
 
-    def load_result(self, in_path, identifier=None):
+    def load_result(self, in_path):
         with open_file(in_path, 'r') as f:
             serum_keys, serum_table = self.read_table(f, self.serum_key)
             serum_dict = {key: values for key, values in zip(serum_keys, serum_table.T)}
