@@ -14,7 +14,18 @@ class TestWorkflow(unittest.TestCase):
         except OSError:
             pass
 
-    def test_instance_segmentation(self):
+    def test_pixel_analysis_workflow(self):
+        pass
+
+    def test_cell_analysis_workflow(self):
+        from batchlib.workflows import run_cell_analysis, cell_analysis_parser
+        # TODO rename this config
+        parser = cell_analysis_parser('test_instance_analysis_2.conf')
+        config = parser.parse_args()
+        run_cell_analysis(config)
+        # TODO check the results
+
+    def test_small_workflow(self):
         from batchlib.preprocessing import Preprocess
         from batchlib.segmentation import SeededWatershed
         from batchlib.segmentation.stardist_prediction import StardistPrediction

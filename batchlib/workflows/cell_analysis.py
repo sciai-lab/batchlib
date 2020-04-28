@@ -43,6 +43,9 @@ def get_input_keys(config):
 
 
 def run_cell_analysis(config):
+    """
+    """
+
     name = 'CellAnalysisWorkflow'
 
     # to allow running on the cpu
@@ -61,6 +64,7 @@ def run_cell_analysis(config):
     model_root = os.path.join(misc_folder, 'models/stardist')
     model_name = '2D_dsb2018'
 
+    # TODO load the correct barrel corrector based on the image size
     barrel_corrector_path = os.path.join(this_folder, '../misc/', config.barrel_corrector)
 
     torch_model_path = os.path.join(this_folder, '../misc/models/torch',
@@ -151,16 +155,24 @@ def run_cell_analysis(config):
     return name, t0
 
 
-def parser():
-    doc = """Run instance analysis workflow
-    Based on UNet boundary and foreground prediction,
+# TODO rename the default config
+def cell_analysis_parser(config_name='instance_analysis_2.conf'):
+    """
+    """
+
+    doc = """Run cell based analysis workflow.
+    Based on UNet boundary and foreground predictions,
     stardist nucleus prediction and watershed segmentation.
     """
     fhelp = """Folder to store the results. will default to
     /home/covid19/data/data-processed/<INPUT_FOLDER_NAME>, which will be
     overriden if this parameter is specified
     """
-    default_config = os.path.join(os.path.split(__file__)[0], 'configs', 'instance_analysis_2.conf')
+
+    this_folder = os.path.split(__file__)[0]
+    config_folder = os.path.join(this_folder, '../../antibodies/configs')
+    default_config = os.path.join(config_folder, config_name)
+
     parser = configargparse.ArgumentParser(description=doc,
                                            default_config_files=[default_config],
                                            config_file_parser_class=configargparse.YAMLConfigFileParser)
