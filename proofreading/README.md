@@ -23,9 +23,14 @@ Start bigcat:
 bigcat -i /path/to/output.h5 -r volumes/raw -l volumes/labels/fragments
 ```
 
-Export bigcat segmentation result (only works after corrected segmentation was exported, see below):
+Export bigcat segmentation result (only works after corrected segmentation was exported, see below).
+For the cell segmentation:
 ```
-python export_groundtruth.py /path/to/output.h5 /path/to/export.h5
+python export_cell_segmentation_groundtruth.py /path/to/output.h5 /path/to/export.h5
+```
+For the infected cells:
+```
+python export_infected_cells_groundtruth.py /path/to/output.h5 /path/to/export.h5
 ```
 
 

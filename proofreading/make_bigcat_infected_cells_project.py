@@ -29,7 +29,7 @@ def to_uint8(raw):
 
 
 # TODO need to read Roman's infected / non-infected classification from somewhere.
-def to_bigcat(serum, marker, segmentation, infected_labels, out_path):
+def to_bigcat(serum, marker, nuclei, segmentation, infected_labels, out_path):
     lut = fragment_segment_lut(segmentation, infected_labels)
     next_id = int(lut.max()) + 1
 
@@ -40,7 +40,9 @@ def to_bigcat(serum, marker, segmentation, infected_labels, out_path):
 
         serum = to_uint8(serum)
         marker = to_uint8(marker)
-        raw = np.concatenate([serum[None], marker[None]], axis=0)
+        nuclei = to_uint8(nuclei)
+
+        raw = np.concatenate([serum[None], marker[None], nuclei[None]], axis=0)
         ds = f.create_dataset('volumes/raw', data=raw.astype('uint8'), compression='gzip')
         attrs = ds.attrs
         attrs['resolution'] = res
@@ -63,19 +65,22 @@ def convert_to_bigcat(in_path, out_path, use_corrected):
     if use_corrected:
         serum_key = 'serum_corrected'
         marker_key = 'marker_corrected'
+        nuclei_key = 'nuclei_corrected'
     else:
         serum_key = 'serum'
         marker_key = 'marker'
+        nuclei_key = 'nuclei_corrected'
 
     with h5py.File(in_path, 'r') as f:
         serum = f[serum_key]['s0'][:]
         marker = f[marker_key]['s0'][:]
+        nuclei = f[nuclei_key]['s0'][:]
         seg = f['cell_segmentation/s0'][:]
 
         # TODO read infected labels from the cell level hdf5 table
         infected_labels = ''
 
-    to_bigcat(serum, marker, seg, infected_labels, out_path)
+    to_bigcat(serum, marker, nuclei, seg, infected_labels, out_path)
 
 
 if __name__ == '__main__':

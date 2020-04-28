@@ -3,7 +3,8 @@ import numpy as np
 import h5py
 
 
-# TODO enable exporting more channels for the infected problem ?
+# TODO should we enable also exporting the nucleus channel?
+# (= second raw channel)
 def export_from_bigcat(in_path, out_path):
     with h5py.File(in_path, 'r') as f:
         raw = f['volumes/raw'][0, :, :]
