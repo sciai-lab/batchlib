@@ -180,12 +180,11 @@ class DenoiseByGrayscaleOpening(DenoiseChannel):
         return skimage.morphology.opening(img, selem=self.structuring_element)
 
 
-class InstanceFeatureExtraction(BatchJobWithSubfolder):
+class InstanceFeatureExtraction(BatchJobOnContainer):
     def __init__(self,
                  channel_keys=('serum', 'marker'),
                  nuc_seg_key='nucleus_segmentation',
                  cell_seg_key='cell_segmentation',
-                 output_folder='instancewise_analysis',
                  identifier=None):
 
         self.channel_keys = tuple(channel_keys)
@@ -195,17 +194,12 @@ class InstanceFeatureExtraction(BatchJobWithSubfolder):
         # all inputs should be 2d
         input_ndim = [2, 2, 2, 2]
 
-        #TODO table output key
-        self.output_key = cell_seg_key if identifier is None else cell_seg_key + '_' + identifier
-
-        # identifier allows to run different instances of this job on the same folder
-        output_ext = '_features.pickle' if identifier is None else f'_{identifier}_features.pickle'
-
-        super().__init__(output_ext=output_ext,
-                         output_folder=output_folder,
-                         input_key=list(self.channel_keys + (self.nuc_seg_key, self.cell_seg_key)),
+        # tables are per default saved at tables/cell_segmentation/channel in the container
+        output_group = cell_seg_key if identifier is None else cell_seg_key + '_' + identifier
+        self.output_table_keys = [output_group + '/' + channel for channel in channel_keys]
+        super().__init__(input_key=list(self.channel_keys + (self.nuc_seg_key, self.cell_seg_key)),
                          input_ndim=input_ndim,
-                         #output_key=self.output_key,
+                         output_key=['tables/' + key for key in self.output_table_keys],
                          identifier=identifier)
 
     def load_sample(self, path, device):
@@ -268,14 +262,17 @@ class InstanceFeatureExtraction(BatchJobWithSubfolder):
         sample = self.load_sample(in_file, device=device)
         per_cell_statistics = self.eval_cells(*sample)
 
-
-        # TODO get columns and table for the result.
-        # We save the measures in their own one-row table
-        with open_file(out_file, 'a') as f:
-            self.write_table(f, self.output_key, columns, table)
-
-        with open(out_file, 'wb') as f:
-            pickle.dump(per_cell_statistics, f)
+        labels = per_cell_statistics['labels']
+        for channel, output_key in zip(self.channel_keys, self.output_table_keys):
+            columns = ['label_id']
+            table = [list(labels)]
+            for key, values in per_cell_statistics[channel].items():
+                columns.append(key)
+                table.append([v if v is not None else np.nan for v in values])
+            # transpose table to have shape (n_cells, n_features)
+            table = np.asarray(table, dtype=float).T
+            with open_file(out_file, 'a') as f:
+                self.write_table(f, output_key, columns, table)
 
     def run(self, input_files, output_files, gpu_id=None):
         with torch.no_grad():
@@ -290,49 +287,47 @@ class InstanceFeatureExtraction(BatchJobWithSubfolder):
                 _save_all_stats(input_file, output_file)
 
 
-class CellLevelAnalysis(BatchJobWithSubfolder):
+class CellLevelAnalysis(BatchJobOnContainer):
     """
     """
     def __init__(self,
-                 serum_key='serum', marker_key='marker', infected_decision_marker_key=None,
-                 output_folder='instancewise_analysis',
-                 features_for_infected_decision_identifier=None,
-                 features_for_evaluation_identifier=None,
+                 cell_seg_key='cell_segmentation',
+                 serum_key='serum',
+                 marker_key='marker',
                  infected_threshold=250, split_statistic='top50',
                  subtract_marker_background=True,
                  identifier=None):
-        self.serum_key = serum_key
-        self.marker_key = marker_key
-        self.infected_decision_marker_key = infected_decision_marker_key if infected_decision_marker_key is not None \
-            else marker_key
 
-        self.features_for_infected_decision_identifier = features_for_infected_decision_identifier
-        self.features_for_evaluation_identifier = features_for_evaluation_identifier
+        # TODO allow for serum and marker data to come from different segmentations
+        self.serum_key = cell_seg_key + '/' + serum_key
+        self.marker_key = cell_seg_key + '/' + marker_key
 
         self.infected_threshold = infected_threshold
         self.split_statistic = split_statistic
 
         self.subtract_marker_background = subtract_marker_background
-        # identifier allows to run different instances of this job on the same folder
-        output_ext = '.pickle' if identifier is None else f'_{identifier}.pickle'
 
-        super().__init__(output_ext=output_ext,
-                         output_folder=output_folder,
+        self.table_key = f'{cell_seg_key}/measures' if identifier is None else f'{cell_seg_key}/measures_{identifier}'
+
+        super().__init__(input_key=['tables/' + key for key in (serum_key, marker_key)],
+                         output_key='tables/' + self.table_key,
                          identifier=identifier)
 
+    def validate_input(self, path):
+        return True  # FIXME fix input validation for tables (e.g. do not search for 's0' in groups)
+
     def load_result(self, in_path, identifier=None):
-        # TODO: adjust to loading from the table
-        ext = get_default_extension()
-        assert in_path.endswith(ext)
-        # load result of cell level feature extraction
-        split_path = os.path.abspath(in_path).split(os.sep)
-        result_path = os.path.join(
-            '/', *split_path[:-1], self.output_folder,
-            split_path[-1][:-3] + ('_features.pickle' if identifier is None else f'_{identifier}_features.pickle')
-        )
-        assert os.path.isfile(result_path), f'Cell feature file missing: {result_path}'
-        with open(result_path, 'rb') as f:
-            return pickle.load(f)
+        with open_file(in_path, 'r') as f:
+            serum_keys, serum_table = self.read_table(f, self.serum_key)
+            serum_dict = {key: values for key, values in zip(serum_keys, serum_table.T)}
+            marker_keys, marker_table = self.read_table(f, self.marker_key)
+            marker_dict = {key: values for key, values in zip(marker_keys, marker_table.T)}
+        assert np.all(serum_dict['label_id'] == marker_dict['label_id'])
+        return {
+            'labels': serum_dict['label_id'],
+            self.serum_key: serum_dict,
+            self.marker_key: marker_dict
+        }
 
     def preprocess_per_cell_statistics(self, per_cell_statistics, marker_key=None):
         marker_key = marker_key if marker_key is not None else self.marker_key
@@ -346,16 +341,9 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
 
     # this is what should be run for each h5 file
     def save_all_stats(self, in_file, out_file):
-        # TODO: only save the measures and not again the cell-level features
-        per_cell_statistics_to_save = self.load_result(in_file, self.features_for_evaluation_identifier)
+        per_cell_statistics_to_save = self.load_result(in_file)
         per_cell_statistics = self.preprocess_per_cell_statistics(deepcopy(per_cell_statistics_to_save))
-        if self.features_for_evaluation_identifier != self.features_for_infected_decision_identifier:
-            pcs_for_infected_identification = self.load_result(in_file, self.features_for_infected_decision_identifier)
-            pcs_for_infected_identification = self.preprocess_per_cell_statistics(
-                pcs_for_infected_identification, marker_key=self.infected_decision_marker_key)
-        else:
-            pcs_for_infected_identification = deepcopy(per_cell_statistics)
-        infected_ind = self.get_infected_ind(pcs_for_infected_identification)
+        infected_ind = self.get_infected_ind(per_cell_statistics)
 
         not_infected_ind = 1 - infected_ind
         not_infected_cell_statistics = index_cell_properties(per_cell_statistics, not_infected_ind)
@@ -365,16 +353,16 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
         infected_ind_with_bg = np.zeros_like(per_cell_statistics_to_save[self.marker_key]['means'])
         infected_ind_with_bg[per_cell_statistics_to_save['labels'] > 0] = infected_ind
 
-        # TODO get columns and table for the result.
         # We save the measures in their own one-row table
         with open_file(out_file, 'a') as f:
-            self.write_table(f, self.output_key, columns, table)
+            self.write_table(
+                f, self.table_key,
+                column_names=np.asarray(['label_id'] + list(measures.keys())),
+                table=np.asarray([np.nan] + [m if m is not None else np.nan for m in measures.values()])[None]
+            )
 
-        # result = dict(per_cell_statistics=per_cell_statistics_to_save,
-        #               infected_ind=infected_ind_with_bg,
-        #               measures=measures)
-        # with open(out_file, 'wb') as f:
-        #     pickle.dump(result, f)
+        # TODO: how to save the non-infected indices?
+        #  Make one big per-cell table for the analysis, with both serum and marker statistics?
 
         # FIXME I think we need this for the plots, so they should also read from the h5
         # # also save the measures in jsons

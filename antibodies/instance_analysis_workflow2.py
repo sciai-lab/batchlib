@@ -7,7 +7,8 @@ from glob import glob
 import configargparse
 
 from batchlib import run_workflow
-from batchlib.analysis.cell_level_analysis import CellLevelAnalysis, DenoiseByGrayscaleOpening
+from batchlib.analysis.cell_level_analysis import InstanceFeatureExtraction, \
+    CellLevelAnalysis, DenoiseByGrayscaleOpening
 from batchlib.analysis.pixel_level_analysis import all_plots
 from batchlib.analysis.summary import CellLevelSummary
 from batchlib.outliers.outlier import get_outlier_predicate
@@ -19,6 +20,29 @@ from batchlib.segmentation.unet import UNet2D
 from batchlib.util.logging import get_logger
 
 logger = get_logger('Workflow.InstanceAnalysis2')
+
+
+def get_input_keys(config):
+
+    nuc_in_key = 'nuclei'
+    serum_in_key = 'serum'
+    marker_in_key = 'marker'
+
+    if config.segmentation_on_corrected:
+        nuc_seg_in_key = nuc_in_key + '_corrected'
+        serum_seg_in_key = serum_in_key + '_corrected'
+    else:
+        nuc_seg_in_key = nuc_in_key
+        serum_seg_in_key = serum_in_key
+
+    if config.analysis_on_corrected:
+        serum_ana_in_key = serum_in_key + '_corrected'
+        marker_ana_in_key = marker_in_key + '_corrected'
+    else:
+        serum_ana_in_key = serum_in_key
+        marker_ana_in_key = marker_in_key
+
+    return nuc_seg_in_key, serum_seg_in_key, marker_ana_in_key, serum_ana_in_key
 
 
 def run_instance_analysis2(config):
@@ -93,12 +117,14 @@ def run_instance_analysis2(config):
                                                'run': {}}
         marker_ana_in_key = marker_ana_in_key + '_denoised'
 
+    job_dict[InstanceFeatureExtraction] = {'build': {'channel_keys': (serum_ana_in_key, marker_ana_in_key),
+                                                     'nuc_seg_key': config.nuc_key,
+                                                     'cell_seg_key': config.seg_key},
+                                           'run': {'gpu_id': config.gpu}}
     job_dict[CellLevelAnalysis] = {'build': {'serum_key': serum_ana_in_key,
                                              'marker_key': marker_ana_in_key,
-                                             'nuc_seg_key': config.nuc_key,
-                                             'cell_seg_key': config.seg_key,
-                                             'output_folder': analysis_folder},
-                                   'run': {'gpu_id': config.gpu}}
+                                             'cell_seg_key': config.seg_key},
+                                   'run': {}}
     job_dict[CellLevelSummary] = {'build': {'serum_key': serum_ana_in_key,
                                             'marker_key': marker_ana_in_key,
                                              'cell_seg_key': config.seg_key,
