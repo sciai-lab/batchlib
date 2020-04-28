@@ -15,6 +15,12 @@ class TestOutliers(unittest.TestCase):
         img_name = 'WellA01_PointA01_0008_ChannelDAPI,WF_GFP,TRITC_Seq0008'
         assert outliers(img_name)
 
+    def test_no_outlier_for_plate(self):
+        plate_name = 'New_plate'
+        outliers = OutlierPredicate(self._global_path, plate_name)
+        img_name = 'WellA01_PointA01_0008_ChannelDAPI,WF_GFP,TRITC_Seq0008'
+        assert outliers(img_name) is None
+
     def test_outlier_number(self):
         plate_files = [
             os.path.split(csv_file)[1] for csv_file in glob.glob(os.path.join(self._global_path, '*.csv'))
