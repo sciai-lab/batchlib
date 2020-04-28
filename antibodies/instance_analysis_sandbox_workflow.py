@@ -7,7 +7,7 @@ from glob import glob
 import configargparse
 
 from batchlib import run_workflow
-from batchlib.analysis.cell_level_analysis import CellLevelAnalysis, DenoiseByGrayscaleOpening
+from batchlib.analysis.cell_level_analysis import InstanceFeatureExtraction, CellLevelAnalysis, DenoiseByGrayscaleOpening
 from batchlib.analysis.pixel_level_analysis import all_plots
 from batchlib.analysis.summary import CellLevelSummary
 from batchlib.outliers.outlier import get_outlier_predicate
@@ -15,6 +15,7 @@ from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
+from batchlib.segmentation.voronoi_ring_segmentation import VoronoiRingSegmentation
 from batchlib.segmentation.unet import UNet2D
 from batchlib.util.logging import get_logger
 
@@ -80,63 +81,122 @@ def run_instance_analysis2(config):
 
     outlier_predicate = get_outlier_predicate(config)
 
-    job_dict = {
-        Preprocess.from_folder: {'build': {'input_folder': config.input_folder,
-                                           'barrel_corrector_path': barrel_corrector_path,
-                                           'scale_factors': config.scale_factors},
-                                 'run': {'n_jobs': config.n_cpus}},
-        TorchPrediction: {'build': {'input_key': serum_seg_in_key,
-                                    'output_key': [config.mask_key, config.bd_key],
-                                    'model_path': torch_model_path,
-                                    'model_class': torch_model_class,
-                                    'model_kwargs': torch_model_kwargs,
-                                    'scale_factors': config.scale_factors},
-                          'run': {'gpu_id': config.gpu,
-                                  'batch_size': config.batch_size,
-                                  'threshold_channels': {0: 0.5}}},
-        StardistPrediction: {'build': {'model_root': model_root,
-                                       'model_name': model_name,
-                                       'input_key': nuc_seg_in_key,
-                                       'output_key': config.nuc_key,
-                                       'scale_factors': config.scale_factors},
-                             'run': {'gpu_id': config.gpu if not config.stardist_on_cpu else None,
-                                     'n_jobs': config.n_cpus}},
-        SeededWatershed: {'build': {'pmap_key': config.bd_key,
-                                    'seed_key': config.nuc_key,
-                                    'output_key': config.seg_key,
-                                    'mask_key': config.mask_key,
-                                    'scale_factors': config.scale_factors},
-                          'run': {'erode_mask': 20,
-                                  'dilate_seeds': 3,
-                                  'n_jobs': config.n_cpus}}
-    }
+    job_list = [
+        (Preprocess.from_folder,
+         {'build': {'input_folder': config.input_folder,
+                    'barrel_corrector_path': barrel_corrector_path,
+                    'scale_factors': config.scale_factors},
+          'run': {'n_jobs': config.n_cpus}}),
+        (TorchPrediction,
+         {'build': {'input_key': serum_seg_in_key,
+                    'output_key': [config.mask_key, config.bd_key],
+                    'model_path': torch_model_path,
+                    'model_class': torch_model_class,
+                    'model_kwargs': torch_model_kwargs,
+                    'scale_factors': config.scale_factors},
+          'run': {'gpu_id': config.gpu,
+                  'batch_size': config.batch_size,
+                  'threshold_channels': {0: 0.5}}}),
+        (StardistPrediction,
+         {'build': {'model_root': model_root,
+                    'model_name': model_name,
+                    'input_key': nuc_seg_in_key,
+                    'output_key': config.nuc_key,
+                    'scale_factors': config.scale_factors},
+          'run': {'gpu_id': config.gpu if not config.stardist_on_cpu else None,
+                  'n_jobs': config.n_cpus}}),
+        (SeededWatershed,
+         {'build': {'pmap_key': config.bd_key,
+                    'seed_key': config.nuc_key,
+                    'output_key': config.seg_key,
+                    'mask_key': config.mask_key,
+                    'scale_factors': config.scale_factors},
+          'run': {'erode_mask': 20,
+                  'dilate_seeds': 3,
+                  'n_jobs': config.n_cpus}}),
+    ]
     if config.marker_denoise_radius > 0:
-        job_dict[DenoiseByGrayscaleOpening] = {'build': {'key_to_denoise': marker_ana_in_key,
-                                                         'radius': config.marker_denoise_radius},
-                                               'run': {}}
+        job_list.append((DenoiseByGrayscaleOpening,
+                         {'build': {'key_to_denoise': marker_ana_in_key,
+                                    'radius': config.marker_denoise_radius},
+                          'run': {}}))
         marker_ana_in_key = marker_ana_in_key + '_denoised'
 
-    job_dict[CellLevelAnalysis] = {'build': {'serum_key': serum_ana_in_key,
-                                             'marker_key': marker_ana_in_key,
-                                             'nuc_seg_key': config.nuc_key,
-                                             'cell_seg_key': config.seg_key,
-                                             'output_folder': analysis_folder},
-                                   'run': {'gpu_id': config.gpu}}
-    job_dict[CellLevelSummary] = {'build': {'serum_key': serum_ana_in_key,
-                                            'marker_key': marker_ana_in_key,
-                                             'cell_seg_key': config.seg_key,
-                                             'analysis_folder': analysis_folder,
-                                             'outlier_predicate': outlier_predicate,
-                                             'scale_factors': config.scale_factors},
-                                  'run': {}}
+    job_list.append((InstanceFeatureExtraction,
+                     {'build': {'channel_keys': (serum_ana_in_key, marker_ana_in_key),
+                                'nuc_seg_key': config.nuc_key,
+                                'cell_seg_key': config.seg_key,
+                                'output_folder': analysis_folder},
+                      'run': {'gpu_id': config.gpu}}))
+
+    job_list.append((CellLevelAnalysis,
+                     {'build': {'serum_key': serum_ana_in_key,
+                                'marker_key': marker_ana_in_key,
+                                'output_folder': analysis_folder},
+                      'run': {}}))
+
+    job_list.append((CellLevelSummary,
+                     {'build': {'serum_key': serum_ana_in_key,
+                                'marker_key': marker_ana_in_key,
+                                'cell_seg_key': config.seg_key,
+                                'analysis_folder': analysis_folder,
+                                'outlier_predicate': outlier_predicate,
+                                'scale_factors': config.scale_factors},
+                      'run': {}}))
+
+    # second variant
+    if config.run_local_infected_ring_based:
+        analysis_folder += '_ring'
+        job_list.append((VoronoiRingSegmentation,
+                         {'build': {'input_key': config.nuc_key,
+                                    'output_key': 'ring_segmentation',
+                                    'ring_width': 10},
+                          'run': {}}))
+
+        job_list.append((InstanceFeatureExtraction,
+                         {'build': {'channel_keys': (serum_ana_in_key, marker_ana_in_key),
+                                    'nuc_seg_key': config.nuc_key,
+                                    'cell_seg_key': config.seg_key,
+                                    'output_folder': analysis_folder},
+                          'run': {'gpu_id': config.gpu}}))
+
+        job_list.append((InstanceFeatureExtraction,
+                         {'build': {'channel_keys': (serum_ana_in_key, 'local_infected'),
+                                    'nuc_seg_key': config.nuc_key,
+                                    'cell_seg_key': 'ring_segmentation',
+                                    'output_folder': analysis_folder,
+                                    'identifier': 'ring'},
+                          'run': {'gpu_id': config.gpu}}))
+
+        job_list.append((CellLevelAnalysis,
+                         {'build': {'serum_key': serum_ana_in_key,
+                                    'features_for_infected_decision_identifier': 'ring',
+                                    'infected_threshold': 0.6,
+                                    'split_statistic': 'means',
+                                    'subtract_marker_background': False,
+                                    'marker_key': marker_ana_in_key,
+                                    'output_folder': analysis_folder,
+                                    'identifier': None},
+                          'run': {}}))
+
+        job_list.append((CellLevelSummary,
+                         {'build': {'serum_key': serum_ana_in_key,
+                                    'marker_key': marker_ana_in_key,
+                                    'cell_seg_key': config.seg_key,
+                                    'analysis_folder': analysis_folder,
+                                    'outlier_predicate': outlier_predicate,
+                                    'scale_factors': config.scale_factors,
+                                    'table_name': 'ring_based_infected_analysis.csv'},
+                          'run': {}}))
 
     if config.skip_analysis:
-        job_dict.pop(CellLevelAnalysis)
+        raise NotImplementedError
+
     t0 = time.time()
 
     run_workflow(name,
                  config.folder,
-                 job_dict,
+                 job_list,
                  input_folder=config.input_folder,
                  force_recompute=config.force_recompute,
                  ignore_invalid_inputs=config.ignore_invalid_inputs,
@@ -201,6 +261,9 @@ def parser():
 
     # whether to skip the final analysis (this is to circumvent a bug regarding tensorflow not freeing the memory)
     parser.add_argument('--skip_analysis', dest='skip_analysis', default=False, action='store_true')
+
+    parser.add_argument('--run_local_infected_ring_based', dest='run_local_infected_ring_based',
+                        default=False, action='store_true')
 
     # whether to run the segmentation / analysis on the corrected or on the corrected data
     parser.add("--segmentation_on_corrected", default=True)
