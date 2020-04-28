@@ -354,18 +354,26 @@ class BatchJobOnContainer(BatchJob, ABC):
         # cast all values to numpy string
         table_ = table.astype('S10')
 
-        # make the dataset
+        # make the table datasets. we follow the layout
+        # table/cells - contains the data
+        # table/columns - containse the column names
         key = 'tables/%s' % name
-        ds = f.require_dataset(key, shape=table_.shape, compression='gzip', dtype='S10')
+        g = f.require_group(key)
+
+        ds = g.require_dataset('cells', shape=table_.shape, compression='gzip', dtype='S10')
         ds[:] = table_
-        ds.attrs['columns'] = column_names
+
+        ds = g.require_dataset('columns', shape=(len(column_names),), dtype='S10')
+        ds[:] = np.array(column_names, dtype='S10')
 
     def read_table(self, f, name):
         key = 'tables/%s' % name
-        ds = f[key]
-
-        column_names = ds.attrs['columns']
+        g = f[key]
+        ds = g['cells']
         table = ds[:]
+
+        ds = g['columns']
+        column_names = [col_name.decode('utf-8') for col_name in ds[:]]
 
         def _cast(column):
             try:

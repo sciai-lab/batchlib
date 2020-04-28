@@ -1,6 +1,4 @@
-import json
 import os
-import pickle
 from copy import copy, deepcopy
 from functools import partial
 
@@ -197,6 +195,9 @@ class InstanceFeatureExtraction(BatchJobWithSubfolder):
         # all inputs should be 2d
         input_ndim = [2, 2, 2, 2]
 
+        #TODO table output key
+        self.output_key = cell_seg_key if identifier is None else cell_seg_key + '_' + identifier
+
         # identifier allows to run different instances of this job on the same folder
         output_ext = '_features.pickle' if identifier is None else f'_{identifier}_features.pickle'
 
@@ -204,6 +205,7 @@ class InstanceFeatureExtraction(BatchJobWithSubfolder):
                          output_folder=output_folder,
                          input_key=list(self.channel_keys + (self.nuc_seg_key, self.cell_seg_key)),
                          input_ndim=input_ndim,
+                         #output_key=self.output_key,
                          identifier=identifier)
 
     def load_sample(self, path, device):
@@ -266,6 +268,12 @@ class InstanceFeatureExtraction(BatchJobWithSubfolder):
         sample = self.load_sample(in_file, device=device)
         per_cell_statistics = self.eval_cells(*sample)
 
+
+        # TODO get columns and table for the result.
+        # We save the measures in their own one-row table
+        with open_file(out_file, 'a') as f:
+            self.write_table(f, self.output_key, columns, table)
+
         with open(out_file, 'wb') as f:
             pickle.dump(per_cell_statistics, f)
 
@@ -313,6 +321,7 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
                          identifier=identifier)
 
     def load_result(self, in_path, identifier=None):
+        # TODO: adjust to loading from the table
         ext = get_default_extension()
         assert in_path.endswith(ext)
         # load result of cell level feature extraction
@@ -356,17 +365,23 @@ class CellLevelAnalysis(BatchJobWithSubfolder):
         infected_ind_with_bg = np.zeros_like(per_cell_statistics_to_save[self.marker_key]['means'])
         infected_ind_with_bg[per_cell_statistics_to_save['labels'] > 0] = infected_ind
 
-        result = dict(per_cell_statistics=per_cell_statistics_to_save,
-                      infected_ind=infected_ind_with_bg,
-                      measures=measures)
-        with open(out_file, 'wb') as f:
-            pickle.dump(result, f)
+        # TODO get columns and table for the result.
+        # We save the measures in their own one-row table
+        with open_file(out_file, 'a') as f:
+            self.write_table(f, self.output_key, columns, table)
 
-        # also save the measures in jsons
-        measures = {key: (float(value) if (value is not None and np.isreal(value)) else None)
-                    for key, value in result['measures'].items()}
-        with open(out_file[:-6] + 'json', 'w') as fp:
-            json.dump(measures, fp)
+        # result = dict(per_cell_statistics=per_cell_statistics_to_save,
+        #               infected_ind=infected_ind_with_bg,
+        #               measures=measures)
+        # with open(out_file, 'wb') as f:
+        #     pickle.dump(result, f)
+
+        # FIXME I think we need this for the plots, so they should also read from the h5
+        # # also save the measures in jsons
+        # measures = {key: (float(value) if (value is not None and np.isreal(value)) else None)
+        #             for key, value in result['measures'].items()}
+        # with open(out_file[:-6] + 'json', 'w') as fp:
+        #     json.dump(measures, fp)
 
     def run(self, input_files, output_files):
         for input_file, output_file in tqdm(list(zip(input_files, output_files)),

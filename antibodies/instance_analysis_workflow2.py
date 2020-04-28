@@ -21,29 +21,6 @@ from batchlib.util.logging import get_logger
 logger = get_logger('Workflow.InstanceAnalysis2')
 
 
-def get_input_keys(config):
-
-    nuc_in_key = 'nuclei'
-    serum_in_key = 'serum'
-    marker_in_key = 'marker'
-
-    if config.segmentation_on_corrected:
-        nuc_seg_in_key = nuc_in_key + '_corrected'
-        serum_seg_in_key = serum_in_key + '_corrected'
-    else:
-        nuc_seg_in_key = nuc_in_key
-        serum_seg_in_key = serum_in_key
-
-    if config.analysis_on_corrected:
-        serum_ana_in_key = serum_in_key + '_corrected'
-        marker_ana_in_key = marker_in_key + '_corrected'
-    else:
-        serum_ana_in_key = serum_in_key
-        marker_ana_in_key = marker_in_key
-
-    return nuc_seg_in_key, serum_seg_in_key, marker_ana_in_key, serum_ana_in_key
-
-
 def run_instance_analysis2(config):
     name = 'InstanceAnalysisWorkflow2'
 

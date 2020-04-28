@@ -33,16 +33,18 @@ class Preprocess(BatchJobOnContainer):
     """
     semantic_viewer_settings = {'nuclei': {'color': 'Blue', 'visible': True},
                                 'serum': {'color': 'Green', 'visible': True},
-                                'marker': {'color': 'Red', 'visible': True}}
+                                'marker': {'color': 'Red', 'visible': True},
+                                'cells': {'color': 'Gray', 'visible': False}}
 
     @staticmethod
-    def validate_barrel_corector(path, channel_names):
+    def validate_barrel_corrector(path, channel_names, channel_mapping):
         if path is None:
             return
         with open_file(path, 'r') as f:
-            channels_found = [name in f for name in channel_names]
+            channels_found = [name in f for name in channel_names if channel_mapping[name] is not None]
         if not all(channels_found):
-            raise ValueError("Could not find all channel names in the barrel corrector file")
+            missing_channels = ' '.join(chan for chan, found in zip(channel_names, channels_found) if not found)
+            raise ValueError("Could not find all channel names in the barrel corrector file: %s" % missing_channels)
 
     @classmethod
     def from_folder(cls, input_folder, output_ext=None,
@@ -55,14 +57,20 @@ class Preprocess(BatchJobOnContainer):
         with open(mapping_file, 'r') as f:
             channel_mapping = json.load(f)
 
-        # validate the channel mapping:
-        mapping_values = set(val for val in channel_mapping.values() if val is not None)
-        # make sure that we have exaclty three valid channel names
-        if len(mapping_values) != 3:
-            raise ValueError("Invalid channel mapping")
-        # make sure that we map to the correct names
-        if len(set(cls.semantic_viewer_settings.keys()) - mapping_values) != 0:
-            raise ValueError("Invalid channel mapping")
+        viewer_settings = {}
+        for chan_name, semantic_name in channel_mapping.items():
+            if semantic_name is None:
+                continue
+
+            this_settings = None
+            for name, settings in cls.semantic_viewer_settings.items():
+                if semantic_name.startswith(name):
+                    this_settings = settings
+                    break
+
+            if this_settings is None:
+                raise ValueError("Did not find a matching semantic channel for %s" % semantic_name)
+            viewer_settings[semantic_name] = this_settings
 
         # parse the channel names and make sure they match with the mapping
         pattern = os.path.join(input_folder, '*.tiff')
@@ -75,30 +83,29 @@ class Preprocess(BatchJobOnContainer):
         if any(parse_channel_names(path) != channel_names for path in input_files[1:]):
             raise ValueError("Channel names are not consistent for all files")
 
-        return cls(channel_names, channel_mapping,
+        return cls(channel_names, channel_mapping, viewer_settings,
                    output_ext=output_ext,
                    barrel_corrector_path=barrel_corrector_path, **super_kwargs)
 
-    def __init__(self, channel_names, channel_mapping,
+    def __init__(self, channel_names, channel_mapping, viewer_settings,
                  output_ext=None, barrel_corrector_path=None,
                  **super_kwargs):
 
         output_ext = get_default_extension() if output_ext is None else output_ext
 
-        self.validate_barrel_corector(barrel_corrector_path, channel_names)
+        self.validate_barrel_corrector(barrel_corrector_path, channel_names, channel_mapping)
         self.barrel_corrector_path = barrel_corrector_path
 
         self.channel_mapping = channel_mapping
         self.channel_names = channel_names
 
-        channel_out_names = list(self.semantic_viewer_settings.keys())
+        channel_out_names = list(viewer_settings.keys())
         if self.barrel_corrector_path is not None:
             channel_out_names += [chan_name + '_corrected' for chan_name in channel_out_names]
         channel_out_dims = [2] * len(channel_out_names)
 
         # add the channel information to the viewer settings, so
         # we can keep track of the original channel names later
-        viewer_settings = self.semantic_viewer_settings
         for name, semantic_name in self.channel_mapping.items():
             if semantic_name is None:
                 continue
@@ -122,19 +129,22 @@ class Preprocess(BatchJobOnContainer):
                 if semantic_name is None:
                     continue
 
+                this_settings = self.viewer_settings[semantic_name].copy()
+                if barrel_corrector is not None:
+                    this_settings.update({'visible': False})
+
                 # save the raw image channel
                 chan = im[chan_id]
-                self.write_image(f, semantic_name, chan)
+                self.write_image(f, semantic_name, chan, settings=this_settings)
 
                 # apply and save the barrel corrected channel,
                 # if we have a barrel corrector
                 if barrel_corrector is not None:
                     this_corrector = barrel_corrector[name]
+                    this_settings.update({'visible': True})
                     chan = barrel_correction(chan, *this_corrector)
 
                     # get the settings for this image channel
-                    this_settings = self.viewer_settings[semantic_name].copy()
-                    this_settings.update({'visible': False})
                     self.write_image(f, semantic_name + '_corrected', chan,
                                      settings=this_settings)
 
@@ -145,6 +155,10 @@ class Preprocess(BatchJobOnContainer):
         barrel_corrector = {}
         with open_file(self.barrel_corrector_path, 'r') as f:
             for name in self.channel_names:
+
+                if self.channel_mapping[name] is None:
+                    continue
+
                 ds = f[name]
                 corrector = ds[:]
                 offset = ds.attrs['offset']
