@@ -352,7 +352,7 @@ class BatchJobOnContainer(BatchJob, ABC):
             raise ValueError("Expect label ids in first column")
 
         # cast all values to numpy string
-        table_ = table.astype('S10')
+        table_ = table.astype('S100')
 
         # make the table datasets. we follow the layout
         # table/cells - contains the data
@@ -360,11 +360,11 @@ class BatchJobOnContainer(BatchJob, ABC):
         key = 'tables/%s' % name
         g = f.require_group(key)
 
-        ds = g.require_dataset('cells', shape=table_.shape, compression='gzip', dtype='S10')
+        ds = g.require_dataset('cells', shape=table_.shape, compression='gzip', dtype='S100')
         ds[:] = table_
 
-        ds = g.require_dataset('columns', shape=(len(column_names),), dtype='S10')
-        ds[:] = np.array(column_names, dtype='S10')
+        ds = g.require_dataset('columns', shape=(len(column_names),), dtype='S100')
+        ds[:] = np.array(column_names, dtype='S100')
 
     def read_table(self, f, name):
         key = 'tables/%s' % name
