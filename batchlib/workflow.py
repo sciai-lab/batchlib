@@ -34,10 +34,14 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
                  lock_folder=True):
     """ Run workflow of consecutive batch jobs.
 
-    The jobs to be run are specified in a dictionary:
+    The jobs to be run are specified in a dictionary, like
     job_dict = {FirstJob: {'build': {...},
                            'run': {...}},
                 SecondJob: {}}
+    or alternatively as a list of tuples, like
+    job_dict = [(FirstJob, {'build': {...},
+                           'run': {...}}),
+                (SecondJob, {})]
     All keys must be classes that inherit from batchlib.BatchJob and map
     to a dictionary with optional keys:
         build_kwargs - keyword arguments passed in class init
@@ -75,7 +79,7 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
 
         logger.info(f"Running workflow: '{name}'. Job spec: {job_dict}")
 
-        for job_id, (job_class, kwarg_dict) in enumerate(job_dict.items()):
+        for job_id, (job_class, kwarg_dict) in enumerate(job_dict.items() if isinstance(job_dict, dict) else job_dict):
             build_kwargs = kwarg_dict.get('build', {})
             run_kwargs = kwarg_dict.get('run', {})
 

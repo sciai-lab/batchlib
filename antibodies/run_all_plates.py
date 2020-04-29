@@ -36,8 +36,8 @@ def run_plates(folders):
         # run_all_workflows(folder)
         # TODO don't hard-code to these workflows
         try:
-            run_instance2(folder, use_unique_output_folder=False)
             run_pixel1(folder, use_unique_output_folder=False)
+            run_instance2(folder, use_unique_output_folder=False)
         except Exception as e:
             print(f'\nException while evaluating folder {folder}.')
             print(traceback.format_exc())
