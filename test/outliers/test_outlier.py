@@ -1,3 +1,4 @@
+import glob
 import os
 import unittest
 from pathlib import Path
@@ -9,22 +10,33 @@ class TestOutliers(unittest.TestCase):
     _global_path = os.path.join(Path(__file__).parent.parent.parent.absolute(), 'misc/tagged_outliers')
 
     def test_outliers(self):
-        outliers = OutlierPredicate(self._global_path)
         plate_name = '20200406_164555_328'
+        outliers = OutlierPredicate(self._global_path, plate_name)
         img_name = 'WellA01_PointA01_0008_ChannelDAPI,WF_GFP,TRITC_Seq0008'
-        assert outliers.is_outlier(plate_name, img_name)
+        assert outliers(img_name)
+
+    def test_no_outlier_for_plate(self):
+        plate_name = 'New_plate'
+        outliers = OutlierPredicate(self._global_path, plate_name)
+        img_name = 'WellA01_PointA01_0008_ChannelDAPI,WF_GFP,TRITC_Seq0008'
+        assert outliers(img_name) is None
 
     def test_outlier_number(self):
-        outliers = OutlierPredicate(self._global_path)
+        plate_files = [
+            os.path.split(csv_file)[1] for csv_file in glob.glob(os.path.join(self._global_path, '*.csv'))
+        ]
+        plate_names = [pn[:pn.find('_tagger')] for pn in plate_files]
+
         plate_count = {}
         total_outlier_count = 0
         total_count = 0
 
-        for plate_name, state in outliers.outliers.items():
+        for plate_name in plate_names:
+            op = OutlierPredicate(self._global_path, plate_name)
             count = 0
             outlier_count = 0
-            for img_file in state:
-                if outliers.is_outlier(plate_name, img_file):
+            for img_file in op.outlier_tags:
+                if op(img_file):
                     outlier_count += 1
                     total_outlier_count += 1
                 count += 1

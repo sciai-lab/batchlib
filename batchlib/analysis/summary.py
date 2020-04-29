@@ -107,7 +107,7 @@ class CellLevelSummary(Summary):
                  edge_key='cell_segmentation_edges',
                  score_key='ratio_of_median_of_means',
                  analysis_folder='instancewise_analysis_corrected',
-                 outlier_predicate=lambda im: False,
+                 outlier_predicate=lambda im: None,
                  table_name=None,
                  **super_kwargs):
         self.cell_seg_key = cell_seg_key
