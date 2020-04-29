@@ -5,7 +5,6 @@ from time import sleep
 
 import h5py
 import numpy as np
-import pandas as pd
 from skimage.transform import downscale_local_mean, resize
 
 try:
@@ -89,40 +88,6 @@ def get_image_and_site_names(folder, pattern):
     im_names = [os.path.splitext(name)[0] for name in im_names]
     site_names = [image_name_to_site_name(name) for name in im_names]
     return im_names, site_names
-
-
-def read_table(path):
-    table = pd.read_csv(path, sep='\t')
-    columns = table.columns
-    if (columns[0] != 'image') or (columns[1] != 'site-name'):
-        raise ValueError("Invalid table columns")
-    column_names = columns[2:]
-
-    table = table.values[:, 1:]
-    column_dict = {row[0]: row[1:].astype('float32').tolist() for row in table}
-
-    return column_dict, column_names
-
-
-def write_table(folder, column_dict, column_names, out_path, pattern='*.h5'):
-
-    im_names, site_names = get_image_and_site_names(folder, pattern)
-    table = [im_names, site_names]
-
-    n_cols = len(column_names)
-    cols = [[column_dict[name][ii] for name in site_names] for ii in range(n_cols)]
-    table += cols
-
-    column_names = ['image', 'site-name'] + column_names
-    n_cols = len(column_names)
-    n_images = len(im_names)
-
-    table = np.array(table).T
-    exp_shape = (n_images, n_cols)
-    assert table.shape == exp_shape, "%s, %s" % (table.shape, exp_shape)
-
-    table = pd.DataFrame(table, columns=column_names)
-    table.to_csv(out_path, sep='\t', index=False)
 
 
 def sample_shape(shape, scale_factor, add_incomplete_blocks=False):
@@ -217,7 +182,7 @@ def write_image_information(path, image_information=None, well_information=None,
 
         def _write_info(info_key, info_val):
             if not isinstance(info_val, str):
-                raise ValueError("Expect %s to be str, got %s" % type(info_key, info_val))
+                raise ValueError("Expect %s to be str, got %s" % type(info_key), type(info_val))
             if not overwrite and info_key in attrs:
                 info_val = info_val + "; " + attrs[info_key]
             attrs[info_key] = info_val

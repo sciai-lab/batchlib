@@ -8,7 +8,7 @@ class TestWorkflow(unittest.TestCase):
     in_folder = os.path.join(os.path.split(__file__)[0], '../data/test_data/test')
     folder = './out'
 
-    def _tearDown(self):
+    def tearDown(self):
         try:
             rmtree(self.folder)
         except OSError:

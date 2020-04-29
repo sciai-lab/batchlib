@@ -1,6 +1,5 @@
 import os
 import time
-from glob import glob
 
 import configargparse
 
@@ -8,7 +7,6 @@ from batchlib import run_workflow
 from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    DenoiseByGrayscaleOpening,
                                                    InstanceFeatureExtraction)
-from batchlib.analysis.summary import CellLevelSummary
 from batchlib.outliers.outlier import get_outlier_predicate
 from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import SeededWatershed
@@ -121,21 +119,16 @@ def run_cell_analysis(config):
                                                'run': {}}
         marker_ana_in_key = marker_ana_in_key + '_denoised'
 
-    # TODO I think we can merge "CellLevelAnalysis" and "CellLevelSummary"
     job_dict[InstanceFeatureExtraction] = {'build': {'channel_keys': (serum_ana_in_key, marker_ana_in_key),
                                                      'nuc_seg_key': config.nuc_key,
                                                      'cell_seg_key': config.seg_key},
                                            'run': {'gpu_id': config.gpu}}
     job_dict[CellLevelAnalysis] = {'build': {'serum_key': serum_ana_in_key,
                                              'marker_key': marker_ana_in_key,
-                                             'cell_seg_key': config.seg_key}}
-    job_dict[CellLevelSummary] = {'build': {'serum_key': serum_ana_in_key,
-                                            'marker_key': marker_ana_in_key,
-                                            'cell_seg_key': config.seg_key,
-                                            'outlier_predicate': outlier_predicate,
-                                            'scale_factors': config.scale_factors},
-                                  'run': {}}
-
+                                             'cell_seg_key': config.seg_key,
+                                             'outlier_predicate': outlier_predicate,
+                                             'write_summary_images': True,
+                                             'scale_factors': config.scale_factors}}
     t0 = time.time()
 
     run_workflow(name,
@@ -147,9 +140,11 @@ def run_cell_analysis(config):
                  ignore_failed_outputs=config.ignore_failed_outputs)
 
     # run all plots on the output files
-    all_files = glob(config.folder, "*.h5")
     plot_folder = os.path.join(config.folder, 'plots')
-    all_plots(all_files, plot_folder, keys=['ratio_of_median_of_means'])
+    table_path = CellLevelAnalysis.folder_to_table_path(config.folder)
+    all_plots(table_path, plot_folder,
+              table_key='tables/images/default',
+              stat_names=['ratio_of_median_of_means'])
 
     t0 = time.time() - t0
     logger.info(f"Run {name} in {t0}s")

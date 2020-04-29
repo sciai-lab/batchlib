@@ -345,26 +345,35 @@ class BatchJobOnContainer(BatchJob, ABC):
     # read and write tables
     #
 
-    def write_table(self, f, name, column_names, table):
+    def write_table(self, f, name, column_names, table, visible=None):
         if len(column_names) != table.shape[1]:
             raise ValueError("Number of columns does not match")
-        if column_names[0] != 'label_id':
-            raise ValueError("Expect label ids in first column")
 
+        # TODO try varlen string, and if that doesn't work with java,
+        # issue a warning if a string is cut
         # cast all values to numpy string
         table_ = table.astype('S100')
 
         # make the table datasets. we follow the layout
         # table/cells - contains the data
         # table/columns - containse the column names
+        # table/visible - contains which columns are visible in the plate-viewer
+
         key = 'tables/%s' % name
         g = f.require_group(key)
 
         ds = g.require_dataset('cells', shape=table_.shape, compression='gzip', dtype='S100')
         ds[:] = table_
 
-        ds = g.require_dataset('columns', shape=(len(column_names),), dtype='S100')
+        n_cols = len(column_names)
+        ds = g.require_dataset('columns', shape=(n_cols,), dtype='S100')
         ds[:] = np.array(column_names, dtype='S100')
+
+        if visible is None:
+            visible = np.ones(n_cols, dtype='bool')
+
+        ds = g.require_dataset('visible', shape=visible.shape, dtype='bool')
+        ds[:] = visible
 
     def read_table(self, f, name):
         key = 'tables/%s' % name

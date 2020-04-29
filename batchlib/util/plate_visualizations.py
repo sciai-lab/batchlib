@@ -1,5 +1,5 @@
+import os
 import re
-import math
 from collections import defaultdict
 
 import numpy as np
@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use("Agg")
 from matplotlib.collections import PatchCollection
-from matplotlib.patches import Circle, Wedge, Polygon
+from matplotlib.patches import Circle, Wedge
 
 row_letters = np.array(list('ABCDEFGH'))
 letter_to_row = {letter: i for i, letter in enumerate(row_letters)}
@@ -245,7 +245,8 @@ def all_plots(table_path, out_folder, table_key, stat_names=None):
         column_names = g['columns'][:]
         table = g['cells'][:]
     column_names = [name.decode('utf8') for name in column_names]
-    assert column_names[0] == 'image'
+    # TODO need to change this to also suport well name
+    assert column_names[0] == 'image_name'
 
     stats_per_file = {}
 
@@ -256,8 +257,9 @@ def all_plots(table_path, out_folder, table_key, stat_names=None):
     for name in tqdm(stat_names, desc='making plots'):
 
         # 0th column is the image name
+        image_names = [str(im_name) for im_name in table[:, 0]]
         stat_id = column_names.index(name)
-        stats_per_file = dict(zip(table[:, 0], table[:, stat_id]))
+        stats_per_file = dict(zip(image_names, table[:, stat_id].astype('float')))
 
         outfile = os.path.join(out_folder, f"plates_{name}.png")
         # TODO is there a reason for the previous weird title ???
@@ -269,6 +271,7 @@ def all_plots(table_path, out_folder, table_key, stat_names=None):
                   title=name)
                   # title=out_path + "\n" + name)
 
+        # TODO we should actually use the well level table for this
         outfile = os.path.join(out_folder, f"plates_{name}_median.png")
         # TODO is there a reason for the previous weird title ???
         # TODO median over wells ? does this make sense ? not medain over images ?
@@ -282,7 +285,6 @@ def all_plots(table_path, out_folder, table_key, stat_names=None):
 
 
 if __name__ == '__main__':
-    import os
     result_dir = '/export/home/rremme/Datasets/antibodies/covid-data-vibor/20200406_210102_953/'
     well_plot({name: np.random.rand(1)[0]
                for name in os.listdir(result_dir)},

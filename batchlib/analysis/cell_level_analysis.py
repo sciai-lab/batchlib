@@ -8,9 +8,9 @@ import torch
 from tqdm.auto import tqdm
 
 from batchlib.util.logging import get_logger
-from ..base import BatchJobWithSubfolder, BatchJobOnContainer
-from ..config import get_default_extension
-from ..util.io import open_file
+from ..base import BatchJobOnContainer
+from ..util.image import seg_to_edges
+from ..util.io import open_file, image_name_to_site_name, image_name_to_well_name, write_image_information
 
 logger = get_logger('Workflow.BatchJob.CellLevelAnalysis')
 
@@ -290,13 +290,26 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
 class CellLevelAnalysis(BatchJobOnContainer):
     """
     """
+    # TODO enable over-riding these keys to allow runnning CellLevelAnalysis Jobs
+    # with different settings on the same folder
+    image_table_key = 'images/default'
+    well_table_key = 'wells/default'
+
     def __init__(self,
                  cell_seg_key='cell_segmentation',
                  serum_key='serum',
                  marker_key='marker',
+                 outlier_predicate=lambda im: False,
+                 score_name='ratio_of_median_of_means',
                  infected_threshold=250, split_statistic='top50',
                  subtract_marker_background=True,
-                 identifier=None):
+                 write_summary_images=False,
+                 infected_cell_mask_key='infected_cell_mask',
+                 serum_per_cell_mean_key='serum_per_cell_mean',
+                 edge_key='cell_segmentation_edges',
+                 **super_kwargs):
+
+        self.outlier_predicate = outlier_predicate
 
         # TODO allow for serum and marker data to come from different segmentations
         self.serum_key = cell_seg_key + '/' + serum_key
@@ -306,15 +319,78 @@ class CellLevelAnalysis(BatchJobOnContainer):
         self.split_statistic = split_statistic
 
         self.subtract_marker_background = subtract_marker_background
+        self.score_name = score_name
+        self.write_summary_images = write_summary_images
 
-        self.table_key = f'{cell_seg_key}/measures' if identifier is None else f'{cell_seg_key}/measures_{identifier}'
+        if self.write_summary_images:
+            output_key = [infected_cell_mask_key,
+                          serum_per_cell_mean_key,
+                          edge_key]
+            self.edge_key = edge_key
+        else:
+            output_key = None
 
-        super().__init__(input_key=['tables/' + key for key in (serum_key, marker_key)],
-                         output_key='tables/' + self.table_key,
-                         identifier=identifier)
+        self.cell_seg_key = cell_seg_key
+        super().__init__(input_key=[f'tables/{cell_seg_key}/{key}' for key in (serum_key, marker_key)],
+                         output_key=output_key,
+                         **super_kwargs)
 
+    # in the long run we should merge this into BatchJobOnContainer somehow
     def validate_input(self, path):
-        return True  # FIXME fix input validation for tables (e.g. do not search for 's0' in groups)
+        if not os.path.exists(path):
+            return False
+
+        exp_keys = self._input_exp_key
+        if exp_keys is None:
+            return True
+        with open_file(path, 'r') as f:
+            for key in exp_keys:
+                if key not in f:
+                    print("111", key)
+                    return False
+                g = f[key]
+                if ('cells' not in g) or ('columns' not in g):
+                    print('AAA', key)
+                    return False
+        return True
+
+    @staticmethod
+    def folder_to_table_path(folder):
+        # NOTE, we call this .hdf5 to avoid pattern matching, it's a bit hacky ...
+        table_file_name = os.path.split(folder)[1] + '_table.hdf5'
+        return os.path.join(folder, table_file_name)
+
+    @property
+    def table_out_path(self):
+        return self.folder_to_table_path(self.folder)
+
+    def check_table(self):
+        table_path = self.table_out_path
+        if not os.path.exists(table_path):
+            return False
+        with open_file(table_path, 'r') as f:
+            if self.image_table_key not in f:
+                return False
+            if self.well_table_key not in f:
+                return False
+        return True
+
+    # we only write a single output file, so need to over-write the output validation and output checks
+    def check_output(self, path):
+        have_table = self.check_table()
+        if self.write_summary_images:
+            return have_table and super().check_output(path)
+        else:
+            return have_table
+
+    def validate_outputs(self, output_files, folder, status, ignore_failed_outputs):
+        have_table = self.check_table()
+        if self.write_summary_images:
+            return have_table and super().validate_outputs(output_files,
+                                                           folder, status,
+                                                           ignore_failed_outputs)
+        else:
+            return have_table
 
     def load_result(self, in_path):
         with open_file(in_path, 'r') as f:
@@ -340,38 +416,154 @@ class CellLevelAnalysis(BatchJobOnContainer):
         return per_cell_statistics[self.marker_key][self.split_statistic] > self.infected_threshold
 
     # this is what should be run for each h5 file
-    def save_all_stats(self, in_file, out_file):
-        per_cell_statistics_to_save = self.load_result(in_file)
-        per_cell_statistics = self.preprocess_per_cell_statistics(deepcopy(per_cell_statistics_to_save))
-        infected_ind = self.get_infected_ind(per_cell_statistics)
+    def write_image_table(self, input_files):
 
-        not_infected_ind = 1 - infected_ind
-        not_infected_cell_statistics = index_cell_properties(per_cell_statistics, not_infected_ind)
-        infected_cell_statistics = index_cell_properties(per_cell_statistics, infected_ind)
-        measures = compute_ratios(not_infected_cell_statistics, infected_cell_statistics, serum_key=self.serum_key)
+        column_names = ['image_name', 'site_name', 'score', 'marked_as_outlier']
+        table = []
 
-        infected_ind_with_bg = np.zeros_like(per_cell_statistics_to_save[self.marker_key]['means'])
-        infected_ind_with_bg[per_cell_statistics_to_save['labels'] > 0] = infected_ind
+        for ii, in_file in enumerate(input_files):
+            per_cell_statistics_to_save = self.load_result(in_file)
+            per_cell_statistics = self.preprocess_per_cell_statistics(deepcopy(per_cell_statistics_to_save))
 
-        # We save the measures in their own one-row table
-        with open_file(out_file, 'a') as f:
-            self.write_table(
-                f, self.table_key,
-                column_names=np.asarray(['label_id'] + list(measures.keys())),
-                table=np.asarray([np.nan] + [m if m is not None else np.nan for m in measures.values()])[None]
-            )
+            # TODO this should go to a separate job (e.g. FindInfectedCells),
+            # and we should also figure out if
+            # preprocess_per_cell_statistics can be moved to a previous job
+            # (either FindInfectedCells or InstanceFeatureExtraction)
+            infected_ind = self.get_infected_ind(per_cell_statistics)
 
-        # TODO: how to save the non-infected indices?
-        #  Make one big per-cell table for the analysis, with both serum and marker statistics?
+            not_infected_ind = 1 - infected_ind
+            not_infected_cell_statistics = index_cell_properties(per_cell_statistics, not_infected_ind)
+            infected_cell_statistics = index_cell_properties(per_cell_statistics, infected_ind)
+            measures = compute_ratios(not_infected_cell_statistics, infected_cell_statistics, serum_key=self.serum_key)
+            if ii == 0:
+                column_names += list(measures.keys())
 
-        # FIXME I think we need this for the plots, so they should also read from the h5
-        # # also save the measures in jsons
-        # measures = {key: (float(value) if (value is not None and np.isreal(value)) else None)
-        #             for key, value in result['measures'].items()}
-        # with open(out_file[:-6] + 'json', 'w') as fp:
-        #     json.dump(measures, fp)
+            infected_ind_with_bg = np.zeros_like(per_cell_statistics_to_save[self.marker_key]['means'])
+            infected_ind_with_bg[per_cell_statistics_to_save['labels'] > 0] = infected_ind
+
+            image_name = os.path.splitext(os.path.split(in_file)[1])[0]
+            site_name = image_name_to_site_name(image_name)
+
+            # outliers can have the following values:
+            # 0: not an outlier
+            # 1: outlier
+            # -1: no annotation available
+            outlier = self.outlier_predicate(image_name)
+            score = measures[self.score_name]
+            score = np.nan if (outlier == 1 or score is None) else score
+            table.append([image_name, site_name, score, outlier] +
+                         [np.nan if m is None else m for m in measures.values()])
+
+        # NOTE: todos left from Roman
+        # TODO: Make one big per-cell table for the analysis, with both serum and marker statistics?
+
+        table = np.array(table)
+        n_cols = len(column_names)
+        assert n_cols == table.shape[1]
+
+        # set image name to non-visible for the plateViewer (something else?)
+        visible = np.ones(n_cols, dtype='bool')
+        visible[0] = False
+
+        with open_file(self.table_out_path, 'a') as f:
+            self.write_table(f, self.image_table_key, column_names, table, visible)
+
+        return table, column_names
+
+    def write_well_table(self, input_files, image_table, image_columns):
+        site_names = image_table[:, 1]
+        well_names = np.array([name.split('-')[0] for name in site_names])
+
+        value_table = image_table[:, 2:]
+        column_names = image_columns[2:]
+        assert len(column_names) == value_table.shape[1]
+
+        unique_wells = np.unique(well_names)
+        well_column_names = ['well_name'] + column_names
+
+        table = []
+        # could maybe be done more efficiently
+        for well_name in unique_wells:
+            well_mask = well_names == well_name
+            this_values = value_table[well_mask]
+
+            row = []
+            for col_id, name in enumerate(column_names):
+                # TODO we should take median by default, but use
+                # different rules for special names.
+                # e.g. for number of cells we should use sum
+                # for outliers, we should count the number of outliers etc.
+                try:
+                    row_values = this_values[:, col_id].astype('float')
+                    this_value = np.median(row_values[np.isfinite(row_values)])
+                except ValueError:
+                    this_value = np.nan
+                row.append(this_value)
+
+            table.append([well_name] + row)
+
+        table = np.array(table)
+        n_cols = len(well_column_names)
+
+        assert table.shape[1] == n_cols
+
+        return table, well_column_names
+
+    # write the image and well score attributes
+    def write_image_and_well_information(self, files,
+                                         image_table, image_columns,
+                                         well_table, well_columns):
+
+        image_score_index = image_columns.index('score')
+        image_information = dict(zip(image_table[:, 0], image_table[:, image_score_index]))
+
+        well_score_index = well_columns.index('score')
+        well_information = dict(zip(well_table[:, 0], well_table[:, well_score_index]))
+
+        for path in files:
+            name = os.path.splitext(os.path.split(path)[1])[0]
+            well_name = image_name_to_well_name(name)
+            write_image_information(path,
+                                    image_information=str(image_information[name]),
+                                    well_information=str(well_information[well_name]))
+
+    def write_summary_image(self, in_path, out_path):
+
+        with open_file(in_path, 'r') as f:
+            cell_seg = self.read_image(f, self.cell_seg_key)
+
+        # TODO this needs to be simplified
+        # result = self.load_result(in_path)
+        # labels = result['per_cell_statistics']['labels']
+        # labels = np.array([], dtype=np.int32) if labels is None else labels
+        # infected_labels = labels[result['infected_ind'] != 0]
+
+        # infected_mask = np.zeros_like(cell_seg)
+        # for label in infected_labels:
+        #     infected_mask[cell_seg == label] = 1
+
+        # mean_serum_image = np.zeros_like(cell_seg, dtype=np.float32)
+        # for label, intensity in zip(filter(lambda x: x != 0, labels),
+        #                             result['per_cell_statistics'][self.serum_key]['means']):
+        #     mean_serum_image[cell_seg == label] = intensity
+
+        seg_edges = seg_to_edges(cell_seg).astype('uint8')
+
+        with open_file(out_path, 'a') as f:
+            # we need to use nearest down-sampling for the mean serum images,
+            # because while these are float values, they should not be interpolated
+            # self.write_image(f, self.serum_per_cell_mean_key, mean_serum_image,
+            #                  settings={'use_nearest': True})
+            # self.write_image(f, self.infected_cell_mask_key, infected_mask)
+            self.write_image(f, self.edge_key, seg_edges)
 
     def run(self, input_files, output_files):
-        for input_file, output_file in tqdm(list(zip(input_files, output_files)),
-                                            desc='running cell-level analysis on images'):
-            self.save_all_stats(input_file, output_file)
+        image_table, image_columns = self.write_image_table(input_files)
+        well_table, well_columns = self.write_well_table(input_files, image_table, image_columns)
+        self.write_image_and_well_information(output_files, image_table, image_columns,
+                                              well_table, well_columns)
+
+        if self.write_summary_images:
+            for input_file, output_file in tqdm(list(zip(input_files, output_files)),
+                                                desc='write cell level analysis summary images'):
+                self.write_summary_image(input_file, output_file)
