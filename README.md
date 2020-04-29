@@ -48,6 +48,8 @@ There are som more advanced methods of execution, they can be activated by passi
 
 ### Data model
 
+#### Image Data
+
 The intermediate image data associated with one raw image is stored in an h5 container with the same name as the image.
 All images are stored with one group per image channel. The group layout for a channel called `data` looks like this:
 ```
@@ -59,6 +61,21 @@ All images are stored with one group per image channel. The group layout for a c
 ```
 The sub-datasets `sI` store the channel's image data as multi-scale image pyramid.
 In addition, the group `data` contains metadata to display the image in the [plateViewer fiji plugin](https://github.com/embl-cba/fiji-plugin-plateViewer).
+
+#### Tables
+
+Tables are stored in the group `/tables` with the following layout:
+```
+/tables
+  /table-name (can be nested)
+    /cells  (contains the table values as 2d dataset of strings)
+    /columns (contains the column names as 1d dataset of strings)
+    /visible (should the columns be shown in the plate-viewer? 1d dataset of bools)
+```
+Three different kinds of tables are supported by the plate viewer:
+- `cell tables`: containing object level information for the cell segmentation. Must be stored in `/tables/<NAME OF SEGMENTATION>/<NAME>` and the first column must contain the corresponding object ids and be called `label_id`
+- `image tables`: containing image level information. Must be stored in a separate file: `<PLATE NAME_tables.hdf5> (note that we don't use the `.h5` extension to avoid matching this file)`. In this file, it must be stored in `/tables/images/<NAME>` (the plate-viewer will load the table called `default` on start, but other tables can be selected) . The first column must contain the image file name and be called `image_name`, the second column must contain the site name, `<WELL NAME-ID IN WELL>` and be called `site name`.
+- `well_tables`: containing well level information. Must be stored in same file as `image tables` in `/tables/wells/<NAME>`. The first column must cotain the well name and be called `well_name`.
 
 ### Implement a new Batch Job
 
