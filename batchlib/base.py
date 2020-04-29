@@ -202,6 +202,9 @@ class BatchJob(ABC):
             input_folder_ = folder if input_folder is None else input_folder
             logger.info(f'{self.name}: input folder is {input_folder_}')
 
+            # monkey patch the folder, so that we can get this in the run and input / output validation methods
+            self.folder = folder
+
             # validate and get the input files to be processed
             input_files = self.get_inputs(folder, input_folder_, status,
                                           force_recompute, ignore_invalid_inputs)
@@ -212,9 +215,6 @@ class BatchJob(ABC):
             # get the output files corresponding to the input files
             output_files = self.to_outputs(input_files, folder)
             assert len(input_files) == len(output_files)
-
-            # monkey patch the folder, so that we can get this in the run method
-            self.folder = folder
 
             logger.info(f'{self.name}: call run method with {len(input_files)} inputs.')
             logger.debug(f'{self.name}: with the following inputs:\n {input_files}')
@@ -352,7 +352,7 @@ class BatchJobOnContainer(BatchJob, ABC):
             raise ValueError("Expect label ids in first column")
 
         # cast all values to numpy string
-        table_ = table.astype('S10')
+        table_ = table.astype('S100')
 
         # make the table datasets. we follow the layout
         # table/cells - contains the data
@@ -360,11 +360,11 @@ class BatchJobOnContainer(BatchJob, ABC):
         key = 'tables/%s' % name
         g = f.require_group(key)
 
-        ds = g.require_dataset('cells', shape=table_.shape, compression='gzip', dtype='S10')
+        ds = g.require_dataset('cells', shape=table_.shape, compression='gzip', dtype='S100')
         ds[:] = table_
 
-        ds = g.require_dataset('columns', shape=(len(column_names),), dtype='S10')
-        ds[:] = np.array(column_names, dtype='S10')
+        ds = g.require_dataset('columns', shape=(len(column_names),), dtype='S100')
+        ds[:] = np.array(column_names, dtype='S100')
 
     def read_table(self, f, name):
         key = 'tables/%s' % name
