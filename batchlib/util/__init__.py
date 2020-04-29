@@ -6,4 +6,3 @@ from .io import (open_file, downscale_image, is_dataset, is_group, read_table,
                  DelayedKeyboardInterrupt)
 from .jobs import files_to_jobs, get_file_lock
 from .logging import get_logger, add_file_handler
-from .plate_visualizations import well_plot, score_distribution_plots

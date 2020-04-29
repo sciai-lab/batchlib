@@ -1,11 +1,16 @@
+import re
+import math
+from collections import defaultdict
+
 import numpy as np
+from tqdm import tqdm
+from batchlib.util.io import open_file
+
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use("Agg")
-import re
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Circle, Wedge, Polygon
-from collections import defaultdict
 
 row_letters = np.array(list('ABCDEFGH'))
 letter_to_row = {letter: i for i, letter in enumerate(row_letters)}
@@ -186,7 +191,7 @@ def score_distribution_plots(infected_values, not_infected_values, infected_medi
         # per-well scatter and violins
         ax[0].scatter(y, x, alpha=0.2, marker='o', color='r', label='per patient ratios\nover all cells')
         violin_parts = ax[0].violinplot([not_infected_medians, infected_medians], vert=False,
-                                         bw_method=violin_bw_method)
+                                        bw_method=violin_bw_method)
         for pc in violin_parts['bodies']:
             pc.set_facecolor('green')
 
@@ -217,6 +222,63 @@ def score_distribution_plots(infected_values, not_infected_values, infected_medi
     if outfile is not None:
         plt.savefig(outfile)
         plt.close()
+
+
+def get_colorbar_range(key):
+    colorbar_range = None
+
+    if key == "ratio_of_mean_over_mean":
+        colorbar_range = (1, 1.3)
+
+    if key == "plates_ratio_of_mean_over_mean_median":
+        colorbar_range = (1, 1.3)
+
+    return colorbar_range
+
+
+def all_plots(table_path, out_folder, table_key, stat_names=None):
+    os.makedirs(out_folder, exist_ok=True)
+
+    # load first file to get all the column names
+    with open_file(table_path, 'r') as f:
+        g = f[table_key]
+        column_names = g['columns'][:]
+        table = g['cells'][:]
+    column_names = [name.decode('utf8') for name in column_names]
+    assert column_names[0] == 'image'
+
+    stats_per_file = {}
+
+    if stat_names is None:
+        stat_names = [name for name in column_names]  # if name.startswith("ratio_of")]
+    # TODO check that we have all the stat names
+
+    for name in tqdm(stat_names, desc='making plots'):
+
+        # 0th column is the image name
+        stat_id = column_names.index(name)
+        stats_per_file = dict(zip(table[:, 0], table[:, stat_id]))
+
+        outfile = os.path.join(out_folder, f"plates_{name}.png")
+        # TODO is there a reason for the previous weird title ???
+        well_plot(stats_per_file,
+                  figsize=(14, 6),
+                  print_medians=True,
+                  # colorbar_range=get_colorbar_range(key),
+                  outfile=outfile,
+                  title=name)
+                  # title=out_path + "\n" + name)
+
+        outfile = os.path.join(out_folder, f"plates_{name}_median.png")
+        # TODO is there a reason for the previous weird title ???
+        # TODO median over wells ? does this make sense ? not medain over images ?
+        well_plot(stats_per_file,
+                  figsize=(14, 6),
+                  outfile=outfile,
+                  print_medians=True,
+                  wedge_width=0.,
+                  # colorbar_range=get_colorbar_range(key),
+                  title=name + " median over wells")
 
 
 if __name__ == '__main__':

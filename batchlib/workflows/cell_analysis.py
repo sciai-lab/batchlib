@@ -8,7 +8,6 @@ from batchlib import run_workflow
 from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    DenoiseByGrayscaleOpening,
                                                    InstanceFeatureExtraction)
-from batchlib.analysis.pixel_level_analysis import all_plots
 from batchlib.analysis.summary import CellLevelSummary
 from batchlib.outliers.outlier import get_outlier_predicate
 from batchlib.preprocessing import Preprocess
@@ -16,7 +15,8 @@ from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
-from batchlib.util.logging import get_logger
+from batchlib.util import get_logger
+from batchlib.util.plate_visualizations import all_plots
 
 logger = get_logger('Workflow.CellAnalysis')
 
@@ -82,7 +82,6 @@ def run_cell_analysis(config):
     # get keys and identifier
     (nuc_seg_in_key, serum_seg_in_key,
      marker_ana_in_key, serum_ana_in_key) = get_input_keys(config)
-    analysis_folder = 'instancewise_analysis_corrected' if config.analysis_on_corrected else 'instancewise_analysis'
 
     outlier_predicate = get_outlier_predicate(config)
 
@@ -148,10 +147,9 @@ def run_cell_analysis(config):
                  ignore_failed_outputs=config.ignore_failed_outputs)
 
     # run all plots on the output files
-    output_folder = os.path.join(config.folder, analysis_folder)
-    json_pattern = os.path.join(output_folder, "*.json")
-    all_json_files = glob(json_pattern)
-    all_plots(all_json_files, output_folder, keys=['ratio_of_median_of_means'])
+    all_files = glob(config.folder, "*.h5")
+    plot_folder = os.path.join(config.folder, 'plots')
+    all_plots(all_files, plot_folder, keys=['ratio_of_median_of_means'])
 
     t0 = time.time() - t0
     logger.info(f"Run {name} in {t0}s")
@@ -204,6 +202,7 @@ def cell_analysis_parser(config_folder, config_name='instance_analysis_2.conf'):
     parser.add("--nuc_key", default='nucleus_segmentation', type=str)
     parser.add("--seg_key", default='cell_segmentation', type=str)
 
+    # TODO I am not sure if changing away from the defaults works for this
     # whether to run the segmentation / analysis on the corrected or on the corrected data
     parser.add("--segmentation_on_corrected", default=True)
     parser.add("--analysis_on_corrected", default=True)
