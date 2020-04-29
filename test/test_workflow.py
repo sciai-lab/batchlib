@@ -8,7 +8,7 @@ class TestWorkflow(unittest.TestCase):
     in_folder = os.path.join(os.path.split(__file__)[0], '../data/test_data/test')
     folder = './out'
 
-    def tearDown(self):
+    def _tearDown(self):
         try:
             rmtree(self.folder)
         except OSError:
@@ -20,8 +20,8 @@ class TestWorkflow(unittest.TestCase):
     def test_cell_analysis_workflow(self):
         from batchlib.workflows import run_cell_analysis, cell_analysis_parser
         # TODO rename this config
-        parser = cell_analysis_parser('test_instance_analysis_2.conf')
-        config = parser.parse_args()
+        parser = cell_analysis_parser('./configs', 'test_cell_analysis.conf')
+        config, _ = parser.parse_known_args()
         run_cell_analysis(config)
         # TODO check the results
 
