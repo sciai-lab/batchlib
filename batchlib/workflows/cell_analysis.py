@@ -136,7 +136,16 @@ def run_cell_analysis(config):
     job_list.append((InstanceFeatureExtraction, {
         'build': {
             'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
-            'nuc_seg_key': config.nuc_key,
+            'nuc_seg_key_to_ignore': config.nuc_key,
+            'cell_seg_key': config.seg_key},
+        'run': {'gpu_id': config.gpu}}))
+
+    # Also compute features with nuclei if they should be used later
+    job_list.append((InstanceFeatureExtraction, {
+        'build': {
+            'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
+            'nuc_seg_key_to_ignore': None,
+            'identifier': 'with_nuclei',
             'cell_seg_key': config.seg_key},
         'run': {'gpu_id': config.gpu}}))
 

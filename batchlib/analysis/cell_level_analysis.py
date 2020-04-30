@@ -181,25 +181,25 @@ class DenoiseByGrayscaleOpening(DenoiseChannel):
         return skimage.morphology.opening(img, selem=self.structuring_element)
 
 
-# TODO: add a way to restrict to non-nuclei pixels (maybe via additional BatchJob)
 class InstanceFeatureExtraction(BatchJobOnContainer):
     def __init__(self,
                  channel_keys=('serum', 'marker'),
-                 nuc_seg_key='nucleus_segmentation',
+                 nuc_seg_key_to_ignore=None,
                  cell_seg_key='cell_segmentation',
                  identifier=None):
 
         self.channel_keys = tuple(channel_keys)
-        self.nuc_seg_key = nuc_seg_key
+        self.nuc_seg_key_to_ignore = nuc_seg_key_to_ignore
         self.cell_seg_key = cell_seg_key
 
         # all inputs should be 2d
-        input_ndim = [2] * (2 + len(channel_keys))
+        input_ndim = [2] * (1 + len(channel_keys) + (1 if nuc_seg_key_to_ignore else 0))
 
         # tables are per default saved at tables/cell_segmentation/channel in the container
         output_group = cell_seg_key if identifier is None else cell_seg_key + '_' + identifier
         self.output_table_keys = [output_group + '/' + channel for channel in channel_keys]
-        super().__init__(input_key=list(self.channel_keys + (self.nuc_seg_key, self.cell_seg_key)),
+        super().__init__(input_key=list(self.channel_keys) + [self.cell_seg_key] +
+                                       ([self.nuc_seg_key_to_ignore] if self.nuc_seg_key_to_ignore is not None else []),
                          input_ndim=input_ndim,
                          output_key=['tables/' + key for key in self.output_table_keys],
                          identifier=identifier)
@@ -207,15 +207,16 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
     def load_sample(self, path, device):
         with open_file(path, 'r') as f:
             channels = [self.read_image(f, key) for key in self.channel_keys]
-            nucleus_seg = self.read_image(f, self.nuc_seg_key)
             cell_seg = self.read_image(f, self.cell_seg_key)
+            if self.nuc_seg_key_to_ignore is not None:
+                nucleus_seg = self.read_image(f, self.nuc_seg_key_to_ignore)
 
         channels = [torch.FloatTensor(channel.astype(np.float32)).to(device) for channel in channels]
-        nucleus_seg = torch.LongTensor(nucleus_seg.astype(np.int32)).to(device)
         cell_seg = torch.LongTensor(cell_seg.astype(np.int32)).to(device)
 
-        # FIXME ignore nuclei in a different way. currently they could mess up the BG calculations!
-        cell_seg[nucleus_seg != 0] = 0
+        if self.nuc_seg_key_to_ignore is not None:
+            nucleus_seg = torch.LongTensor(nucleus_seg.astype(np.int32)).to(device)
+            cell_seg[nucleus_seg != 0] = -1  # negative labels are ignored in eval_cells
 
         return channels, cell_seg
 
@@ -253,6 +254,7 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
 
         # include background as instance with label 0
         labels = torch.sort(torch.unique(cell_seg))[0]
+        labels = labels[labels >= 0]  # ignore nuclei with label -1
 
         cell_properties = dict()
         for key, channel in zip(self.channel_keys, channels):
