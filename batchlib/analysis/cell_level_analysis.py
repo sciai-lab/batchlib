@@ -214,6 +214,7 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         nucleus_seg = torch.LongTensor(nucleus_seg.astype(np.int32)).to(device)
         cell_seg = torch.LongTensor(cell_seg.astype(np.int32)).to(device)
 
+        # FIXME ignore nuclei in a different way. currently they could mess up the BG calculations!
         cell_seg[nucleus_seg != 0] = 0
 
         return channels, cell_seg
