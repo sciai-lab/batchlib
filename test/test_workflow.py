@@ -19,7 +19,6 @@ class TestWorkflow(unittest.TestCase):
 
     def test_cell_analysis_workflow(self):
         from batchlib.workflows import run_cell_analysis, cell_analysis_parser
-        # TODO rename this config
         parser = cell_analysis_parser('./configs', 'test_cell_analysis.conf')
         config, _ = parser.parse_known_args()
         run_cell_analysis(config)
