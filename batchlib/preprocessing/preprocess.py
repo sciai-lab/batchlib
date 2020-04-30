@@ -28,6 +28,18 @@ def parse_channel_names(input_name):
     return tuple(channel_names)
 
 
+# TODO for this to work, we need to move the barrel correctors in their
+# own sub-directory and add a global attribute 'image_shape' to them
+def find_barrel_corrector(barrel_corrector_root, image_shape):
+    barrel_correctors = glob(os.path.join(barrel_corrector_root, '*.h5'))
+    for corrector_path in barrel_correctors:
+        with open_file(corrector_path, 'r') as f:
+            corrector_shape = f.attrs['image_shape']
+        if corrector_shape == image_shape:
+            return corrector_path
+    raise RuntimeError(f"Could not find barrel corrector for image shape {image_shape}")
+
+
 class Preprocess(BatchJobOnContainer):
     """ Preprocess folder with tifs from high-throughput experiment
     """
