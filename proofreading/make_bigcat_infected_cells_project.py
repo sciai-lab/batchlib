@@ -7,7 +7,7 @@ import numpy as np
 def fragment_segment_lut(segmentation, infected_labels):
     node_ids = np.unique(segmentation)
     assert len(infected_labels) == len(node_ids)
-    assert np.array_equal(np.infected_labels, np.array([0, 1]))
+    assert np.array_equal(np.unique(infected_labels), np.array([0, 1]))
 
     # the background gets a special label, because it is neither infected nor not infected
     infected_labels[0] = 2
@@ -64,12 +64,12 @@ def infected_labels_from_table(f, infected_label_key):
     table = g['cells'][:]
     cols = [name.decode('utf8') for name in g['columns'][:]]
     idx = cols.index('is_infected')
-    return table[:, idx].astype('uint8')
+    return table[:, idx].astype('float').astype('uint8')
 
 
 def infected_labels_from_mask(f, infected_mask_key, seg):
     import nifty.ground_truth as ngt
-    ds = f[infected_mask_key]
+    ds = f[infected_mask_key]['s0']
     mask = ds[:].astype('uint32')
 
     node_ids = np.unique(seg)
@@ -83,7 +83,7 @@ def infected_labels_from_mask(f, infected_mask_key, seg):
 
 # TODO get keys via argparse too
 def convert_to_bigcat(in_path, out_path, use_corrected,
-                      infected_label_key='tables/cell_classification/cell_segmentation/marker',
+                      infected_label_key='tables/cell_classification/cell_segmentation/marker_corrected',
                       infected_mask_key='infected_cell_mask'):
 
     if use_corrected:
@@ -102,8 +102,10 @@ def convert_to_bigcat(in_path, out_path, use_corrected,
         seg = f['cell_segmentation/s0'][:]
 
         if infected_label_key in f:
+            print(f"Reading infected labels from table @{infected_label_key}")
             infected_labels = infected_labels_from_table(f, infected_label_key)
         elif infected_mask_key in f:
+            print(f"Reading infected labels from mask @{infected_mask_key}")
             infected_labels = infected_labels_from_mask(f, infected_mask_key, seg)
         else:
             raise ValueError(f"Could neither find the table @{infected_label_key} or the mask @{infected_mask_key}")
