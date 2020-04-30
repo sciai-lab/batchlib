@@ -370,9 +370,9 @@ class BatchJobOnContainer(BatchJob, ABC):
         ds[:] = np.array(column_names, dtype='S100')
 
         if visible is None:
-            visible = np.ones(n_cols, dtype='bool')
+            visible = np.ones(n_cols, dtype='uint8')
 
-        ds = g.require_dataset('visible', shape=visible.shape, dtype='bool')
+        ds = g.require_dataset('visible', shape=visible.shape, dtype='uint8')
         ds[:] = visible
 
     def read_table(self, f, name):

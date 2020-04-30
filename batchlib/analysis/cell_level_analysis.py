@@ -557,7 +557,7 @@ class CellLevelAnalysis(BatchJobOnContainer):
         assert n_cols == table.shape[1]
 
         # set image name to non-visible for the plateViewer (something else?)
-        visible = np.ones(n_cols, dtype='bool')
+        visible = np.ones(n_cols, dtype='uint8')
         visible[0] = False
 
         with open_file(self.table_out_path, 'a') as f:
