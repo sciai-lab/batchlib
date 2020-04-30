@@ -28,7 +28,6 @@ def to_uint8(raw):
     return raw.astype('uint8')
 
 
-# TODO need to read Roman's infected / non-infected classification from somewhere.
 def to_bigcat(serum, marker, nuclei, segmentation, infected_labels, out_path):
     lut = fragment_segment_lut(segmentation, infected_labels)
     next_id = int(lut.max()) + 1
@@ -60,7 +59,32 @@ def to_bigcat(serum, marker, nuclei, segmentation, infected_labels, out_path):
         ds[:] = lut
 
 
-def convert_to_bigcat(in_path, out_path, use_corrected):
+def infected_labels_from_table(f, infected_label_key):
+    g = f[infected_label_key]
+    table = g['cells'][:]
+    cols = [name.decode('utf8') for name in g['columns'][:]]
+    idx = cols.index('is_infected')
+    return table[:, idx].astype('uint8')
+
+
+def infected_labels_from_mask(f, infected_mask_key, seg):
+    import nifty.ground_truth as ngt
+    ds = f[infected_mask_key]
+    mask = ds[:].astype('uint32')
+
+    node_ids = np.unique(seg)
+    overlap = ngt.overlap(seg, mask)
+
+    infected_labels = [overlap.overlapArrays(nid, True)[0][0] for nid in node_ids]
+    infected_labels = np.array(infected_labels, dtype='uint8')
+
+    return infected_labels
+
+
+# TODO get keys via argparse too
+def convert_to_bigcat(in_path, out_path, use_corrected,
+                      infected_label_key='tables/cell_classification/cell_segmentation/marker',
+                      infected_mask_key='infected_cell_mask'):
 
     if use_corrected:
         serum_key = 'serum_corrected'
@@ -77,8 +101,12 @@ def convert_to_bigcat(in_path, out_path, use_corrected):
         nuclei = f[nuclei_key]['s0'][:]
         seg = f['cell_segmentation/s0'][:]
 
-        # TODO read infected labels from the cell level hdf5 table
-        infected_labels = ''
+        if infected_label_key in f:
+            infected_labels = infected_labels_from_table(f, infected_label_key)
+        elif infected_mask_key in f:
+            infected_labels = infected_labels_from_mask(f, infected_mask_key, seg)
+        else:
+            raise ValueError(f"Could neither find the table @{infected_label_key} or the mask @{infected_mask_key}")
 
     to_bigcat(serum, marker, nuclei, seg, infected_labels, out_path)
 
