@@ -9,11 +9,9 @@ Batch processing for image-analysis on high-throughput screening data; developed
 - activate the environment and install `batchlib` using `setup.py`, e.g. via running `pip install -e .` in this directory to install in development mode
 - to check your installation, go to the `antibodies` directory and run the following example:
 ``` sh
-python instance_analysis_workflow2.py -c configs/test_instance_analysis_2.conf
+python cell_analysis_workflow.py -c configs/test_cell_analysis.conf
 ```
-
 This should run through without throwing an error and create a folder `test` locally containing 9 h5 files with the results per image.
-Note: until we solve everything listed in issue #14, you will need to get the (private) `antibodies-nuclei` repository separately.
 
 
 ## Usage & Development
@@ -21,10 +19,8 @@ Note: until we solve everything listed in issue #14, you will need to get the (p
 ### Run Analysis Workflows
 
 The analysis workflows for antibody screening are in the folder `antibodies`.
-For now, we have three workflows:
-- `pixel_analysis_worfklow1`: pixel prediction based analysis workflow
-- `instance_analysis_worfklow1`: instance segmentation based analysis workflow, using ilastik predictions
-- `instance_analysis_worfklow2`: instance segmentation based analysis workflow, using network predictions
+For now, we have one stable workflow:
+- `cell_analysis_worfklow`: cell-instance segmentation based analysis workflow
 
 These scripts use `configargparse` to read options from a config file and enable over-riding options
 from the command line. The default configurations to run on ialgpu03 are in `antibodies/configs`.
@@ -91,7 +87,7 @@ Three different kinds of tables are supported by the plate viewer:
 
 Global log level can be passed via an environment variable `LOGLEVEL` during the workflow execution, e.g.
 ```sh
-LOGLEVEL=DEBUG python instance_analysis_workflow2.py -c configs/test_instance_analysis_2.conf
+LOGLEVEL=DEBUG python cell_analysis_workflow.py -c configs/test_cell_analysis.conf
 ```
 
 The workflow logger (named `Workflow`) is where all of the file/console handlers are registered, so make sure any new
