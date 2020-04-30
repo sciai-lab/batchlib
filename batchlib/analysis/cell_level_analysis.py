@@ -1,6 +1,7 @@
 import os
 from copy import copy, deepcopy
 from functools import partial
+from collections import defaultdict
 
 import numpy as np
 import skimage.morphology
@@ -180,8 +181,8 @@ class DenoiseByGrayscaleOpening(DenoiseChannel):
         return skimage.morphology.opening(img, selem=self.structuring_element)
 
 
+# TODO: add a way to restrict to non-nuclei pixels (maybe via additional BatchJob)
 class InstanceFeatureExtraction(BatchJobOnContainer):
-    # TODO: also save per-well (even per plate?) values of BG in table
     def __init__(self,
                  channel_keys=('serum', 'marker'),
                  nuc_seg_key='nucleus_segmentation',
@@ -243,8 +244,7 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
                     top10=top10)
 
     def eval_cells(self, channels, cell_seg,
-                   ignore_label=0,
-                   substract_mean_background=False):
+                   ignore_label=0):
         # all segs have shape H, W
         shape = cell_seg.shape
         for channel in list(channels):
@@ -253,10 +253,6 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         # include background as instance with label 0
         labels = torch.sort(torch.unique(cell_seg))[0]
 
-        if substract_mean_background:
-            for channel in channels:
-                channel -= (channel[cell_seg == ignore_label]).mean()
-
         cell_properties = dict()
         for key, channel in zip(self.channel_keys, channels):
             cell_properties[key] = self.get_per_instance_statistics(channel, cell_seg, labels)
@@ -264,24 +260,70 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
 
         return cell_properties
 
+    def get_bg_segment(self, in_file, ignore_label=0, device='cpu'):
+        channels, cell_seg = self.load_sample(in_file, device=device)
+        return torch.stack(channels)[:, cell_seg == ignore_label]
+
     # this is what should be run for each h5 file
-    def save_all_stats(self, in_file, out_file, device):
+    def save_all_stats(self, in_file, out_file,
+                       bg_per_image_stats, bg_per_well_stats, bg_plate_stats, device):
         sample = self.load_sample(in_file, device=device)
         per_cell_statistics = self.eval_cells(*sample)
 
         labels = per_cell_statistics['labels']
-        for channel, output_key in zip(self.channel_keys, self.output_table_keys):
+        for i, (channel, output_key) in enumerate(zip(self.channel_keys, self.output_table_keys)):
             columns = ['label_id']
             table = [list(labels)]
+
+            # add background stats to all cells (in case we want a different bg for each cell at some point)
+            n_cells = len(table[0])
+            # per-plate bg stats
+            for key, values in bg_plate_stats.items():
+                columns.append(f'plate_bg_{key}')
+                table.append([values[i]] * n_cells)
+            # per-well bg stats
+            well = image_name_to_well_name(os.path.basename(in_file))
+            for key, values in bg_per_well_stats[well].items():
+                columns.append(f'well_bg_{key}')
+                table.append([values[i]] * n_cells)
+            # per-image bg stats
+            for key, values in bg_per_image_stats[in_file].items():
+                columns.append(f'image_bg_{key}')
+                table.append([values[i]] * n_cells)
+
+            # actual per-cell stats
             for key, values in per_cell_statistics[channel].items():
                 columns.append(key)
                 table.append([v if v is not None else np.nan for v in values])
+
             # transpose table to have shape (n_cells, n_features)
             table = np.asarray(table, dtype=float).T
             with open_file(out_file, 'a') as f:
                 self.write_table(f, output_key, columns, table)
 
+    def get_bg_stats(self, bg_values):
+        # bg_vales should have shape n_channels, n_pixels
+        medians = bg_values.median(1)[0]
+        mads = (bg_values - medians[:, None]).abs().median(1)[0]
+
+        def to_numpy(tensor):
+            return tensor.cpu().numpy().astype(np.float32)
+        return {
+            'median': to_numpy(medians),
+            'mad': to_numpy(mads),
+        }
+
     def run(self, input_files, output_files, gpu_id=None):
+        # first, get plate wide and per-well background statistics
+        logger.info('computing background statistics')
+        bg_dict = {file: self.get_bg_segment(file, device='cpu') for file in input_files}
+        bg_per_image_stats = {file: self.get_bg_stats(bg_segments) for file, bg_segments in bg_dict.items()}
+        bg_per_well_dict = defaultdict(list)
+        for file, bg_segment in bg_dict.items():
+            bg_per_well_dict[image_name_to_well_name(os.path.basename(file))].append(bg_segment)
+        bg_per_well_dict = {well: torch.cat(bg_segments, dim=1) for well, bg_segments in bg_per_well_dict.items()}
+        bg_per_well_stats = {well: self.get_bg_stats(bg_pixels) for well, bg_pixels in bg_per_well_dict.items()}
+        bg_plate_stats = self.get_bg_stats(torch.cat(list(bg_per_well_dict.values()), dim=1))
         with torch.no_grad():
             if gpu_id is not None:
                 os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
@@ -291,7 +333,7 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
             _save_all_stats = partial(self.save_all_stats, device=device)
             for input_file, output_file in tqdm(list(zip(input_files, output_files)),
                                                 desc='extracting cell-level features'):
-                _save_all_stats(input_file, output_file)
+                _save_all_stats(input_file, output_file, bg_per_image_stats, bg_per_well_stats, bg_plate_stats)
 
 
 class FindInfectedCells(BatchJobOnContainer):
