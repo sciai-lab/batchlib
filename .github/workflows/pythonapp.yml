@@ -35,5 +35,8 @@ jobs:
     - name: Test with unit-test
       run: |
         source activate antibodies
-        which python
-        python -m unittest discover -v test
+        # unittest discovery clashes with configargparse
+        # python -m unittest discover -v test
+        cd test
+        python test_workflow.py
+        python test_base.py
