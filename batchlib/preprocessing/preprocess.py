@@ -28,9 +28,20 @@ def parse_channel_names(input_name):
     return tuple(channel_names)
 
 
+def get_serum_keys(folder):
+    mapping_file = os.path.join(folder, 'channel_mapping.json')
+    if not os.path.exists(mapping_file):
+        raise ValueError("The input folder %s does not contain channel_mapping.json" % mapping_file)
+    with open(mapping_file) as f:
+        channel_mapping = json.load(f)
+    names = list(channel_mapping.values())
+    serum_keys = [name for name in names if (name is not None and name.startswith('serum'))]
+    return serum_keys
+
+
 # TODO for this to work, we need to move the barrel correctors in their
 # own sub-directory and add a global attribute 'image_shape' to them
-def find_barrel_corrector(barrel_corrector_root, image_shape):
+def get_barrel_corrector(barrel_corrector_root, image_shape):
     barrel_correctors = glob(os.path.join(barrel_corrector_root, '*.h5'))
     for corrector_path in barrel_correctors:
         with open_file(corrector_path, 'r') as f:

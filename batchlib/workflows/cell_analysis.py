@@ -9,7 +9,7 @@ from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    InstanceFeatureExtraction,
                                                    FindInfectedCells)
 from batchlib.outliers.outlier import get_outlier_predicate
-from batchlib.preprocessing import Preprocess
+from batchlib.preprocessing import Preprocess, get_serum_keys
 from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
@@ -20,10 +20,9 @@ from batchlib.util.plate_visualizations import all_plots
 logger = get_logger('Workflow.CellAnalysis')
 
 
-def get_input_keys(config):
+def get_input_keys(config, serum_in_keys):
 
     nuc_in_key = 'nuclei'
-    serum_in_keys = config.serum_keys
     marker_in_key = 'marker'
 
     if config.segmentation_on_corrected:
@@ -79,8 +78,9 @@ def run_cell_analysis(config):
     }
 
     # get keys and identifier
+    serum_in_keys = get_serum_keys(config.input_folder)
     (nuc_seg_in_key, serum_seg_in_keys,
-     marker_ana_in_key, serum_ana_in_keys) = get_input_keys(config)
+     marker_ana_in_key, serum_ana_in_keys) = get_input_keys(config, serum_in_keys)
 
     outlier_predicate = get_outlier_predicate(config)
 
@@ -198,6 +198,8 @@ def cell_analysis_parser(config_folder, config_name='instance_analysis_2.conf'):
     /home/covid19/data/data-processed/<INPUT_FOLDER_NAME>, which will be
     overriden if this parameter is specified
     """
+    mischelp = """Path to the folder batchlib/misc,
+    that contains all necessary additional data to run the workflow"""
 
     default_config = os.path.join(config_folder, config_name)
     parser = configargparse.ArgumentParser(description=doc,
@@ -210,11 +212,7 @@ def cell_analysis_parser(config_folder, config_name='instance_analysis_2.conf'):
     parser.add('--gpu', required=True, type=int, help='id of gpu for this job')
     parser.add('--n_cpus', required=True, type=int, help='number of cpus')
     parser.add('--folder', required=True, type=str, default="", help=fhelp)
-    # TODO infer serum keys from channel mapping
-    parser.add('--serum_keys', required=True,  nargs='+', type=str,
-               help='serum keys to process. the first one will be used for prediction of segmentations.')
-    # TODO add help
-    parser.add('--misc_folder', required=True, type=str, help="")
+    parser.add('--misc_folder', required=True, type=str, help=mischelp)
 
     # TODO infer the appropriate barrel corrector from the file-size instead
     # barrel corrector

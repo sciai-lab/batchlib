@@ -9,13 +9,13 @@ class TestWorkflow(unittest.TestCase):
     folder = './out'
 
     def tearDown(self):
-        try:
-            rmtree(self.folder)
-        except OSError:
+
+        def continue_removing(fu, path, excinfo):
             pass
 
-    def test_pixel_analysis_workflow(self):
-        pass
+        # throws some error due to busy devices sometimes (I assume this is due to the locking)
+        # so we just skip errors, all important files will be removed
+        rmtree(self.folder, onerror=continue_removing)
 
     def test_cell_analysis_workflow(self):
         from batchlib.workflows import run_cell_analysis, cell_analysis_parser
