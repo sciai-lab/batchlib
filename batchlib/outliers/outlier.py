@@ -87,11 +87,12 @@ class OutlierPredicate:
 
         if self.outlier_tags is None:
             # outliers info not available
-            return None
+            return -1
 
         label = self.outlier_tags[img_file]
         if label not in (-1, 0, 1):
             raise ValueError(f'Unsupported outlier label value: {label}')
+        return label
 
     @staticmethod
     def _load_state(csv_file):
