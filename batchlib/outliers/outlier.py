@@ -10,28 +10,20 @@ DEFAULT_OUTLIER_DIR = os.path.join(os.path.split(__file__)[0], '../../misc/tagge
 
 
 def get_outlier_predicate(config):
-    if hasattr(config, 'outliers_dir') and config.outliers_dir is not None:
-        outliers_dir = config.outliers_dir
+    if hasattr(config, 'misc_folder') and config.misc_folder is not None:
+        outliers_dir = os.path.join(config.misc_folder, 'tagged_outliers')
     else:
         outliers_dir = DEFAULT_OUTLIER_DIR
 
-    if hasattr(config, 'plate_name') and config.plate_name is not None:
-        plate_name = config.plate_name
-        if isinstance(plate_name, list):
-            assert len(plate_name) == 1, \
-                f'Only a single plate name is allowed, but {len(plate_name)} were given to the outlier predicate'
-            plate_name = plate_name[0]
-        logger.info(f'Using plate name: {plate_name}')
+    logger.info(f"Trying to parse 'plate_name' from the input folder: {config.input_folder}")
+    plate_name = plate_name_from_input_folder(config.input_folder)
+    if plate_name is not None:
+        logger.info(f"plate_name found: {plate_name}")
     else:
-        logger.info(f"Trying to parse 'plate_name' from the input folder: {config.input_folder}")
-        plate_name = plate_name_from_input_folder(config.input_folder)
-        if plate_name is not None:
-            logger.info(f"plate_name found: {plate_name}")
-        else:
-            logger.info(f"Cannot parse plate_name. Outlier detection will be skipped")
-            # no plate name was given and it cannot be parsed from the config.input_folder
-            # so we skip outlier detection, i.e. assign outlier: None to each of the images
-            return lambda im: None
+        logger.info(f"Cannot parse plate_name. Outlier detection will be skipped")
+        # no plate name was given and it cannot be parsed from the config.input_folder
+        # so we skip outlier detection, i.e. assign outlier: -1 to each of the images
+        return lambda im: -1
 
     return OutlierPredicate(root_table_dir=outliers_dir, plate_name=plate_name)
 
@@ -74,7 +66,8 @@ class OutlierPredicate:
         if self.outlier_tags is None:
             # plate_name could not be found in root_table_dir
             logger.warning(f'Plate name: {plate_name} could not be found in {root_table_dir}. '
-                           f'Outlier detection will be skipped. Make sure to put the outlier CSV file inside the {root_table_dir}.')
+                           f'Outlier detection will be skipped.'
+                           f'Make sure to put the outlier CSV file inside the {root_table_dir}.')
 
     def __call__(self, img_file):
         """
@@ -83,7 +76,8 @@ class OutlierPredicate:
         Returns:
             True if the img_file was marked as an outlier
             False if the img_file was marked as a valid image
-            None if the img_file was skipped during tagging, or outliers are not available for a given plate (no outlier CSV file)
+            None if the img_file was skipped during tagging,
+            or outliers are not available for a given plate (no outlier CSV file)
         """
 
         # take only the file
