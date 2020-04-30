@@ -193,7 +193,7 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         self.cell_seg_key = cell_seg_key
 
         # all inputs should be 2d
-        input_ndim = [2,] * (2 + len(channel_keys))
+        input_ndim = [2] * (2 + len(channel_keys))
 
         # tables are per default saved at tables/cell_segmentation/channel in the container
         output_group = cell_seg_key if identifier is None else cell_seg_key + '_' + identifier
@@ -399,6 +399,8 @@ class CellLevelAnalysis(BatchJobOnContainer):
                           serum_per_cell_mean_key,
                           edge_key]
             self.edge_key = edge_key
+            self.infected_cell_mask_key = infected_cell_mask_key
+            self.serum_per_cell_mean_key = serum_per_cell_mean_key
         else:
             output_key = None
 
@@ -635,29 +637,27 @@ class CellLevelAnalysis(BatchJobOnContainer):
         with open_file(in_path, 'r') as f:
             cell_seg = self.read_image(f, self.cell_seg_key)
 
-        # TODO this needs to be simplified
-        # result = self.load_result(in_path)
-        # labels = result['per_cell_statistics']['labels']
-        # labels = np.array([], dtype=np.int32) if labels is None else labels
-        # infected_labels = labels[result['infected_ind'] != 0]
+        # make a label mask for the infected cells
+        label_ids = np.unique(cell_seg)
+        infected_indicator, _ = self.load_infected_and_control_ind(in_path)
+        assert len(label_ids) == len(infected_indicator)
+        infected_label_ids = label_ids[infected_indicator.astype('bool')]  # cast to bool again to be sure
+        infected_mask = np.isin(cell_seg, infected_label_ids).astype(cell_seg.dtype)
 
-        # infected_mask = np.zeros_like(cell_seg)
-        # for label in infected_labels:
-        #     infected_mask[cell_seg == label] = 1
-
-        # mean_serum_image = np.zeros_like(cell_seg, dtype=np.float32)
-        # for label, intensity in zip(filter(lambda x: x != 0, labels),
-        #                             result['per_cell_statistics'][self.serum_key]['means']):
-        #     mean_serum_image[cell_seg == label] = intensity
+        result = self.load_result(in_path)
+        mean_serum_image = np.zeros_like(cell_seg, dtype=np.float32)
+        for label, intensity in zip(filter(lambda x: x != 0, label_ids),
+                                    result[self.serum_key]['means']):
+            mean_serum_image[cell_seg == label] = intensity
 
         seg_edges = seg_to_edges(cell_seg).astype('uint8')
 
         with open_file(out_path, 'a') as f:
             # we need to use nearest down-sampling for the mean serum images,
             # because while these are float values, they should not be interpolated
-            # self.write_image(f, self.serum_per_cell_mean_key, mean_serum_image,
-            #                  settings={'use_nearest': True})
-            # self.write_image(f, self.infected_cell_mask_key, infected_mask)
+            self.write_image(f, self.serum_per_cell_mean_key, mean_serum_image,
+                             settings={'use_nearest': True})
+            self.write_image(f, self.infected_cell_mask_key, infected_mask)
             self.write_image(f, self.edge_key, seg_edges)
 
     def run(self, input_files, output_files):
