@@ -236,7 +236,7 @@ def get_colorbar_range(key):
     return colorbar_range
 
 
-def all_plots(table_path, out_folder, table_key, stat_names=None):
+def all_plots(table_path, out_folder, table_key, identifier=None, stat_names=None):
     os.makedirs(out_folder, exist_ok=True)
 
     # load first file to get all the column names
@@ -261,7 +261,9 @@ def all_plots(table_path, out_folder, table_key, stat_names=None):
         stat_id = column_names.index(name)
         stats_per_file = dict(zip(image_names, table[:, stat_id].astype('float')))
 
-        outfile = os.path.join(out_folder, f"plates_{name}.png")
+        # TODO also put identifier in title
+        outfile = os.path.join(out_folder, f"plates_{name}.png") if identifier is None else \
+            os.path.join(out_folder, f"plates_{name}_{identifier}.png")
         # TODO is there a reason for the previous weird title ???
         well_plot(stats_per_file,
                   figsize=(14, 6),
@@ -274,14 +276,13 @@ def all_plots(table_path, out_folder, table_key, stat_names=None):
         # TODO we should actually use the well level table for this
         outfile = os.path.join(out_folder, f"plates_{name}_median.png")
         # TODO is there a reason for the previous weird title ???
-        # TODO median over wells ? does this make sense ? not medain over images ?
         well_plot(stats_per_file,
                   figsize=(14, 6),
                   outfile=outfile,
                   print_medians=True,
                   wedge_width=0.,
                   # colorbar_range=get_colorbar_range(key),
-                  title=name + " median over wells")
+                  title=name + " median over images")
 
 
 if __name__ == '__main__':

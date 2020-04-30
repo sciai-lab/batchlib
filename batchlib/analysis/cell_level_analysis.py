@@ -193,7 +193,7 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         self.cell_seg_key = cell_seg_key
 
         # all inputs should be 2d
-        input_ndim = [2, 2, 2, 2]
+        input_ndim = [2,] * (2 + len(channel_keys))
 
         # tables are per default saved at tables/cell_segmentation/channel in the container
         output_group = cell_seg_key if identifier is None else cell_seg_key + '_' + identifier
@@ -428,14 +428,15 @@ class CellLevelAnalysis(BatchJobOnContainer):
         return True
 
     @staticmethod
-    def folder_to_table_path(folder):
+    def folder_to_table_path(folder, identifier):
         # NOTE, we call this .hdf5 to avoid pattern matching, it's a bit hacky ...
-        table_file_name = os.path.split(folder)[1] + '_table.hdf5'
+        table_file_name = os.path.split(folder)[1] + \
+                          ('_table.hdf5' if identifier is None else f'_table_{identifier}.hdf5')
         return os.path.join(folder, table_file_name)
 
     @property
     def table_out_path(self):
-        return self.folder_to_table_path(self.folder)
+        return self.folder_to_table_path(self.folder, self.identifier)
 
     def check_table(self):
         table_path = self.table_out_path

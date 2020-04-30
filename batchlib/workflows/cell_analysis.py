@@ -23,24 +23,24 @@ logger = get_logger('Workflow.CellAnalysis')
 def get_input_keys(config):
 
     nuc_in_key = 'nuclei'
-    serum_in_key = 'serum'
+    serum_in_keys = config.serum_keys
     marker_in_key = 'marker'
 
     if config.segmentation_on_corrected:
         nuc_seg_in_key = nuc_in_key + '_corrected'
-        serum_seg_in_key = serum_in_key + '_corrected'
+        serum_seg_in_keys = [serum_in_key + '_corrected' for serum_in_key in serum_in_keys]
     else:
         nuc_seg_in_key = nuc_in_key
-        serum_seg_in_key = serum_in_key
+        serum_seg_in_keys = serum_in_keys
 
     if config.analysis_on_corrected:
-        serum_ana_in_key = serum_in_key + '_corrected'
+        serum_ana_in_keys = [serum_in_key + '_corrected' for serum_in_key in serum_in_keys]
         marker_ana_in_key = marker_in_key + '_corrected'
     else:
-        serum_ana_in_key = serum_in_key
+        serum_ana_in_keys = serum_in_keys
         marker_ana_in_key = marker_in_key
 
-    return nuc_seg_in_key, serum_seg_in_key, marker_ana_in_key, serum_ana_in_key
+    return nuc_seg_in_key, serum_seg_in_keys, marker_ana_in_key, serum_ana_in_keys
 
 
 def run_cell_analysis(config):
@@ -79,67 +79,93 @@ def run_cell_analysis(config):
     }
 
     # get keys and identifier
-    (nuc_seg_in_key, serum_seg_in_key,
-     marker_ana_in_key, serum_ana_in_key) = get_input_keys(config)
+    (nuc_seg_in_key, serum_seg_in_keys,
+     marker_ana_in_key, serum_ana_in_keys) = get_input_keys(config)
 
     outlier_predicate = get_outlier_predicate(config)
 
-    job_dict = {
-        Preprocess.from_folder: {'build': {'input_folder': config.input_folder,
-                                           'barrel_corrector_path': barrel_corrector_path,
-                                           'scale_factors': config.scale_factors},
-                                 'run': {'n_jobs': config.n_cpus}},
-        TorchPrediction: {'build': {'input_key': serum_seg_in_key,
-                                    'output_key': [config.mask_key, config.bd_key],
-                                    'model_path': torch_model_path,
-                                    'model_class': torch_model_class,
-                                    'model_kwargs': torch_model_kwargs,
-                                    'scale_factors': config.scale_factors},
-                          'run': {'gpu_id': config.gpu,
-                                  'batch_size': config.batch_size,
-                                  'threshold_channels': {0: 0.5}}},
-        StardistPrediction: {'build': {'model_root': model_root,
-                                       'model_name': model_name,
-                                       'input_key': nuc_seg_in_key,
-                                       'output_key': config.nuc_key,
-                                       'scale_factors': config.scale_factors},
-                             'run': {'gpu_id': config.gpu,
-                                     'n_jobs': config.n_cpus}},
-        SeededWatershed: {'build': {'pmap_key': config.bd_key,
-                                    'seed_key': config.nuc_key,
-                                    'output_key': config.seg_key,
-                                    'mask_key': config.mask_key,
-                                    'scale_factors': config.scale_factors},
-                          'run': {'erode_mask': 20,
-                                  'dilate_seeds': 3,
-                                  'n_jobs': config.n_cpus}}
-    }
+    job_list = [
+        (Preprocess.from_folder, {
+            'build': {
+                'input_folder': config.input_folder,
+                'barrel_corrector_path': barrel_corrector_path,
+                'scale_factors': config.scale_factors},
+            'run': {
+                'n_jobs': config.n_cpus,
+                'ignore_failed_outputs': True}}),  # FIXME something goes wring in the output validation..
+        (TorchPrediction, {
+            'build': {
+                'input_key': serum_seg_in_keys[0],
+                'output_key': [config.mask_key, config.bd_key],
+                'model_path': torch_model_path,
+                'model_class': torch_model_class,
+                'model_kwargs': torch_model_kwargs,
+                'scale_factors': config.scale_factors},
+            'run': {
+                'gpu_id': config.gpu,
+                'batch_size': config.batch_size,
+                'threshold_channels': {0: 0.5}}}),
+        (StardistPrediction, {
+            'build': {
+                'model_root': model_root,
+                'model_name': model_name,
+                'input_key': nuc_seg_in_key,
+                'output_key': config.nuc_key,
+                'scale_factors': config.scale_factors},
+            'run': {
+                'gpu_id': config.gpu,
+                'n_jobs': config.n_cpus}}),
+        (SeededWatershed, {
+            'build': {
+                'pmap_key': config.bd_key,
+                'seed_key': config.nuc_key,
+                'output_key': config.seg_key,
+                'mask_key': config.mask_key,
+                'scale_factors': config.scale_factors},
+            'run': {
+                'erode_mask': 20,
+                'dilate_seeds': 3,
+                'n_jobs': config.n_cpus}})
+    ]
     if config.marker_denoise_radius > 0:
-        job_dict[DenoiseByGrayscaleOpening] = {'build': {'key_to_denoise': marker_ana_in_key,
-                                                         'radius': config.marker_denoise_radius},
-                                               'run': {}}
+        job_list.append((DenoiseByGrayscaleOpening, {
+            'build': {
+                'key_to_denoise': marker_ana_in_key,
+                'radius': config.marker_denoise_radius},
+            'run': {}}))
         marker_ana_in_key = marker_ana_in_key + '_denoised'
 
-    job_dict[InstanceFeatureExtraction] = {'build': {'channel_keys': (serum_ana_in_key, marker_ana_in_key),
-                                                     'nuc_seg_key': config.nuc_key,
-                                                     'cell_seg_key': config.seg_key,
-                                                     },
-                                           'run': {'gpu_id': config.gpu}}
-    job_dict[FindInfectedCells] = {'build': {'marker_key': marker_ana_in_key,
-                                             'cell_seg_key': config.seg_key,
-                                             'bg_correction_key': 'means'},
-                                   'run': {}}
-    job_dict[CellLevelAnalysis] = {'build': {'serum_key': serum_ana_in_key,
-                                             'marker_key': marker_ana_in_key,
-                                             'cell_seg_key': config.seg_key,
-                                             'outlier_predicate': outlier_predicate,
-                                             'write_summary_images': True,
-                                             'scale_factors': config.scale_factors}}
+    job_list.append((InstanceFeatureExtraction, {
+        'build': {
+            'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
+            'nuc_seg_key': config.nuc_key,
+            'cell_seg_key': config.seg_key},
+        'run': {'gpu_id': config.gpu}}))
+
+    job_list.append((FindInfectedCells, {
+        'build': {
+            'marker_key': marker_ana_in_key,
+            'cell_seg_key': config.seg_key,
+            'bg_correction_key': 'means'},
+        'run': {}}))
+
+    table_identifiers = serum_ana_in_keys
+    for serum_key, identifier in zip(serum_ana_in_keys, table_identifiers):
+        job_list.append((CellLevelAnalysis, {
+            'build': {
+                'serum_key': serum_key,
+                'marker_key': marker_ana_in_key,
+                'cell_seg_key': config.seg_key,
+                'outlier_predicate': outlier_predicate,
+                'write_summary_images': True,
+                'scale_factors': config.scale_factors,
+                'identifier': identifier}}))
+
     t0 = time.time()
 
     run_workflow(name,
                  config.folder,
-                 job_dict,
+                 job_list,
                  input_folder=config.input_folder,
                  force_recompute=config.force_recompute,
                  ignore_invalid_inputs=config.ignore_invalid_inputs,
@@ -147,10 +173,12 @@ def run_cell_analysis(config):
 
     # run all plots on the output files
     plot_folder = os.path.join(config.folder, 'plots')
-    table_path = CellLevelAnalysis.folder_to_table_path(config.folder)
-    all_plots(table_path, plot_folder,
-              table_key='tables/images/default',
-              stat_names=['ratio_of_median_of_means'])
+    for identifier in table_identifiers:
+        table_path = CellLevelAnalysis.folder_to_table_path(config.folder, identifier)
+        all_plots(table_path, plot_folder,
+                  table_key='tables/images/default',
+                  identifier=identifier,
+                  stat_names=['ratio_of_median_of_means'])
 
     t0 = time.time() - t0
     logger.info(f"Run {name} in {t0}s")
@@ -182,6 +210,9 @@ def cell_analysis_parser(config_folder, config_name='instance_analysis_2.conf'):
     parser.add('--gpu', required=True, type=int, help='id of gpu for this job')
     parser.add('--n_cpus', required=True, type=int, help='number of cpus')
     parser.add('--folder', required=True, type=str, default="", help=fhelp)
+    # TODO infer serum keys from channel mapping
+    parser.add('--serum_keys', required=True,  nargs='+', type=str,
+               help='serum keys to process. the first one will be used for prediction of segmentations.')
     # TODO add help
     parser.add('--misc_folder', required=True, type=str, help="")
 
