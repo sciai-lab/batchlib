@@ -9,7 +9,7 @@ from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    InstanceFeatureExtraction,
                                                    FindInfectedCells)
 from batchlib.outliers.outlier import get_outlier_predicate
-from batchlib.preprocessing import Preprocess, get_serum_keys
+from batchlib.preprocessing import get_barrel_corrector, get_serum_keys, Preprocess
 from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
@@ -63,10 +63,8 @@ def run_cell_analysis(config):
     model_root = os.path.join(misc_folder, 'models/stardist')
     model_name = '2D_dsb2018'
 
-    # TODO load the correct barrel corrector based on the image size
-    barrel_corrector_path = os.path.join(misc_folder, config.barrel_corrector)
-    if not os.path.exists(barrel_corrector_path):
-        raise ValueError("Invalid barrel corrector path:", barrel_corrector_path)
+    barrel_corrector_path = get_barrel_corrector(os.path.join(misc_folder, 'barrel_correctors'),
+                                                 config.input_folder)
 
     torch_model_path = os.path.join(misc_folder, 'models/torch/fg_and_boundaries_V1.torch')
     torch_model_class = UNet2D
@@ -213,11 +211,6 @@ def cell_analysis_parser(config_folder, config_name='instance_analysis_2.conf'):
     parser.add('--n_cpus', required=True, type=int, help='number of cpus')
     parser.add('--folder', required=True, type=str, default="", help=fhelp)
     parser.add('--misc_folder', required=True, type=str, help=mischelp)
-
-    # TODO infer the appropriate barrel corrector from the file-size instead
-    # barrel corrector
-    parser.add('--barrel_corrector', type=str, default="barrel_corrector.h5",
-               help="name of barrel corrector file in batchlib/misc/")
 
     # folder options
     # this parameter is not necessary here any more, but for now we need it to be

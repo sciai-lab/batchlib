@@ -39,15 +39,20 @@ def get_serum_keys(folder):
     return serum_keys
 
 
-# TODO for this to work, we need to move the barrel correctors in their
-# own sub-directory and add a global attribute 'image_shape' to them
-def get_barrel_corrector(barrel_corrector_root, image_shape):
+def get_barrel_corrector(barrel_corrector_root, input_folder, pattern='*.tiff'):
+
+    # read the image shape in this folder
+    files = glob(os.path.join(input_folder, pattern))
+    image_shape = imageio.volread(files[0]).shape[1:]
+
+    # find the corresponding barrel corrector
     barrel_correctors = glob(os.path.join(barrel_corrector_root, '*.h5'))
     for corrector_path in barrel_correctors:
         with open_file(corrector_path, 'r') as f:
-            corrector_shape = f.attrs['image_shape']
+            corrector_shape = tuple(f.attrs['image_shape'])
         if corrector_shape == image_shape:
             return corrector_path
+
     raise RuntimeError(f"Could not find barrel corrector for image shape {image_shape}")
 
 
