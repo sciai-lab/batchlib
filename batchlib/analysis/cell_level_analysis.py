@@ -342,7 +342,9 @@ class FindInfectedCells(BatchJobOnContainer):
                  cell_seg_key='cell_segmentation',
                  marker_key='marker',
                  infected_threshold=250, split_statistic='top50',
+                 infected_threshold_scale_key=None,
                  bg_correction_key=None,
+                 per_cell_bg_correction=True,
                  identifier=None,
                  **super_kwargs):
         self.marker_key = marker_key
@@ -350,9 +352,11 @@ class FindInfectedCells(BatchJobOnContainer):
         self.feature_table_key = cell_seg_key + '/' + marker_key
 
         self.infected_threshold = infected_threshold
+        self.infected_threshold_scale_key = infected_threshold_scale_key
         self.split_statistic = split_statistic
 
         self.bg_correction_key = bg_correction_key
+        self.per_cell_bg_correction = per_cell_bg_correction
 
         # infected are per default saved at tables/infected_ind/cell_segmentation/marker_key in the container
         self.output_table_key = 'cell_classification/' + self.feature_table_key + \
@@ -368,13 +372,26 @@ class FindInfectedCells(BatchJobOnContainer):
             feature_dict = {key: values for key, values in zip(keys, table.T)}
         return feature_dict
 
-    def get_infected_ind(self, feature_dict):
-        bg_ind = feature_dict['label_id'].tolist().index(0)
-        if self.bg_correction_key:
-            offset = feature_dict[self.bg_correction_key][bg_ind]
+    def get_bg_correction(self, feature_dict, bg_correction_key=None):
+        bg_correction_key = self.bg_correction_key if bg_correction_key is None else bg_correction_key
+        if bg_correction_key:
+            if self.per_cell_bg_correction:
+                offset = feature_dict[bg_correction_key]
+            else:
+                bg_ind = feature_dict['label_id'].tolist().index(0)
+                offset = feature_dict[bg_correction_key][bg_ind]
         else:
             offset = 0
-        infected_ind = feature_dict[self.split_statistic] > self.infected_threshold + offset
+        return offset
+
+    def get_infected_ind(self, feature_dict):
+        bg_ind = feature_dict['label_id'].tolist().index(0)
+        offset = self.get_bg_correction(feature_dict)
+        if self.infected_threshold_scale_key is not None:
+            scale = feature_dict[self.infected_threshold_scale_key]
+        else:
+            scale = 1
+        infected_ind = feature_dict[self.split_statistic] > scale * self.infected_threshold + offset
         infected_ind[bg_ind] = False  # the background should never be classified as infected
         return infected_ind
 

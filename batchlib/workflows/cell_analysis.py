@@ -144,8 +144,14 @@ def run_cell_analysis(config):
         'build': {
             'marker_key': marker_ana_in_key,
             'cell_seg_key': config.seg_key,
-            'bg_correction_key': 'means'},
-        'run': {}}))
+            'bg_correction_key': 'means',
+            'per_cell_bg_correction': False,
+            # # For now keep the old method. But this would be a possible improvement
+            # 'bg_correction_key': 'image_bg_median',
+            # 'infected_threshold_scale_key': 'image_bg_mad',
+            # 'infected_threshold': 7,
+        },
+        'run': {'force_recompute': None}}))
 
     table_identifiers = serum_ana_in_keys
     for serum_key, identifier in zip(serum_ana_in_keys, table_identifiers):
@@ -157,7 +163,8 @@ def run_cell_analysis(config):
                 'outlier_predicate': outlier_predicate,
                 'write_summary_images': True,
                 'scale_factors': config.scale_factors,
-                'identifier': identifier}}))
+                'identifier': identifier},
+            'run': {'force_recompute': False}}))
 
     t0 = time.time()
 
