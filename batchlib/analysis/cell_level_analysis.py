@@ -485,16 +485,41 @@ class CellLevelAnalysis(BatchJobOnContainer):
         control_ind = table[:, 2]
         return infected_ind, control_ind
 
+    # TODO for now, we only use manual outlier annotations, but we should
+    # also use some heuristics for automated QC, e.g.
+    # - number of cells
+    # - cell size distribution
+    # - negative ratios
+    def check_for_outlier(self, image_name, values, value_names):
+
+        # outliers can have the following values:
+        # 0: not an outlier
+        # 1: outlier
+        # -1: no annotation available
+        outlier = self.outlier_predicate(image_name)
+
+        outlier_type = 'none'
+        if outlier == 1:
+            outlier_type = 'manual'
+        if outlier == -1:
+            outlier_type = 'not annotated'
+
+        return outlier, outlier_type
+
     # this is what should be run for each h5 file
     def write_image_table(self, input_files):
 
-        column_names = ['image_name', 'site_name', 'score', 'marked_as_outlier', 'n_infected', 'n_control']
+        column_names = ['image_name', 'site_name', 'score', 'marked_as_outlier', 'outlier_type',
+                        'n_infected', 'n_control']
         table = []
 
         for ii, in_file in enumerate(input_files):
             per_cell_statistics_to_save = self.load_result(in_file)
             per_cell_statistics = deepcopy(per_cell_statistics_to_save)  # TODO: background subtraction
 
+            # TODO: @Roman are these binary masks or indices?
+            # Could we rename the variables to something that makes this clear?
+            # (ind could be either 'indicator' (=binary mask) or index)
             infected_ind, control_ind = self.load_infected_and_control_ind(in_file)
             n_infected = infected_ind.astype(np.int32).sum()
             n_control = control_ind.astype(np.int32).sum()
@@ -508,15 +533,20 @@ class CellLevelAnalysis(BatchJobOnContainer):
             image_name = os.path.splitext(os.path.split(in_file)[1])[0]
             site_name = image_name_to_site_name(image_name)
 
-            # outliers can have the following values:
-            # 0: not an outlier
-            # 1: outlier
-            # -1: no annotation available
-            outlier = self.outlier_predicate(image_name)
+            # gather the values (and their names) that could be relevant for the outlier detection
+            image_values = [n_infected, n_control] + [np.nan if m is None else m for m in measures.values()]
+            value_names = column_names[5:]
+            assert len(value_names) == len(image_values)
+
+            # check if this image is an outlier. it can be classified as outlier either because
+            # of outlier annotations or because it doesn't pass some quality control heuristics
+            outlier, outlier_type = self.check_for_outlier(image_name, image_values, value_names)
+
+            # get the main score, which is the measure computed for `score_name`, but set to
+            # nan if this image is an outlier
             score = measures[self.score_name]
             score = np.nan if (outlier == 1 or score is None) else score
-            table.append([image_name, site_name, score, outlier, n_infected, n_control] +
-                         [np.nan if m is None else m for m in measures.values()])
+            table.append([image_name, site_name, score, outlier, outlier_type] + image_values)
 
         # NOTE: todos left from Roman
         # TODO: Make one big per-cell table for the analysis, with both serum and marker statistics?
@@ -543,7 +573,7 @@ class CellLevelAnalysis(BatchJobOnContainer):
         assert len(column_names) == value_table.shape[1]
 
         unique_wells = np.unique(well_names)
-        well_column_names = ['well_name'] + column_names
+        well_column_names = ['well_name'] + [name for name in column_names if name != 'outlier_type']
 
         table = []
         # could maybe be done more efficiently
@@ -553,13 +583,21 @@ class CellLevelAnalysis(BatchJobOnContainer):
 
             row = []
             for col_id, name in enumerate(column_names):
-                # TODO we should take median by default, but use
-                # different rules for special names.
-                # e.g. for number of cells we should use sum
-                # for outliers, we should count the number of outliers etc.
+
+                # we accumulate values over images with the median by default,
+                # but use sum for the outliers and the number of cells
+                # TODO are there other stats that need to be treated differently?
+                if name in ('marked_as_outlier', 'n_control', 'n_infected'):
+                    accumulator = np.sum
+                elif name == 'outlier_type':
+                    # we don't accumulate the outlier type column
+                    continue
+                else:
+                    accumulator = np.median
+
                 try:
                     row_values = this_values[:, col_id].astype('float')
-                    this_value = np.median(row_values[np.isfinite(row_values)])
+                    this_value = accumulator(row_values[np.isfinite(row_values)])
                 except ValueError:
                     this_value = np.nan
                 row.append(this_value)
