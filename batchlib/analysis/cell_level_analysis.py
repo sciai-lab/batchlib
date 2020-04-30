@@ -361,7 +361,7 @@ class FindInfectedCells(BatchJobOnContainer):
         self.bg_correction_key = bg_correction_key
         self.per_cell_bg_correction = per_cell_bg_correction
 
-        # infected are per default saved at tables/infected_ind/cell_segmentation/marker_key in the container
+        # infected are per default saved at tables/cell_classification/cell_segmentation/marker_key in the container
         self.output_table_key = 'cell_classification/' + self.feature_table_key + \
                                 ('' if identifier is None else '_' + identifier)
         super().__init__(input_key='tables/' + self.feature_table_key,
@@ -387,37 +387,37 @@ class FindInfectedCells(BatchJobOnContainer):
             offset = 0
         return offset
 
-    def get_infected_ind(self, feature_dict):
+    def get_infected_indicator(self, feature_dict):
         bg_ind = feature_dict['label_id'].tolist().index(0)
         offset = self.get_bg_correction(feature_dict)
         if self.infected_threshold_scale_key is not None:
             scale = feature_dict[self.infected_threshold_scale_key]
         else:
             scale = 1
-        infected_ind = feature_dict[self.split_statistic] > scale * self.infected_threshold + offset
-        infected_ind[bg_ind] = False  # the background should never be classified as infected
-        return infected_ind
+        infected_indicator = feature_dict[self.split_statistic] > scale * self.infected_threshold + offset
+        infected_indicator[bg_ind] = False  # the background should never be classified as infected
+        return infected_indicator
 
-    def get_infected_and_control_ind(self, feature_dict):
-        infected_ind = self.get_infected_ind(feature_dict)
+    def get_infected_and_control_indicators(self, feature_dict):
+        infected_indicator = self.get_infected_indicator(feature_dict)
         # per default, everything that is not infected is control
         bg_ind = feature_dict['label_id'].tolist().index(0)
-        control_ind = infected_ind == False
-        control_ind[bg_ind] = False  # the background should never be classified as control
-        return infected_ind, control_ind
+        control_indicator = infected_indicator == False
+        control_indicator[bg_ind] = False  # the background should never be classified as control
+        return infected_indicator, control_indicator
 
-    def compute_and_save_infected_ind(self, in_file, out_file):
+    def compute_and_save_infected_and_control(self, in_file, out_file):
         feature_dict = self.load_feature_dict(in_file)
-        infected_ind, control_ind = self.get_infected_and_control_ind(feature_dict)
+        infected_indicator, control_indicator= self.get_infected_and_control_indicators(feature_dict)
         column_names = ['label_id', 'is_infected', 'is_control']
-        table = [feature_dict['label_id'], infected_ind, control_ind]
+        table = [feature_dict['label_id'], infected_indicator, control_indicator]
         table = np.asarray(table, dtype=float).T
         with open_file(out_file, 'a') as f:
             self.write_table(f, self.output_table_key, column_names, table)
 
     def run(self, input_files, output_files):
         for input_file, output_file in tqdm(list(zip(input_files, output_files)), desc='finding infected cells'):
-            self.compute_and_save_infected_ind(input_file, output_file)
+            self.compute_and_save_infected_and_control(input_file, output_file)
 
 
 class CellLevelAnalysis(BatchJobOnContainer):
@@ -543,12 +543,12 @@ class CellLevelAnalysis(BatchJobOnContainer):
             self.marker_key: marker_dict
         }
 
-    def load_infected_and_control_ind(self, in_path):
+    def load_infected_and_control_indicators(self, in_path):
         with open_file(in_path, 'r') as f:
             column_names, table = self.read_table(f, self.classification_key)
-        infected_ind = table[:, 1]
-        control_ind = table[:, 2]
-        return infected_ind, control_ind
+        infected_indicator = table[:, 1]
+        control_indicator = table[:, 2]
+        return infected_indicator, control_indicator
 
     # TODO for now, we only use manual outlier annotations, but we should
     # also use some heuristics for automated QC, e.g.
@@ -585,12 +585,12 @@ class CellLevelAnalysis(BatchJobOnContainer):
             # TODO: @Roman are these binary masks or indices?
             # Could we rename the variables to something that makes this clear?
             # (ind could be either 'indicator' (=binary mask) or index)
-            infected_ind, control_ind = self.load_infected_and_control_ind(in_file)
-            n_infected = infected_ind.astype(np.int32).sum()
-            n_control = control_ind.astype(np.int32).sum()
+            infected_indicator, control_indicator = self.load_infected_and_control_indicators(in_file)
+            n_infected = infected_indicator.astype(np.int32).sum()
+            n_control = control_indicator.astype(np.int32).sum()
 
-            control_cell_statistics = index_cell_properties(per_cell_statistics, control_ind)
-            infected_cell_statistics = index_cell_properties(per_cell_statistics, infected_ind)
+            control_cell_statistics = index_cell_properties(per_cell_statistics, control_indicator)
+            infected_cell_statistics = index_cell_properties(per_cell_statistics, infected_indicator)
             measures = compute_ratios(control_cell_statistics, infected_cell_statistics, serum_key=self.serum_key)
             if ii == 0:
                 column_names += list(measures.keys())
@@ -701,7 +701,7 @@ class CellLevelAnalysis(BatchJobOnContainer):
 
         # make a label mask for the infected cells
         label_ids = np.unique(cell_seg)
-        infected_indicator, _ = self.load_infected_and_control_ind(in_path)
+        infected_indicator, _ = self.load_infected_and_control_indicators(in_path)
         assert len(label_ids) == len(infected_indicator)
         infected_label_ids = label_ids[infected_indicator.astype('bool')]  # cast to bool again to be sure
         infected_mask = np.isin(cell_seg, infected_label_ids).astype(cell_seg.dtype)
