@@ -13,13 +13,13 @@ class TestOutliers(unittest.TestCase):
         plate_name = '20200406_164555_328'
         outliers = OutlierPredicate(self._global_path, plate_name)
         img_name = 'WellA01_PointA01_0008_ChannelDAPI,WF_GFP,TRITC_Seq0008'
-        assert outliers(img_name)
+        assert outliers(img_name) == 1
 
     def test_no_outlier_for_plate(self):
         plate_name = 'New_plate'
         outliers = OutlierPredicate(self._global_path, plate_name)
         img_name = 'WellA01_PointA01_0008_ChannelDAPI,WF_GFP,TRITC_Seq0008'
-        assert outliers(img_name) is None
+        assert outliers(img_name) == -1
 
     def test_outlier_number(self):
         plate_files = [
@@ -36,7 +36,7 @@ class TestOutliers(unittest.TestCase):
             count = 0
             outlier_count = 0
             for img_file in op.outlier_tags:
-                if op(img_file):
+                if op(img_file) == 1:
                     outlier_count += 1
                     total_outlier_count += 1
                 count += 1

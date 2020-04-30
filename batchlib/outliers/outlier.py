@@ -74,10 +74,10 @@ class OutlierPredicate:
         Check if a given image (img_file) was marked as an outlier.
 
         Returns:
-            True if the img_file was marked as an outlier
-            False if the img_file was marked as a valid image
-            None if the img_file was skipped during tagging,
-            or outliers are not available for a given plate (no outlier CSV file)
+            1 if the img_file was marked as an outlier
+            0 if the img_file was marked as a valid image
+            -1 if the img_file was skipped during tagging,
+               or outliers are not available for a given plate (no outlier CSV file)
         """
 
         # take only the file
@@ -90,13 +90,7 @@ class OutlierPredicate:
             return None
 
         label = self.outlier_tags[img_file]
-        if label == 1:
-            return True
-        elif label == 0:
-            return False
-        elif label == -1:
-            return None
-        else:
+        if label not in (-1, 0, 1):
             raise ValueError(f'Unsupported outlier label value: {label}')
 
     @staticmethod
