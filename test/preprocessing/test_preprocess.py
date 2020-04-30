@@ -3,11 +3,13 @@ import unittest
 from glob import glob
 from shutil import rmtree
 
+THIS_FOLDER = os.path.split(__file__)[0]
 
-# TODO check for processed data for correctness
+
+# TODO check the processed data for correctness
 class TestPreprocess(unittest.TestCase):
-    in_root = os.path.join(os.path.split(__file__)[0],
-                           '../../data/test_data')
+    in_root = os.path.join(THIS_FOLDER, '../../data/test_data')
+    misc_folder = os.path.join(THIS_FOLDER, '../../misc')
     folder = './out'
 
     def tearDown(self):
@@ -23,9 +25,10 @@ class TestPreprocess(unittest.TestCase):
         job(self.folder, in_folder, n_jobs=4)
 
     def test_preprocess_with_barrel_correction(self):
-        from batchlib.preprocessing import Preprocess
+        from batchlib.preprocessing import Preprocess, get_barrel_corrector
         in_folder = os.path.join(self.in_root, 'test')
-        barrel_corrector_path = '../../misc/barrel_corrector.h5'
+        barrel_corrector_root = os.path.join(self.misc_folder, 'barrel_correctors')
+        barrel_corrector_path = get_barrel_corrector(barrel_corrector_root, in_folder)
         job = Preprocess.from_folder(in_folder,
                                      barrel_corrector_path=barrel_corrector_path)
         job(self.folder, in_folder, n_jobs=4)
@@ -38,6 +41,19 @@ class TestPreprocess(unittest.TestCase):
             name = os.path.split(folder)[1]
             out_folder = os.path.join(folder, name)
             job = Preprocess.from_folder(folder)
+            job(out_folder, folder, n_jobs=4)
+
+    def test_nameing_schemes_with_barrel_correction(self):
+        from batchlib.preprocessing import Preprocess, get_barrel_corrector
+        root = os.path.join(self.in_root, 'naming_schemes')
+        barrel_corrector_root = os.path.join(self.misc_folder, 'barrel_correctors')
+        folders = glob(os.path.join(root, "*"))
+        for folder in folders:
+            barrel_corrector_path = get_barrel_corrector(barrel_corrector_root, folder)
+            name = os.path.split(folder)[1]
+            out_folder = os.path.join(folder, name)
+            job = Preprocess.from_folder(folder,
+                                         barrel_corrector_path=barrel_corrector_path)
             job(out_folder, folder, n_jobs=4)
 
 
