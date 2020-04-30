@@ -158,12 +158,13 @@ def run_cell_analysis(config):
         'build': {
             'marker_key': marker_ana_in_key,
             'cell_seg_key': config.seg_key,
-            'bg_correction_key': 'means',
-            'per_cell_bg_correction': False,
-            # # For now keep the old method. But this would be a possible improvement
-            # 'bg_correction_key': 'image_bg_median',
-            # 'infected_threshold_scale_key': 'image_bg_mad',
-            # 'infected_threshold': 7,
+            # # old method
+            # 'bg_correction_key': 'means',
+            # 'per_cell_bg_correction': False,
+            # new method
+            'bg_correction_key': 'well_bg_median',
+            'infected_threshold_scale_key': 'well_bg_mad',
+            'infected_threshold': 7,
         },
         'run': {'force_recompute': None}}))
 
