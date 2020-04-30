@@ -25,12 +25,17 @@ def get_input_keys(config, serum_in_keys):
     nuc_in_key = 'nuclei'
     marker_in_key = 'marker'
 
+    # compute segmentation on IgG if available
+    try:
+        serum_seg_in_key = next(iter(filter(lambda key: key.endswith('IgG'), serum_in_keys)))
+    except StopIteration:
+        serum_seg_in_key = serum_in_keys[0]
+
     if config.segmentation_on_corrected:
         nuc_seg_in_key = nuc_in_key + '_corrected'
-        serum_seg_in_keys = [serum_in_key + '_corrected' for serum_in_key in serum_in_keys]
+        serum_seg_in_key = serum_seg_in_key + '_corrected'
     else:
         nuc_seg_in_key = nuc_in_key
-        serum_seg_in_keys = serum_in_keys
 
     if config.analysis_on_corrected:
         serum_ana_in_keys = [serum_in_key + '_corrected' for serum_in_key in serum_in_keys]
@@ -39,7 +44,7 @@ def get_input_keys(config, serum_in_keys):
         serum_ana_in_keys = serum_in_keys
         marker_ana_in_key = marker_in_key
 
-    return nuc_seg_in_key, serum_seg_in_keys, marker_ana_in_key, serum_ana_in_keys
+    return nuc_seg_in_key, serum_seg_in_key, marker_ana_in_key, serum_ana_in_keys
 
 
 def run_cell_analysis(config):
@@ -77,7 +82,7 @@ def run_cell_analysis(config):
 
     # get keys and identifier
     serum_in_keys = get_serum_keys(config.input_folder)
-    (nuc_seg_in_key, serum_seg_in_keys,
+    (nuc_seg_in_key, serum_seg_in_key,
      marker_ana_in_key, serum_ana_in_keys) = get_input_keys(config, serum_in_keys)
 
     outlier_predicate = get_outlier_predicate(config)
@@ -93,7 +98,7 @@ def run_cell_analysis(config):
                 'ignore_failed_outputs': True}}),  # FIXME something goes wring in the output validation..
         (TorchPrediction, {
             'build': {
-                'input_key': serum_seg_in_keys[0],
+                'input_key': serum_seg_in_key,
                 'output_key': [config.mask_key, config.bd_key],
                 'model_path': torch_model_path,
                 'model_class': torch_model_class,
