@@ -181,6 +181,7 @@ class DenoiseByGrayscaleOpening(DenoiseChannel):
 
 
 class InstanceFeatureExtraction(BatchJobOnContainer):
+    # TODO: also save per-well (even per plate?) values of BG in table
     def __init__(self,
                  channel_keys=('serum', 'marker'),
                  nuc_seg_key='nucleus_segmentation',
@@ -227,9 +228,15 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
                           for t in per_cell_values])
         top10 = np.array([0 if len(t) < 10 else t.topk(10)[0][-1].item()
                           for t in per_cell_values])
+        medians = np.array([t.median().item()
+                            for t in per_cell_values])
+        mads = np.array([(t - median).abs().median().item()
+                         for t, median in zip(per_cell_values, medians)])
         # convert to numpy here
         return dict(sums=sums.cpu().numpy(),
                     means=means.cpu().numpy(),
+                    medians=medians,
+                    mads=mads,
                     sizes=instance_sizes.cpu().numpy(),
                     top50=top50,
                     top30=top30,
@@ -287,6 +294,70 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
                 _save_all_stats(input_file, output_file)
 
 
+class FindInfectedCells(BatchJobOnContainer):
+    """This job finds the infected and control cells to later compute the measures on"""
+    def __init__(self,
+                 cell_seg_key='cell_segmentation',
+                 marker_key='marker',
+                 infected_threshold=250, split_statistic='top50',
+                 bg_correction_key=None,
+                 identifier=None,
+                 **super_kwargs):
+        self.marker_key = marker_key
+        self.cell_seg_key = cell_seg_key
+        self.feature_table_key = cell_seg_key + '/' + marker_key
+
+        self.infected_threshold = infected_threshold
+        self.split_statistic = split_statistic
+
+        self.bg_correction_key = bg_correction_key
+
+        # infected are per default saved at tables/infected_ind/cell_segmentation/marker_key in the container
+        self.output_table_key = 'cell_classification/' + self.feature_table_key + \
+                                ('' if identifier is None else '_' + identifier)
+        super().__init__(input_key='tables/' + self.feature_table_key,
+                         output_key='tables/' + self.output_table_key,
+                         identifier=identifier,
+                         **super_kwargs)
+
+    def load_feature_dict(self, in_path):
+        with open_file(in_path, 'r') as f:
+            keys, table = self.read_table(f, self.feature_table_key)
+            feature_dict = {key: values for key, values in zip(keys, table.T)}
+        return feature_dict
+
+    def get_infected_ind(self, feature_dict):
+        bg_ind = feature_dict['label_id'].tolist().index(0)
+        if self.bg_correction_key:
+            offset = feature_dict[self.bg_correction_key][bg_ind]
+        else:
+            offset = 0
+        infected_ind = feature_dict[self.split_statistic] > self.infected_threshold + offset
+        infected_ind[bg_ind] = False  # the background should never be classified as infected
+        return infected_ind
+
+    def get_infected_and_control_ind(self, feature_dict):
+        infected_ind = self.get_infected_ind(feature_dict)
+        # per default, everything that is not infected is control
+        bg_ind = feature_dict['label_id'].tolist().index(0)
+        control_ind = infected_ind == False
+        control_ind[bg_ind] = False  # the background should never be classified as control
+        return infected_ind, control_ind
+
+    def compute_and_save_infected_ind(self, in_file, out_file):
+        feature_dict = self.load_feature_dict(in_file)
+        infected_ind, control_ind = self.get_infected_and_control_ind(feature_dict)
+        column_names = ['label_id', 'is_infected', 'is_control']
+        table = [feature_dict['label_id'], infected_ind, control_ind]
+        table = np.asarray(table, dtype=float).T
+        with open_file(out_file, 'a') as f:
+            self.write_table(f, self.output_table_key, column_names, table)
+
+    def run(self, input_files, output_files):
+        for input_file, output_file in tqdm(list(zip(input_files, output_files)), desc='finding infected cells'):
+            self.compute_and_save_infected_ind(input_file, output_file)
+
+
 class CellLevelAnalysis(BatchJobOnContainer):
     """
     """
@@ -314,6 +385,7 @@ class CellLevelAnalysis(BatchJobOnContainer):
         # TODO allow for serum and marker data to come from different segmentations
         self.serum_key = cell_seg_key + '/' + serum_key
         self.marker_key = cell_seg_key + '/' + marker_key
+        self.classification_key = 'cell_classification/' + cell_seg_key + '/' + marker_key
 
         self.infected_threshold = infected_threshold
         self.split_statistic = split_statistic
@@ -331,7 +403,8 @@ class CellLevelAnalysis(BatchJobOnContainer):
             output_key = None
 
         self.cell_seg_key = cell_seg_key
-        super().__init__(input_key=[f'tables/{cell_seg_key}/{key}' for key in (serum_key, marker_key)],
+        super().__init__(input_key=[f'tables/{key}'
+                                    for key in (self.serum_key, self.marker_key, self.classification_key)],
                          output_key=output_key,
                          **super_kwargs)
 
@@ -405,41 +478,32 @@ class CellLevelAnalysis(BatchJobOnContainer):
             self.marker_key: marker_dict
         }
 
-    def preprocess_per_cell_statistics(self, per_cell_statistics, marker_key=None):
-        marker_key = marker_key if marker_key is not None else self.marker_key
-        if self.subtract_marker_background:
-            per_cell_statistics = substract_background_of_marker(per_cell_statistics, marker_key=marker_key)
-        per_cell_statistics = remove_background_of_cell_properties(per_cell_statistics)
-        return per_cell_statistics
-
-    def get_infected_ind(self, per_cell_statistics):
-        return per_cell_statistics[self.marker_key][self.split_statistic] > self.infected_threshold
+    def load_infected_and_control_ind(self, in_path):
+        with open_file(in_path, 'r') as f:
+            column_names, table = self.read_table(f, self.classification_key)
+        infected_ind = table[:, 1]
+        control_ind = table[:, 2]
+        return infected_ind, control_ind
 
     # this is what should be run for each h5 file
     def write_image_table(self, input_files):
 
-        column_names = ['image_name', 'site_name', 'score', 'marked_as_outlier']
+        column_names = ['image_name', 'site_name', 'score', 'marked_as_outlier', 'n_infected', 'n_control']
         table = []
 
         for ii, in_file in enumerate(input_files):
             per_cell_statistics_to_save = self.load_result(in_file)
-            per_cell_statistics = self.preprocess_per_cell_statistics(deepcopy(per_cell_statistics_to_save))
+            per_cell_statistics = deepcopy(per_cell_statistics_to_save)  # TODO: background subtraction
 
-            # TODO this should go to a separate job (e.g. FindInfectedCells),
-            # and we should also figure out if
-            # preprocess_per_cell_statistics can be moved to a previous job
-            # (either FindInfectedCells or InstanceFeatureExtraction)
-            infected_ind = self.get_infected_ind(per_cell_statistics)
+            infected_ind, control_ind = self.load_infected_and_control_ind(in_file)
+            n_infected = infected_ind.astype(np.int32).sum()
+            n_control = control_ind.astype(np.int32).sum()
 
-            not_infected_ind = 1 - infected_ind
-            not_infected_cell_statistics = index_cell_properties(per_cell_statistics, not_infected_ind)
+            control_cell_statistics = index_cell_properties(per_cell_statistics, control_ind)
             infected_cell_statistics = index_cell_properties(per_cell_statistics, infected_ind)
-            measures = compute_ratios(not_infected_cell_statistics, infected_cell_statistics, serum_key=self.serum_key)
+            measures = compute_ratios(control_cell_statistics, infected_cell_statistics, serum_key=self.serum_key)
             if ii == 0:
                 column_names += list(measures.keys())
-
-            infected_ind_with_bg = np.zeros_like(per_cell_statistics_to_save[self.marker_key]['means'])
-            infected_ind_with_bg[per_cell_statistics_to_save['labels'] > 0] = infected_ind
 
             image_name = os.path.splitext(os.path.split(in_file)[1])[0]
             site_name = image_name_to_site_name(image_name)
@@ -451,7 +515,7 @@ class CellLevelAnalysis(BatchJobOnContainer):
             outlier = self.outlier_predicate(image_name)
             score = measures[self.score_name]
             score = np.nan if (outlier == 1 or score is None) else score
-            table.append([image_name, site_name, score, outlier] +
+            table.append([image_name, site_name, score, outlier, n_infected, n_control] +
                          [np.nan if m is None else m for m in measures.values()])
 
         # NOTE: todos left from Roman

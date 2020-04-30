@@ -6,7 +6,8 @@ import configargparse
 from batchlib import run_workflow
 from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    DenoiseByGrayscaleOpening,
-                                                   InstanceFeatureExtraction)
+                                                   InstanceFeatureExtraction,
+                                                   FindInfectedCells)
 from batchlib.outliers.outlier import get_outlier_predicate
 from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import SeededWatershed
@@ -121,8 +122,13 @@ def run_cell_analysis(config):
 
     job_dict[InstanceFeatureExtraction] = {'build': {'channel_keys': (serum_ana_in_key, marker_ana_in_key),
                                                      'nuc_seg_key': config.nuc_key,
-                                                     'cell_seg_key': config.seg_key},
+                                                     'cell_seg_key': config.seg_key,
+                                                     },
                                            'run': {'gpu_id': config.gpu}}
+    job_dict[FindInfectedCells] = {'build': {'marker_key': marker_ana_in_key,
+                                             'cell_seg_key': config.seg_key,
+                                             'bg_correction_key': 'means'},
+                                   'run': {}}
     job_dict[CellLevelAnalysis] = {'build': {'serum_key': serum_ana_in_key,
                                              'marker_key': marker_ana_in_key,
                                              'cell_seg_key': config.seg_key,
