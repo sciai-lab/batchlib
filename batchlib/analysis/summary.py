@@ -215,6 +215,7 @@ class CellLevelSummary(Summary):
         with open_file(in_path, 'r') as f:
             cell_seg = self.read_image(f, self.cell_seg_key)
 
+        # TODO use np.isin instead
         infected_mask = np.zeros_like(cell_seg)
         for label in infected_labels:
             infected_mask[cell_seg == label] = 1
