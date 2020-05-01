@@ -89,6 +89,8 @@ def compute_global_statistics(cell_properties):
         result[channel]['q0.9_of_cell_means'] = robust_quantile(properties['means'], 0.9)
         result[channel]['cell_mean'] = properties['means'].mean()
         result[channel]['cell_sum'] = properties['sums'].mean()
+
+
     return result
 
 
@@ -599,7 +601,7 @@ class CellLevelAnalysis(BatchJobOnContainer):
         # TODO: actual background subtraction
         return deepcopy(per_cell_statistics)
 
-    def get_stat_dict(self, infected_cell_statistics, control_cell_statistics):
+    def get_stat_dict(self, infected_cell_statistics, control_cell_statistics, bg_keys=None):
         stat_dict = compute_ratios(control_cell_statistics, infected_cell_statistics, serum_key=self.serum_key)
         stat_dict['score'] = stat_dict[self.score_name]
         stat_dict['n_infected'] = len(next(iter(infected_cell_statistics[self.serum_key].values())))
@@ -609,6 +611,16 @@ class CellLevelAnalysis(BatchJobOnContainer):
         stat_dict['n_cells'] = stat_dict['n_infected'] + stat_dict['n_control']
         stat_dict['fraction_infected'] = stat_dict['n_infected'] / stat_dict['n_cells']
 
+        if bg_keys is not None:
+            # the background statistics are saved for every cell, so get them from an arbitrary one
+            all_cell_statistics = join_cell_properties(infected_cell_statistics, control_cell_statistics)
+            for bg_key in bg_keys:
+                for semantic_channel_name, channel_key in [('serum', self.serum_key), ('marker', self.marker_key)]:
+                    try:
+                        bg_stat = next(iter(all_cell_statistics[channel_key][bg_key]))
+                    except StopIteration:
+                        bg_stat = np.nan
+                stat_dict[f'{bg_key}_{semantic_channel_name}'] = bg_stat
         return stat_dict
 
     # this is what should be run for each h5 file
@@ -622,7 +634,10 @@ class CellLevelAnalysis(BatchJobOnContainer):
             infected_cell_statistics, control_cell_statistics = self.load_per_cell_statistics(in_file)
 
             # get all the statistics for this image and their names
-            stat_dict = self.get_stat_dict(infected_cell_statistics, control_cell_statistics)
+            bg_keys = ['plate_bg_median', 'plate_bg_mad',
+                       'well_bg_median', 'well_bg_mad',
+                       'image_bg_median', 'image_bg_mad']
+            stat_dict = self.get_stat_dict(infected_cell_statistics, control_cell_statistics, bg_keys)
 
             # Set the main score to nan if this image is an outlier
             outlier, outlier_type = self.check_for_outlier(in_file)
@@ -639,6 +654,7 @@ class CellLevelAnalysis(BatchJobOnContainer):
 
         table = np.array(table)
         n_cols = len(column_names)
+        print(column_names)
         assert n_cols == table.shape[1]
 
         # set image name to non-visible for the plateViewer (something else?)
@@ -669,8 +685,10 @@ class CellLevelAnalysis(BatchJobOnContainer):
 
             infected_cell_statistics, control_cell_statistics = self.load_per_cell_statistics(in_files_for_current_well)
 
-            # get all the statistics for this image and their names
-            stat_dict = self.get_stat_dict(infected_cell_statistics, control_cell_statistics)
+            # get all the statistics for this well and their names
+            bg_keys = ['plate_bg_median', 'plate_bg_mad',
+                       'well_bg_median', 'well_bg_mad']
+            stat_dict = self.get_stat_dict(infected_cell_statistics, control_cell_statistics, bg_keys)
 
             # get the main score, which is the measure computed for `score_name`, but set to
             # nan if this image is an outlier
@@ -685,6 +703,7 @@ class CellLevelAnalysis(BatchJobOnContainer):
         table = np.array(table)
         n_cols = len(column_names)
         assert n_cols == table.shape[1]
+        print(column_names)
 
         with open_file(self.table_out_path, 'a') as f:
             self.write_table(f, self.well_table_key, column_names, table)
