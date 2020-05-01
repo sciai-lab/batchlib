@@ -8,9 +8,10 @@ from glob import glob
 from batchlib.workflows import run_cell_analysis, cell_analysis_parser
 
 
-def cell_analysis_workflow():
+def cell_analysis_workflow(folder):
     parser = cell_analysis_parser('./configs', 'cell_analysis.conf')
     config = parser.parse_args()
+    config.input_folder = folder
     run_cell_analysis(config)
 
 
@@ -24,7 +25,7 @@ def run_plates(folders):
             continue
 
         try:
-            cell_analysis_workflow(folder, use_unique_output_folder=False)
+            cell_analysis_workflow(folder)
         except Exception:
             print(f'\nException while evaluating folder {folder}.')
             print(traceback.format_exc())
