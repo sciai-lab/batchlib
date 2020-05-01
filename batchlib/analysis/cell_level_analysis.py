@@ -352,29 +352,39 @@ class FindInfectedCells(BatchJobOnContainer):
             if self.per_cell_bg_correction:
                 offset = feature_dict[bg_correction_key]
             else:
-                bg_ind = feature_dict['label_id'].tolist().index(0)
-                offset = feature_dict[bg_correction_key][bg_ind]
+                try:
+                    bg_ind = feature_dict['label_id'].tolist().index(0)
+                    offset = feature_dict[bg_correction_key][bg_ind]
+                except ValueError:
+                    offset = np.nan
         else:
             offset = 0
         return offset
 
     def get_infected_indicator(self, feature_dict):
-        bg_ind = feature_dict['label_id'].tolist().index(0)
         offset = self.get_bg_correction(feature_dict)
         if self.infected_threshold_scale_key is not None:
             scale = feature_dict[self.infected_threshold_scale_key]
         else:
             scale = 1
         infected_indicator = feature_dict[self.split_statistic] > scale * self.infected_threshold + offset
-        infected_indicator[bg_ind] = False  # the background should never be classified as infected
+
+        try:
+            bg_ind = feature_dict['label_id'].tolist().index(0)
+            infected_indicator[bg_ind] = False  # the background should never be classified as infected
+        except ValueError:
+            pass  # no bg segment
         return infected_indicator
 
     def get_infected_and_control_indicators(self, feature_dict):
         infected_indicator = self.get_infected_indicator(feature_dict)
         # per default, everything that is not infected is control
-        bg_ind = feature_dict['label_id'].tolist().index(0)
         control_indicator = infected_indicator == False
-        control_indicator[bg_ind] = False  # the background should never be classified as control
+        try:
+            bg_ind = feature_dict['label_id'].tolist().index(0)
+            control_indicator[bg_ind] = False  # the background should never be classified as control
+        except ValueError:
+            pass  # no bg segment
         return infected_indicator, control_indicator
 
     def compute_and_save_infected_and_control(self, in_file, out_file):
@@ -720,9 +730,9 @@ class CellLevelAnalysis(BatchJobOnContainer):
             cell_seg = self.read_image(f, self.cell_seg_key)
 
         # make a label mask for the infected cells
-        label_ids = np.unique(cell_seg)
+        label_ids = self.load_per_cell_statistics(in_path, False, False)['labels']
         infected_indicator, _ = self.load_infected_and_control_indicators(in_path)
-        assert len(label_ids) == len(infected_indicator)
+        assert len(label_ids) == len(infected_indicator), f'{len(label_ids)} != {len(infected_indicator)}'
         infected_label_ids = label_ids[infected_indicator.astype('bool')]  # cast to bool again to be sure
         infected_mask = np.isin(cell_seg, infected_label_ids).astype(cell_seg.dtype)
 
