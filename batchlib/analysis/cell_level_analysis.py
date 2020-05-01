@@ -683,6 +683,7 @@ class CellLevelAnalysis(BatchJobOnContainer):
                 # TODO: add row full of np.nan for wells of outliers
                 logger.info(f'Skipping well {well_name} as it consists entirely of outliers. '
                             f'It will not be included in the per-well table.')
+                continue
             infected_cell_statistics, control_cell_statistics = self.load_per_cell_statistics(in_files_for_current_well)
 
             # get all the statistics for this well and their names
