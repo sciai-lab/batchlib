@@ -236,7 +236,11 @@ def get_colorbar_range(key):
     return colorbar_range
 
 
-def all_plots(table_path, out_folder, table_key, identifier=None, stat_names=None):
+# TODO this function should be refactored into two functions:
+# 1 that accepts a well table and one that accepts an image table
+def all_plots(table_path, out_folder, table_key, stat_names, identifier=None):
+    if not isinstance(stat_names, (list, tuple)):
+        raise ValueError(f"stat_names must be either list or tuple, got {type(stat_names)}")
     os.makedirs(out_folder, exist_ok=True)
 
     # load first file to get all the column names
@@ -245,15 +249,20 @@ def all_plots(table_path, out_folder, table_key, identifier=None, stat_names=Non
         column_names = g['columns'][:]
         table = g['cells'][:]
     column_names = [name.decode('utf8') for name in column_names]
-    # TODO need to change this to also suport well name
-    assert column_names[0] == 'image_name'
+
+    if column_names[0] != 'image_name':
+        raise ValueError("all_plots can only be called on a table that contains the image statistics")
+
+    # check that we have all the stat names
+    available_stats = set(column_names[1:])
+    unknown_stats = list(set(stat_names) - available_stats)
+    if len(unknown_stats) > 0:
+        unknown_stats = ", ".join(unknown_stats)
+        raise ValueError(f"Did not find the names {unknown_stats} in the table columns")
+
+    plate_name = os.path.split(table_path)[0]
 
     stats_per_file = {}
-
-    if stat_names is None:
-        stat_names = [name for name in column_names]  # if name.startswith("ratio_of")]
-    # TODO check that we have all the stat names
-
     for name in tqdm(stat_names, desc='making plots'):
 
         # 0th column is the image name
@@ -261,28 +270,21 @@ def all_plots(table_path, out_folder, table_key, identifier=None, stat_names=Non
         stat_id = column_names.index(name)
         stats_per_file = dict(zip(image_names, table[:, stat_id].astype('float')))
 
-        # TODO also put identifier in title
         outfile = os.path.join(out_folder, f"plates_{name}.png") if identifier is None else \
             os.path.join(out_folder, f"plates_{name}_{identifier}.png")
-        # TODO is there a reason for the previous weird title ???
         well_plot(stats_per_file,
                   figsize=(14, 6),
                   print_medians=True,
-                  # colorbar_range=get_colorbar_range(key),
                   outfile=outfile,
-                  title=name)
-                  # title=out_path + "\n" + name)
+                  title=plate_name + "\n" + name)
 
-        # TODO we should actually use the well level table for this
         outfile = os.path.join(out_folder, f"plates_{name}_median.png")
-        # TODO is there a reason for the previous weird title ???
         well_plot(stats_per_file,
                   figsize=(14, 6),
                   outfile=outfile,
                   print_medians=True,
                   wedge_width=0.,
-                  # colorbar_range=get_colorbar_range(key),
-                  title=name + " median over images")
+                  title=plate_name + "\n" + name + " median over images")
 
 
 if __name__ == '__main__':
