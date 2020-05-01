@@ -28,9 +28,19 @@ def to_uint8(raw):
     return raw.astype('uint8')
 
 
+def make_infected_mask(segmentation, labels):
+    infected_mask = np.isin(segmentation, np.where(labels == 1)[0]).astype('int8')
+    infected_mask[segmentation == 0] = 2
+    return infected_mask
+
+
 def to_bigcat(serum, marker, nuclei, segmentation, infected_labels, out_path):
     lut = fragment_segment_lut(segmentation, infected_labels)
     next_id = int(lut.max()) + 1
+
+    # we need to save the initial infected mask
+    # so we can map back the ids later
+    infected_mask = make_infected_mask(segmentation, infected_labels)
 
     res = [1, 1, 1]
     offset = [0, 0, 0]
@@ -47,9 +57,8 @@ def to_bigcat(serum, marker, nuclei, segmentation, infected_labels, out_path):
         attrs['resolution'] = res
 
         segmentation = segmentation.astype('uint64')
-        segmentation = np.concatenate([segmentation[None], np.zeros_like(segmentation)[None]], axis=0)
-        ds = f.create_dataset('volumes/labels/fragments', data=segmentation,
-                              compression='gzip')
+        segmentation = segmentation[None]
+        ds = f.create_dataset('volumes/labels/fragments', data=segmentation, compression='gzip')
         attrs = ds.attrs
         attrs['resolution'] = res
         attrs['offset'] = offset
@@ -57,6 +66,8 @@ def to_bigcat(serum, marker, nuclei, segmentation, infected_labels, out_path):
         ds = f.require_dataset('fragment_segment_lut', shape=lut.shape, compression='gzip',
                                maxshape=(2, None), dtype='uint64')
         ds[:] = lut
+
+        ds = f.create_dataset('volumes/infected_mask', data=infected_mask, compression='gzip')
 
 
 def infected_labels_from_table(f, infected_label_key):
