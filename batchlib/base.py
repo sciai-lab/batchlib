@@ -349,6 +349,9 @@ class BatchJobOnContainer(BatchJob, ABC):
         if len(column_names) != table.shape[1]:
             raise ValueError("Number of columns does not match")
 
+        # set None to np.nan
+        table[table == None] = np.nan
+
         # make the table datasets. we follow the layout
         # table/cells - contains the data
         # table/columns - containse the column names
