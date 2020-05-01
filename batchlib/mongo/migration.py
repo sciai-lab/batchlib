@@ -45,9 +45,12 @@ def _parse_creation_time(plate_name):
     month = int(_date[4:6])
     day = int(_date[6:8])
 
-    hour = int(_time[:2])
-    minute = int(_time[2:4])
-    second = int(_time[4:6])
+    try:
+        hour = int(_time[:2])
+        minute = int(_time[2:4])
+        second = int(_time[4:6])
+    except ValueError:
+        hour = minute = second = 0
 
     return datetime(year, month, day, hour, minute, second)
 
@@ -69,8 +72,8 @@ def _create_images(well_name, well_files, outlier_predicate):
             {
                 "name": im_file,
                 "well_name": well_name,
-                "qc_status": outlier_predicate(im_file),
-                "qc_type": "manual"
+                "outlier": outlier_predicate(im_file),
+                "outlier_type": "manual"
             }
         )
     return images
@@ -97,8 +100,8 @@ def _create_wells(plate_name, plate_dir):
             {
                 "name": well_name,
                 # assume all wells are valid for now
-                "qc_status": 0,
-                "qc_type": "manual",
+                "outlier": 0,
+                "outlier_type": "manual",
                 "manual_assessment": "unknown",
                 "images": _create_images(well_name, well_files, outlier_predicate)
             }
@@ -113,8 +116,8 @@ def _create_plate_doc(plate_name, plate_dir):
         "name": plate_name,
         "created_at": _parse_creation_time(plate_name),
         # assume all plates are valid for now
-        "qc_status": 0,
-        "qc_type": "manual",
+        "outlier": 0,
+        "outlier_type": "manual",
         "channel_mapping": _load_channel_mapping(plate_dir),
         "wells": _create_wells(plate_name, plate_dir)
     }
@@ -140,9 +143,7 @@ def migrate(input_folder, db):
 
     # import plates
     logger.info(f'Importing {len(plate_docs)} plates')
-    result = assay_metadata.insert_many(plate_docs)
-
-    logger.info('Inserted IDS:', result.inserted_ids)
+    assay_metadata.insert_many(plate_docs)
 
 
 def update_well_assessment(plate_name, well_assessments):

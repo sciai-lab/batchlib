@@ -95,21 +95,21 @@ Schema of a single document:
 {
   "created_at": "TIMESTAMP",
   "name": "PLATE NAME; UNIQUE ID", 
-  "qc_status":  "QUALITY CONTROL FLAG",
-  "qc_type": "QUALITY CONTROL TYPE",
+  "outlier":  "QUALITY CONTROL FLAG",
+  "outlier_type": "QUALITY CONTROL TYPE",
   "channel_mapping": "sub-document containing channel mapping info",
   "wells": [
     {
       "name": "WELL NAME",
-      "qc_status": "QUALITY CONTROL FOR THE WELL",
-      "qc_type": "QUALITY CONTROL TYPE",
+      "outlier": "QUALITY CONTROL FOR THE WELL",
+      "outlier_type": "QUALITY CONTROL TYPE",
       "manual_assessment": "positive/negative sample assessed manually",
       "images": [
         {
           "name": "IMAGE NAME",
           "well_name": "WELL NAME",
-          "qc_status": "QUALITY CONTROL: outlier or valid  or none",
-          "qc_type": "additional info about the outlier status",
+          "outlier": "QUALITY CONTROL: outlier or valid  or none",
+          "outlier_type": "additional info about the outlier status",
           "issue_urls (optional)": ["issue-url1", "issue-url2"],
           "inst_seg_gt (optional)": "TRUE/FALSE, whether we have inst seg GT for this image",
           "sem_seg_gt (optional)": "TRUE/FALSE, whether we have sem seg GT for this image"
