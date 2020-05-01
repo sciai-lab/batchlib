@@ -607,6 +607,7 @@ class CellLevelAnalysis(BatchJobOnContainer):
 
         # this only accounts for cells that were either classified as infected or control
         stat_dict['n_cells'] = stat_dict['n_infected'] + stat_dict['n_control']
+        stat_dict['fraction_infected'] = stat_dict['n_infected'] / stat_dict['n_cells']
 
         return stat_dict
 
