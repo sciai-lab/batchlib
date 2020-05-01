@@ -3,11 +3,17 @@ import numpy as np
 import h5py
 
 
-# TODO should we enable also exporting the nucleus channel?
-# (= second raw channel)
+def check(raw, seg):
+    import napari
+    with napari.gui_qt():
+        viewer = napari.Viewer()
+        viewer.add_image(raw)
+        viewer.add_labels(seg)
+
+
 def export_from_bigcat(in_path, out_path):
     with h5py.File(in_path, 'r') as f:
-        raw = f['volumes/raw'][0, :, :]
+        raw = f['volumes/raw'][:]
         seg = f['volumes/labels/merged_ids'][0, :, :]
 
     # largest segment is background
@@ -17,6 +23,7 @@ def export_from_bigcat(in_path, out_path):
 
     seg[seg == bg_id] = 0
 
+    # check(raw, seg)
     with h5py.File(out_path, 'a') as f:
         f.create_dataset('raw', data=raw, compression='gzip')
         f.create_dataset('cells', data=seg, compression='gzip')

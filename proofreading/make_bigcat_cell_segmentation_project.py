@@ -48,10 +48,8 @@ def to_bigcat(serum, nuclei, watershed, segmentation, out_path):
         attrs = ds.attrs
         attrs['resolution'] = res
 
-        watershed = watershed.astype('uint64')
-        watershed = np.concatenate([watershed[None], np.zeros_like(watershed)[None]], axis=0)
-        ds = f.create_dataset('volumes/labels/fragments', data=watershed,
-                              compression='gzip')
+        watershed = watershed[None].astype('uint64')
+        ds = f.create_dataset('volumes/labels/fragments', data=watershed, compression='gzip')
         attrs = ds.attrs
         attrs['resolution'] = res
         attrs['offset'] = offset
