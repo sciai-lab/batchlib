@@ -309,15 +309,11 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
 
     def get_bg_stats(self, bg_values):
         # bg_vales should have shape n_channels, n_pixels
-        medians = bg_values.median(1)[0]
-        mads = (bg_values - medians[:, None]).abs().median(1)[0]
+        bg_values = bg_values.cpu().numpy().astype(np.float32)
+        medians = np.median(bg_values, axis=1)
+        mads = np.median(np.abs(bg_values - medians[:, None]), axis=1)
 
-        def to_numpy(tensor):
-            return tensor.cpu().numpy().astype(np.float32)
-        return {
-            'median': to_numpy(medians),
-            'mad': to_numpy(mads),
-        }
+        return {'median': medians, 'mad': mads}
 
     def run(self, input_files, output_files, gpu_id=None):
         # first, get plate wide and per-well background statistics
