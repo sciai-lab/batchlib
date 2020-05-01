@@ -582,7 +582,6 @@ class CellLevelAnalysis(BatchJobOnContainer):
             per_cell_statistics_to_save = self.load_result(in_file)
             per_cell_statistics = deepcopy(per_cell_statistics_to_save)  # TODO: background subtraction
 
-            # TODO: @Roman are these binary masks or indices?
             # Could we rename the variables to something that makes this clear?
             # (ind could be either 'indicator' (=binary mask) or index)
             infected_indicator, control_indicator = self.load_infected_and_control_indicators(in_file)
@@ -612,9 +611,6 @@ class CellLevelAnalysis(BatchJobOnContainer):
             score = measures[self.score_name]
             score = np.nan if (outlier == 1 or score is None) else score
             table.append([image_name, site_name, score, outlier, outlier_type] + image_values)
-
-        # NOTE: todos left from Roman
-        # TODO: Make one big per-cell table for the analysis, with both serum and marker statistics?
 
         table = np.array(table)
         n_cols = len(column_names)
