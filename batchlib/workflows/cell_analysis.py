@@ -94,8 +94,7 @@ def run_cell_analysis(config):
                 'barrel_corrector_path': barrel_corrector_path,
                 'scale_factors': config.scale_factors},
             'run': {
-                'n_jobs': config.n_cpus,
-                'ignore_failed_outputs': False}}),  # FIXME something goes wring in the output validation..
+                'n_jobs': config.n_cpus}}),
         (TorchPrediction, {
             'build': {
                 'input_key': serum_seg_in_key,
