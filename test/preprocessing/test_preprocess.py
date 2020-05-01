@@ -33,15 +33,17 @@ class TestPreprocess(unittest.TestCase):
                                      barrel_corrector_path=barrel_corrector_path)
         job(self.folder, in_folder, n_jobs=4)
 
-    def test_nameing_schemes(self):
+    def test_naming_schemes(self):
         from batchlib.preprocessing import Preprocess
         root = os.path.join(self.in_root, 'naming_schemes')
         folders = glob(os.path.join(root, "*"))
         for in_folder in folders:
             job = Preprocess.from_folder(in_folder)
-            job(self.folder, in_folder)
+            name = os.path.split(in_folder)[1]
+            folder = os.path.join(self.folder, name)
+            job(folder, in_folder)
 
-    def test_nameing_schemes_with_barrel_correction(self):
+    def test_naming_schemes_with_barrel_correction(self):
         from batchlib.preprocessing import Preprocess, get_barrel_corrector
         root = os.path.join(self.in_root, 'naming_schemes')
         barrel_corrector_root = os.path.join(self.misc_folder, 'barrel_correctors')
@@ -50,7 +52,9 @@ class TestPreprocess(unittest.TestCase):
             barrel_corrector_path = get_barrel_corrector(barrel_corrector_root, in_folder)
             job = Preprocess.from_folder(in_folder,
                                          barrel_corrector_path=barrel_corrector_path)
-            job(self.folder, in_folder)
+            name = os.path.split(in_folder)[1]
+            folder = os.path.join(self.folder, name)
+            job(folder, in_folder)
 
 
 if __name__ == '__main__':

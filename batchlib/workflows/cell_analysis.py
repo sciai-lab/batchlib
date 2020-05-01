@@ -95,7 +95,7 @@ def run_cell_analysis(config):
                 'scale_factors': config.scale_factors},
             'run': {
                 'n_jobs': config.n_cpus,
-                'ignore_failed_outputs': True}}),  # FIXME something goes wring in the output validation..
+                'ignore_failed_outputs': False}}),  # FIXME something goes wring in the output validation..
         (TorchPrediction, {
             'build': {
                 'input_key': serum_seg_in_key,
