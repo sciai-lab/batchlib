@@ -2,6 +2,7 @@ import os
 from copy import copy, deepcopy
 from functools import partial
 from collections import defaultdict
+from functools import lru_cache
 
 import numpy as np
 import skimage.morphology
@@ -51,18 +52,16 @@ def divide_by_background_of_marker(cell_properties, marker_key, bg_label=0):
 
 
 def join_cell_properties(*cell_property_list):
-    updated_cell_properties = []
+    # copy to avoid changing inputs
+    cell_property_list = list(map(copy, cell_property_list))
+    # remove labels if present as they are meaningless without info on what image the cell belongs to
     for cell_properties in cell_property_list:
-        cell_properties = copy(cell_properties)
-        cell_properties.pop('measures', None)
         cell_properties.pop('labels', None)
-        updated_cell_properties.append(cell_properties)
-    cell_property_list = updated_cell_properties
-    return {key: {inner_key: np.concatenate([cell_property[key][inner_key]
-                                             for cell_property in cell_property_list
-                                             if len(cell_property[key][inner_key].shape) > 0])
-                  for inner_key in value.keys()} if isinstance(value, dict) else None
-            for key, value in cell_property_list[0].items()}
+    return {channel: {inner_key: np.concatenate([cell_property[channel][inner_key]
+                                                 for cell_property in cell_property_list
+                                                 if len(cell_property[channel][inner_key].shape) > 0])
+                      for inner_key in per_channel_properties.keys()}
+            for channel, per_channel_properties in cell_property_list[0].items()}
 
 
 def compute_global_statistics(cell_properties):
@@ -530,18 +529,41 @@ class CellLevelAnalysis(BatchJobOnContainer):
         else:
             return have_table
 
-    def load_result(self, in_path):
+    def load_per_cell_statistics(self, in_path, subtract_background=True, split_infected_and_control=True):
+        # if multiple paths are given, concatenate the individual statistics
+        if isinstance(in_path, (list, tuple)):
+            in_paths = in_path
+            results = [self.load_per_cell_statistics(in_path, subtract_background, split_infected_and_control)
+                       for in_path in in_paths]
+            if not split_infected_and_control:
+                return join_cell_properties(*results)
+            else:
+                return (join_cell_properties(*[result[0] for result in results]),  # join infected
+                        join_cell_properties(*[result[1] for result in results]))  # join control
+
+        # only a single path is given
         with open_file(in_path, 'r') as f:
             serum_keys, serum_table = self.read_table(f, self.serum_key)
             serum_dict = {key: values for key, values in zip(serum_keys, serum_table.T)}
             marker_keys, marker_table = self.read_table(f, self.marker_key)
             marker_dict = {key: values for key, values in zip(marker_keys, marker_table.T)}
         assert np.all(serum_dict['label_id'] == marker_dict['label_id'])
-        return {
+        per_cell_statistics = {
             'labels': serum_dict['label_id'],
             self.serum_key: serum_dict,
             self.marker_key: marker_dict
         }
+        if subtract_background:
+            per_cell_statistics = self.subtract_background(per_cell_statistics)
+
+        if not split_infected_and_control:
+            return per_cell_statistics
+
+        infected_indicator, control_indicator = self.load_infected_and_control_indicators(in_path)
+        infected_cell_statistics = index_cell_properties(per_cell_statistics, infected_indicator)
+        control_cell_statistics = index_cell_properties(per_cell_statistics, control_indicator)
+
+        return infected_cell_statistics, control_cell_statistics
 
     def load_infected_and_control_indicators(self, in_path):
         with open_file(in_path, 'r') as f:
@@ -555,12 +577,14 @@ class CellLevelAnalysis(BatchJobOnContainer):
     # - number of cells
     # - cell size distribution
     # - negative ratios
-    def check_for_outlier(self, image_name, values, value_names):
+    @lru_cache(maxsize=None)
+    def check_for_outlier(self, in_file):
 
         # outliers can have the following values:
         # 0: not an outlier
         # 1: outlier
         # -1: no annotation available
+        image_name = os.path.splitext(os.path.split(in_file)[1])[0]
         outlier = self.outlier_predicate(image_name)
 
         outlier_type = 'none'
@@ -571,46 +595,47 @@ class CellLevelAnalysis(BatchJobOnContainer):
 
         return outlier, outlier_type
 
+    def subtract_background(self, per_cell_statistics):
+        # TODO: actual background subtraction
+        return deepcopy(per_cell_statistics)
+
+    def get_stat_dict(self, infected_cell_statistics, control_cell_statistics):
+        stat_dict = compute_ratios(control_cell_statistics, infected_cell_statistics, serum_key=self.serum_key)
+        stat_dict['score'] = stat_dict[self.score_name]
+        stat_dict['n_infected'] = len(next(iter(infected_cell_statistics[self.serum_key].values())))
+        stat_dict['n_control'] = len(next(iter(control_cell_statistics[self.serum_key].values())))
+
+        # this only accounts for cells that were either classified as infected or control
+        stat_dict['n_cells'] = stat_dict['n_infected'] + stat_dict['n_control']
+        stat_dict['fraction_infected'] = stat_dict['n_infected'] / stat_dict['n_cells']
+
+        return stat_dict
+
     # this is what should be run for each h5 file
     def write_image_table(self, input_files):
 
-        column_names = ['image_name', 'site_name', 'score', 'marked_as_outlier', 'outlier_type',
-                        'n_infected', 'n_control']
+        column_names = ['image_name', 'site_name', 'marked_as_outlier', 'outlier_type']
         table = []
 
         for ii, in_file in enumerate(input_files):
-            per_cell_statistics_to_save = self.load_result(in_file)
-            per_cell_statistics = deepcopy(per_cell_statistics_to_save)  # TODO: background subtraction
 
-            # Could we rename the variables to something that makes this clear?
-            # (ind could be either 'indicator' (=binary mask) or index)
-            infected_indicator, control_indicator = self.load_infected_and_control_indicators(in_file)
-            n_infected = infected_indicator.astype(np.int32).sum()
-            n_control = control_indicator.astype(np.int32).sum()
+            infected_cell_statistics, control_cell_statistics = self.load_per_cell_statistics(in_file)
 
-            control_cell_statistics = index_cell_properties(per_cell_statistics, control_indicator)
-            infected_cell_statistics = index_cell_properties(per_cell_statistics, infected_indicator)
-            measures = compute_ratios(control_cell_statistics, infected_cell_statistics, serum_key=self.serum_key)
+            # get all the statistics for this image and their names
+            stat_dict = self.get_stat_dict(infected_cell_statistics, control_cell_statistics)
+
+            # Set the main score to nan if this image is an outlier
+            outlier, outlier_type = self.check_for_outlier(in_file)
+            stat_dict['score'] = np.nan if (outlier == 1 or stat_dict['score'] is None) else stat_dict['score']
+
+            stat_names, stat_list = map(list, zip(*stat_dict.items()))
             if ii == 0:
-                column_names += list(measures.keys())
+                column_names += stat_names
 
             image_name = os.path.splitext(os.path.split(in_file)[1])[0]
             site_name = image_name_to_site_name(image_name)
 
-            # gather the values (and their names) that could be relevant for the outlier detection
-            image_values = [n_infected, n_control] + [np.nan if m is None else m for m in measures.values()]
-            value_names = column_names[5:]
-            assert len(value_names) == len(image_values)
-
-            # check if this image is an outlier. it can be classified as outlier either because
-            # of outlier annotations or because it doesn't pass some quality control heuristics
-            outlier, outlier_type = self.check_for_outlier(image_name, image_values, value_names)
-
-            # get the main score, which is the measure computed for `score_name`, but set to
-            # nan if this image is an outlier
-            score = measures[self.score_name]
-            score = np.nan if (outlier == 1 or score is None) else score
-            table.append([image_name, site_name, score, outlier, outlier_type] + image_values)
+            table.append([image_name, site_name, outlier, outlier_type] + stat_list)
 
         table = np.array(table)
         n_cols = len(column_names)
@@ -625,52 +650,46 @@ class CellLevelAnalysis(BatchJobOnContainer):
 
         return table, column_names
 
-    def write_well_table(self, input_files, image_table, image_columns):
-        site_names = image_table[:, 1]
-        well_names = np.array([name.split('-')[0] for name in site_names])
+    def write_well_table(self, input_files):
+        # group input files per well
+        input_files_per_well = defaultdict(list)
+        for in_file in input_files:
+            image_name = os.path.splitext(os.path.split(in_file)[1])[0]
+            well_name = image_name_to_well_name(image_name)
+            input_files_per_well[well_name].append(in_file)
 
-        value_table = image_table[:, 2:]
-        column_names = image_columns[2:]
-        assert len(column_names) == value_table.shape[1]
-
-        unique_wells = np.unique(well_names)
-        well_column_names = ['well_name'] + [name for name in column_names if name != 'outlier_type']
-
+        column_names = ['well_name', 'number_of_outliers']
         table = []
-        # could maybe be done more efficiently
-        for well_name in unique_wells:
-            well_mask = well_names == well_name
-            this_values = value_table[well_mask]
 
-            row = []
-            for col_id, name in enumerate(column_names):
+        for ii, (well_name, in_files_for_current_well) in enumerate(input_files_per_well.items()):
+            n_total = len(in_files_for_current_well)
+            in_files_for_current_well = [in_file for in_file in in_files_for_current_well
+                                         if not self.check_for_outlier(in_file)[0] == 1]
+            n_outliers = n_total - len(in_files_for_current_well)
 
-                # we accumulate values over images with the median by default,
-                # but use sum for the outliers and the number of cells
-                # TODO are there other stats that need to be treated differently?
-                if name in ('marked_as_outlier', 'n_control', 'n_infected'):
-                    accumulator = np.sum
-                elif name == 'outlier_type':
-                    # we don't accumulate the outlier type column
-                    continue
-                else:
-                    accumulator = np.median
+            infected_cell_statistics, control_cell_statistics = self.load_per_cell_statistics(in_files_for_current_well)
 
-                try:
-                    row_values = this_values[:, col_id].astype('float')
-                    this_value = accumulator(row_values[np.isfinite(row_values)])
-                except ValueError:
-                    this_value = np.nan
-                row.append(this_value)
+            # get all the statistics for this image and their names
+            stat_dict = self.get_stat_dict(infected_cell_statistics, control_cell_statistics)
 
-            table.append([well_name] + row)
+            # get the main score, which is the measure computed for `score_name`, but set to
+            # nan if this image is an outlier
+            stat_dict['score'] = np.nan if stat_dict['score'] is None else stat_dict['score']
+
+            stat_names, stat_list = map(list, zip(*stat_dict.items()))
+            if ii == 0:
+                column_names += list(stat_names)
+
+            table.append([well_name, n_outliers] + stat_list)
 
         table = np.array(table)
-        n_cols = len(well_column_names)
+        n_cols = len(column_names)
+        assert n_cols == table.shape[1]
 
-        assert table.shape[1] == n_cols
+        with open_file(self.table_out_path, 'a') as f:
+            self.write_table(f, self.well_table_key, column_names, table)
 
-        return table, well_column_names
+        return table, column_names
 
     # write the image and well score attributes
     def write_image_and_well_information(self, files,
@@ -702,7 +721,8 @@ class CellLevelAnalysis(BatchJobOnContainer):
         infected_label_ids = label_ids[infected_indicator.astype('bool')]  # cast to bool again to be sure
         infected_mask = np.isin(cell_seg, infected_label_ids).astype(cell_seg.dtype)
 
-        result = self.load_result(in_path)
+        # TODO: should we subtract the background here?
+        result = self.load_per_cell_statistics(in_path, subtract_background=True, split_infected_and_control=False)
         mean_serum_image = np.zeros_like(cell_seg, dtype=np.float32)
         for label, intensity in zip(filter(lambda x: x != 0, label_ids),
                                     result[self.serum_key]['means']):
@@ -720,7 +740,7 @@ class CellLevelAnalysis(BatchJobOnContainer):
 
     def run(self, input_files, output_files):
         image_table, image_columns = self.write_image_table(input_files)
-        well_table, well_columns = self.write_well_table(input_files, image_table, image_columns)
+        well_table, well_columns = self.write_well_table(input_files)
         self.write_image_and_well_information(output_files, image_table, image_columns,
                                               well_table, well_columns)
 
