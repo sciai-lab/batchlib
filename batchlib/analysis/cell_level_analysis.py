@@ -23,34 +23,6 @@ def index_cell_properties(cell_properties, ind):
             for key, value in cell_properties.items()}
 
 
-def remove_background_of_cell_properties(cell_properties, bg_label=0):
-    return index_cell_properties(cell_properties, np.array(cell_properties['labels']) != bg_label)
-
-
-def substract_background_of_marker(cell_properties, bg_label=0, marker_key='marker'):
-    bg_ind = list(cell_properties['labels']).index(bg_label)
-    assert bg_ind is not None
-    cell_properties = deepcopy(cell_properties)
-    mean_bg = cell_properties[marker_key]['means'][bg_ind]
-    for key in cell_properties[marker_key].keys():
-        cell_properties[marker_key][key] -= mean_bg
-    return cell_properties
-
-
-def substract_background_of_serum(cell_properties, bg_label=0, serum_key='serum'):
-    return substract_background_of_marker(cell_properties, marker_key=serum_key)
-
-
-def divide_by_background_of_marker(cell_properties, marker_key, bg_label=0):
-    bg_ind = list(cell_properties['labels']).index(bg_label)
-    cell_properties = deepcopy(cell_properties)
-    mean_bg = cell_properties[marker_key]['means'][bg_ind]
-    for key in cell_properties[marker_key].keys():
-        cell_properties[marker_key][key] -= 550
-        cell_properties[marker_key][key] /= (mean_bg - 550)
-    return cell_properties
-
-
 def join_cell_properties(*cell_property_list):
     # copy to avoid changing inputs
     cell_property_list = list(map(copy, cell_property_list))
@@ -670,7 +642,6 @@ class CellLevelAnalysis(BatchJobOnContainer):
 
         table = np.array(table)
         n_cols = len(column_names)
-        print(column_names)
         assert n_cols == table.shape[1]
 
         # set image name to non-visible for the plateViewer (something else?)
@@ -719,7 +690,6 @@ class CellLevelAnalysis(BatchJobOnContainer):
         table = np.array(table)
         n_cols = len(column_names)
         assert n_cols == table.shape[1]
-        print(column_names)
 
         with open_file(self.table_out_path, 'a') as f:
             self.write_table(f, self.well_table_key, column_names, table)
