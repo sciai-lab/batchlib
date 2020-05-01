@@ -236,6 +236,8 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
                             for t in per_cell_values])
         mads = np.array([(t - median).abs().median().item()
                          for t, median in zip(per_cell_values, medians)])
+
+        # when adding a new stat, make sure that it's BG is subtracted in CellLevelAnalysis.subtract_background()
         # convert to numpy here
         return dict(sums=sums.cpu().numpy(),
                     means=means.cpu().numpy(),
@@ -433,10 +435,10 @@ class CellLevelAnalysis(BatchJobOnContainer):
                  cell_seg_key='cell_segmentation',
                  serum_key='serum',
                  marker_key='marker',
+                 serum_bg_key='well_bg_median',
+                 marker_bg_key='well_bg_median',
                  outlier_predicate=lambda im: False,
                  score_name='ratio_of_median_of_means',
-                 infected_threshold=250, split_statistic='top50',
-                 subtract_marker_background=True,
                  write_summary_images=False,
                  infected_cell_mask_key='infected_cell_mask',
                  serum_per_cell_mean_key='serum_per_cell_mean',
@@ -445,15 +447,14 @@ class CellLevelAnalysis(BatchJobOnContainer):
 
         self.outlier_predicate = outlier_predicate
 
+        self.serum_bg_key = serum_bg_key
+        self.marker_bg_key = marker_bg_key
+
         # TODO allow for serum and marker data to come from different segmentations
         self.serum_key = cell_seg_key + '/' + serum_key
         self.marker_key = cell_seg_key + '/' + marker_key
         self.classification_key = 'cell_classification/' + cell_seg_key + '/' + marker_key
 
-        self.infected_threshold = infected_threshold
-        self.split_statistic = split_statistic
-
-        self.subtract_marker_background = subtract_marker_background
         self.score_name = score_name
         self.write_summary_images = write_summary_images
 
@@ -598,8 +599,27 @@ class CellLevelAnalysis(BatchJobOnContainer):
         return outlier, outlier_type
 
     def subtract_background(self, per_cell_statistics):
-        # TODO: actual background subtraction
-        return deepcopy(per_cell_statistics)
+        per_cell_statistics = deepcopy(per_cell_statistics)
+        for channel, bg_key in ((self.serum_key, self.serum_bg_key), (self.marker_key, self.marker_bg_key)):
+            if bg_key is None:
+                continue
+            channel_statistics = per_cell_statistics[channel]
+            try:
+                bg_offset = next(iter(channel_statistics[bg_key]))
+            except StopIteration:
+                # no cells, nothing to do
+                continue
+            for key in channel_statistics.keys():
+                if key in ['means', 'medians', 'top50', 'top30', 'top10']:
+                    channel_statistics[key] -= bg_offset
+                elif key == 'sums':
+                    # sums are special case
+                    channel_statistics['sums'] -= bg_offset * channel_statistics['sizes']
+                elif key in ['label_id', 'mads', 'sizes'] or '_bg_' in key:
+                    pass
+                else:
+                    assert False, f"No background subtraction rule specified for key '{key}'"
+        return per_cell_statistics
 
     def get_stat_dict(self, infected_cell_statistics, control_cell_statistics, bg_keys=None):
         stat_dict = compute_ratios(control_cell_statistics, infected_cell_statistics, serum_key=self.serum_key)
@@ -620,7 +640,7 @@ class CellLevelAnalysis(BatchJobOnContainer):
                         bg_stat = next(iter(all_cell_statistics[channel_key][bg_key]))
                     except StopIteration:
                         bg_stat = np.nan
-                stat_dict[f'{bg_key}_{semantic_channel_name}'] = bg_stat
+                    stat_dict[f'{bg_key}_{semantic_channel_name}'] = bg_stat
         return stat_dict
 
     # this is what should be run for each h5 file
