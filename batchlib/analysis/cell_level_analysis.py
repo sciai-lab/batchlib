@@ -50,11 +50,15 @@ def compute_global_statistics(cell_properties):
             try:
                 result = np.quantile(arr, q)
             except Exception:
-                result = None
+                result = np.nan
             return result
 
         result[channel]['q0.5_of_cell_sums'] = robust_quantile(properties['sums'], 0.5)
+        result[channel]['mad_of_cell_sums'] = robust_quantile(np.abs(properties['sums'] -
+                                                                     result[channel]['q0.5_of_cell_sums']), 0.5)
         result[channel]['q0.5_of_cell_means'] = robust_quantile(properties['means'], 0.5)
+        result[channel]['mad_of_cell_means'] = robust_quantile(np.abs(properties['means'] -
+                                                                     result[channel]['q0.5_of_cell_means']), 0.5)
         result[channel]['q0.3_of_cell_means'] = robust_quantile(properties['means'], 0.3)
         result[channel]['q0.7_of_cell_means'] = robust_quantile(properties['means'], 0.7)
         result[channel]['q0.1_of_cell_means'] = robust_quantile(properties['means'], 0.1)
@@ -77,7 +81,7 @@ def compute_ratios(not_infected_properties, infected_properties, serum_key='seru
         try:
             result = (infected_global_properties[serum_key][key2]) / (not_infected_global_properties[serum_key][key])
         except Exception:
-            result = None
+            result = np.nan
         return result
 
     def diff_over_sum(key, key2=None):
@@ -86,7 +90,7 @@ def compute_ratios(not_infected_properties, infected_properties, serum_key='seru
             inf, not_inf = infected_global_properties[serum_key][key], not_infected_global_properties[serum_key][key2]
             result = (inf - not_inf) / (inf + not_inf)
         except Exception:
-            result = None
+            result = np.nan
         return result
 
     def diff(key, key2=None):
@@ -95,7 +99,18 @@ def compute_ratios(not_infected_properties, infected_properties, serum_key='seru
             inf, not_inf = infected_global_properties[serum_key][key], not_infected_global_properties[serum_key][key2]
             result = inf - not_inf
         except Exception:
-            result = None
+            result = np.nan
+        return result
+
+    def robust_z_score(mode='sums'):
+        assert mode in ('sums', 'means')
+        try:
+            inf = infected_global_properties[serum_key][f'q0.5_of_cell_{mode}']
+            not_inf = not_infected_global_properties[serum_key][f'q0.5_of_cell_{mode}']
+            mad = not_infected_global_properties[serum_key][f'mad_of_cell_{mode}']
+            result = (inf - not_inf) / mad
+        except Exception:
+            result = np.nan
         return result
 
     for key_result, key1, key2 in [
@@ -116,6 +131,9 @@ def compute_ratios(not_infected_properties, infected_properties, serum_key='seru
         result[f'infected_{key}'] = value
     for key, value in not_infected_global_properties[serum_key].items():
         result[f'not_infected_{key}'] = value
+
+    for mode in ('means', 'sums'):
+        result[f'robust_z_score_{mode}'] = robust_z_score(mode)
 
     result['infected_mean'] = infected_global_properties[serum_key]['global_mean']
     result['infected_median'] = infected_global_properties[serum_key]['q0.5_of_cell_means']
