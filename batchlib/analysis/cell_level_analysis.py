@@ -679,7 +679,10 @@ class CellLevelAnalysis(BatchJobOnContainer):
             in_files_for_current_well = [in_file for in_file in in_files_for_current_well
                                          if not self.check_for_outlier(in_file)[0] == 1]
             n_outliers = n_total - len(in_files_for_current_well)
-
+            if len(in_files_for_current_well) == 0:
+                # TODO: add row full of np.nan for wells of outliers
+                logger.info(f'Skipping well {well_name} as it consists entirely of outliers. '
+                            f'It will not be included in the per-well table.')
             infected_cell_statistics, control_cell_statistics = self.load_per_cell_statistics(in_files_for_current_well)
 
             # get all the statistics for this well and their names
