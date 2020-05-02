@@ -2,7 +2,6 @@ import os
 from copy import copy, deepcopy
 from functools import partial
 from collections import defaultdict
-from functools import lru_cache
 
 import numpy as np
 import skimage.morphology
@@ -595,8 +594,7 @@ class CellLevelAnalysisWithTableBase(CellLevelAnalysisBase):
 class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
     """
     """
-    # TODO enable over-riding these keys to allow runnning CellLevelAnalysis Jobs
-    # with different settings on the same folder
+    # for now, we hard-code the table keys and write to different table files instead
     image_table_key = 'images/default'
     well_table_key = 'wells/default'
 
@@ -611,10 +609,13 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
                  infected_cell_mask_key='infected_cell_mask',
                  serum_per_cell_mean_key='serum_per_cell_mean',
                  edge_key='cell_segmentation_edges',
+                 image_outlier_table='images/outliers',
                  **super_kwargs):
 
         self.score_name = score_name
         self.write_summary_images = write_summary_images
+
+        self.image_outlier_table = image_outlier_table
 
         if self.write_summary_images:
             output_key = [infected_cell_mask_key,
@@ -637,38 +638,38 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
                          output_key=output_key,
                          **super_kwargs)
 
-    # TODO move to the qc jobs and load the tables instead
-    # TODO for now, we only use manual outlier annotations, but we should
-    # also use some heuristics for automated QC, e.g.
-    # - number of cells
-    # - cell size distribution
-    # - negative ratios
-    @lru_cache(maxsize=None)
-    def check_for_outlier(self, in_file):
+    def load_image_outliers(self, input_files):
+        with open_file(self.table_out_path, 'r') as f:
+            if self.image_outlier_table not in f:
+                logger.warn("load_image_outliers: did not find an image outlier table")
+                return {}
+            keys, table = self.read_table(f, self.image_outlier_table)
 
-        # outliers can have the following values:
-        # 0: not an outlier
-        # 1: outlier
-        # -1: no annotation available
-        image_name = os.path.splitext(os.path.split(in_file)[1])[0]
-        # outlier = self.outlier_predicate(image_name)
-        outlier = -1
+        im_name_id = keys.index('image_name')
+        outlier_id = keys.index('is_outlier')
+        outlier_type_id = keys.index('outlier_type')
 
-        outlier_type = 'none'
-        if outlier == 1:
-            outlier_type = 'manual'
-        if outlier == -1:
-            outlier_type = 'not annotated'
+        image_names = set(table[:, im_name_id])
+        expected_names = set(os.path.splitext(os.path.split(in_file)[1])[0]
+                             for in_file in input_files)
 
-        return outlier, outlier_type
+        if image_names != expected_names:
+            logger.warn("load_image_outliers: image names from table and expected image names do not agree")
 
-    # this is what should be run for each h5 file
+        outlier_dict = {table[ii, im_name_id]: (table[ii, outlier_id], table[ii, outlier_type_id])
+                        for ii in range(len(table))}
+        return outlier_dict
+
     def write_image_table(self, input_files):
 
-        column_names = ['image_name', 'site_name', 'marked_as_outlier', 'outlier_type']
+        image_outlier_dict = self.load_image_outliers(input_files)
+
+        column_names = ['image_name', 'site_name', 'is_outlier', 'outlier_type']
         table = []
 
+        # TODO parallelize and tqdm
         for ii, in_file in enumerate(input_files):
+            image_name = os.path.splitext(os.path.split(in_file)[1])[0]
 
             infected_cell_statistics, control_cell_statistics = self.load_per_cell_statistics(in_file)
 
@@ -679,14 +680,13 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
             stat_dict = self.get_stat_dict(infected_cell_statistics, control_cell_statistics, bg_keys)
 
             # Set the main score to nan if this image is an outlier
-            outlier, outlier_type = self.check_for_outlier(in_file)
+            outlier, outlier_type = image_outlier_dict.get(image_name, (-1, 'not_checked'))
             stat_dict['score'] = np.nan if (outlier == 1 or stat_dict['score'] is None) else stat_dict['score']
 
             stat_names, stat_list = map(list, zip(*stat_dict.items()))
             if ii == 0:
                 column_names += stat_names
 
-            image_name = os.path.splitext(os.path.split(in_file)[1])[0]
             site_name = image_name_to_site_name(image_name)
 
             table.append([image_name, site_name, outlier, outlier_type] + stat_list)
@@ -712,13 +712,18 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
             well_name = image_name_to_well_name(image_name)
             input_files_per_well[well_name].append(in_file)
 
+        image_outlier_dict = self.load_image_outliers(input_files)
         column_names = ['well_name', 'number_of_outliers']
         table = []
 
         for ii, (well_name, in_files_for_current_well) in enumerate(input_files_per_well.items()):
             n_total = len(in_files_for_current_well)
-            in_files_for_current_well = [in_file for in_file in in_files_for_current_well
-                                         if not self.check_for_outlier(in_file)[0] == 1]
+            image_names_for_current_well = [os.path.splitext(os.path.split(in_file)[1])[0]
+                                            for in_file in in_files_for_current_well]
+
+            in_files_for_current_well = [in_file for in_file, im_name in zip(in_files_for_current_well,
+                                                                             image_names_for_current_well)
+                                         if not image_outlier_dict.get(im_name, (-1, ''))[0] == 1]
             n_outliers = n_total - len(in_files_for_current_well)
             if len(in_files_for_current_well) == 0:
                 # TODO: add row full of np.nan for wells of outliers
