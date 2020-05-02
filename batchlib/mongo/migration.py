@@ -129,8 +129,16 @@ def migrate(input_folder, db):
     logger.info(f'Migrating plates from: {input_folder}...')
     # get assay metadata collection
     assay_metadata = db[ASSAY_METADATA]
+    assay_results = db[ASSAY_ANALYSIS_RESULTS]
     # create necessary indexes
     assay_metadata.create_index([('name', pymongo.ASCENDING)], unique=True)
+    # create unique compound index on (workflow_name, plate_name, batchlib_version), i.e. reject result objects
+    # for which those 3 values already exist in the collection
+    assay_results.create_index([
+        ('workflow_name', pymongo.ASCENDING),
+        ('plate_name', pymongo.ASCENDING),
+        ('batchlib_version', pymongo.ASCENDING),
+    ], unique=True)
 
     plate_docs = []
     for filename in os.listdir(input_folder):

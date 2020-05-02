@@ -20,3 +20,4 @@ dependencies:
         - tensorflow==1.15
         - stardist
         - pymongo
+        - gitpython
