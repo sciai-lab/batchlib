@@ -8,9 +8,10 @@ def fragment_segment_lut(segmentation, infected_labels):
     node_ids = np.unique(segmentation)
     assert len(infected_labels) == len(node_ids)
     assert np.array_equal(np.unique(infected_labels), np.array([0, 1]))
+    infected_labels += 1
 
     # the background gets a special label, because it is neither infected nor not infected
-    infected_labels[0] = 2
+    infected_labels[0] = 0
     label_offset = node_ids[-1] + 1
 
     lut = np.zeros((2, len(node_ids)), dtype='uint64')
@@ -30,7 +31,9 @@ def to_uint8(raw):
 
 def make_infected_mask(segmentation, labels):
     infected_mask = np.isin(segmentation, np.where(labels == 1)[0]).astype('int8')
-    infected_mask[segmentation == 0] = 2
+    infected_mask[infected_mask == 1] = 2
+    infected_mask[infected_mask == 0] = 1
+    infected_mask[segmentation == 0] = 0
     return infected_mask
 
 
@@ -51,7 +54,7 @@ def to_bigcat(serum, marker, nuclei, segmentation, infected_labels, out_path):
         marker = to_uint8(marker)
         nuclei = to_uint8(nuclei)
 
-        raw = np.concatenate([serum[None], marker[None], nuclei[None]], axis=0)
+        raw = np.concatenate([marker[None], nuclei[None], serum[None]], axis=0)
         ds = f.create_dataset('volumes/raw', data=raw.astype('uint8'), compression='gzip')
         attrs = ds.attrs
         attrs['resolution'] = res
@@ -110,7 +113,7 @@ def convert_to_bigcat(in_path, out_path, use_corrected,
         serum = f[serum_key]['s0'][:]
         marker = f[marker_key]['s0'][:]
         nuclei = f[nuclei_key]['s0'][:]
-        seg = f['cell_segmentation/s0'][:]
+        seg = f['nucleus_segmentation/s0'][:]
 
         if infected_label_key in f:
             print(f"Reading infected labels from table @{infected_label_key}")
