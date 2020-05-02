@@ -142,7 +142,7 @@ def well_plot(data_dict, infected_list=None,
     if title is not None:
         plt.title(title)
     if outfile is not None:
-        plt.savefig(outfile)
+        plt.savefig(outfile, dpi=300)
         plt.close()
 
 
@@ -220,7 +220,7 @@ def score_distribution_plots(infected_values, not_infected_values, infected_medi
     if title is not None:
         plt.suptitle(title)
     if outfile is not None:
-        plt.savefig(outfile)
+        plt.savefig(outfile, dpi=300)
         plt.close()
 
 
@@ -238,7 +238,7 @@ def get_colorbar_range(key):
 
 # TODO this function should be refactored into two functions:
 # 1 that accepts a well table and one that accepts an image table
-def all_plots(table_path, out_folder, table_key, stat_names, identifier=None):
+def all_plots(table_path, out_folder, table_key, stat_names, identifier=None, **well_plot_kwargs):
     if not isinstance(stat_names, (list, tuple)):
         raise ValueError(f"stat_names must be either list or tuple, got {type(stat_names)}")
     os.makedirs(out_folder, exist_ok=True)
@@ -250,8 +250,8 @@ def all_plots(table_path, out_folder, table_key, stat_names, identifier=None):
         table = g['cells'][:]
     column_names = [name.decode('utf8') for name in column_names]
 
-    if column_names[0] != 'image_name':
-        raise ValueError("all_plots can only be called on a table that contains the image statistics")
+    if column_names[0] not in ['image_name', 'well_name']:
+        raise ValueError("all_plots can only be called on a table that contains the image or well statistics")
 
     # check that we have all the stat names
     available_stats = set(column_names[1:])
@@ -262,29 +262,23 @@ def all_plots(table_path, out_folder, table_key, stat_names, identifier=None):
 
     plate_name = os.path.split(table_path)[0]
 
-    stats_per_file = {}
     for name in tqdm(stat_names, desc='making plots'):
 
-        # 0th column is the image name
-        image_names = [str(im_name) for im_name in table[:, 0]]
+        # 0th column is the image / well name
+        image_or_well_names = [str(im_name) for im_name in table[:, 0]]
+        # Hack for Wells
+        image_or_well_names = ['Well' + name[2:] if len(name) == 6 else name for name in image_or_well_names]
         stat_id = column_names.index(name)
-        stats_per_file = dict(zip(image_names, table[:, stat_id].astype('float')))
+        stats_per_file = dict(zip(image_or_well_names, table[:, stat_id].astype('float')))
 
         outfile = os.path.join(out_folder, f"plates_{name}.png") if identifier is None else \
             os.path.join(out_folder, f"plates_{name}_{identifier}.png")
         well_plot(stats_per_file,
-                  figsize=(14, 6),
                   print_medians=True,
                   outfile=outfile,
-                  title=plate_name + "\n" + name)
-
-        outfile = os.path.join(out_folder, f"plates_{name}_median.png")
-        well_plot(stats_per_file,
-                  figsize=(14, 6),
-                  outfile=outfile,
-                  print_medians=True,
-                  wedge_width=0.,
-                  title=plate_name + "\n" + name + " median over images")
+                  figsize=(11, 6),
+                  title=plate_name + "\n" + name,
+                  **well_plot_kwargs)
 
 
 if __name__ == '__main__':

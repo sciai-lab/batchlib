@@ -192,12 +192,19 @@ def run_cell_analysis(config):
 
     # run all plots on the output files
     plot_folder = os.path.join(config.folder, 'plots')
+    stat_names = ['ratio_of_median_of_means', 'ratio_of_median_of_sums']
     for identifier in table_identifiers:
         table_path = CellLevelAnalysis.folder_to_table_path(config.folder, identifier)
         all_plots(table_path, plot_folder,
-                  table_key='tables/images/default',
-                  identifier=identifier,
-                  stat_names=['ratio_of_median_of_means'])
+                  table_key=f'tables/{CellLevelAnalysis.image_table_key}',
+                  identifier=identifier + '_per-image',
+                  stat_names=stat_names,
+                  wedge_width=0.3)
+        all_plots(table_path, plot_folder,
+                  table_key=f'tables/{CellLevelAnalysis.well_table_key}',
+                  identifier=identifier + '_per-well',
+                  stat_names=stat_names,
+                  wedge_width=0)
 
     t0 = time.time() - t0
     logger.info(f"Run {name} in {t0}s")
