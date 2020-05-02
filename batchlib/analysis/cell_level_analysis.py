@@ -507,8 +507,16 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
     def load_infected_and_control_indicators(self, in_path):
         with open_file(in_path, 'r') as f:
             column_names, table = self.read_table(f, self.classification_key)
-        infected_indicator = table[:, 1]
-        control_indicator = table[:, 2]
+        infected_indicator = table[:, column_names.index('is_infected')]
+        control_indicator = table[:, column_names.index('is_control')]
+        if hasattr(self, 'load_cell_outliers'):
+            # remove cell outliers from infected / control and thereby the analysis
+            cell_outlier_dict = self.load_cell_outliers(in_path)
+            labels = table[:, column_names.index('label_id')].astype(np.int32)
+            for i, label in enumerate(labels):
+                if cell_outlier_dict.get(label, (-1, ""))[0] == 1:
+                    infected_indicator[i] = 0
+                    control_indicator[i] = 0
         return infected_indicator, control_indicator
 
     def subtract_background(self, per_cell_statistics):
@@ -675,7 +683,6 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         label_id = keys.index('label_id')
         outlier_id = keys.index('is_outlier')
         outlier_type_id = keys.index('outlier_type')
-
         outlier_dict = {table[ii, label_id]: (table[ii, outlier_id], table[ii, outlier_type_id])
                         for ii in range(len(table))}
         return outlier_dict
