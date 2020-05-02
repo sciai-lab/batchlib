@@ -4,13 +4,9 @@ import json
 from abc import ABC
 from glob import glob
 
-import numpy as np
-import pandas as pd
-
-from .config import get_default_chunks, get_default_extension
-from .util import (downscale_image, is_group, is_dataset,
-                   open_file, get_file_lock, get_logger,
-                   write_viewer_settings)
+from .config import get_default_extension
+from .util import is_group, get_file_lock, get_logger
+from .util import io as io
 
 logger = get_logger('Workflow.BatchJob')
 
@@ -288,31 +284,6 @@ class BatchJobOnContainer(BatchJob, ABC):
                 raise ValueError("Key %s was not specified in the outputs" % key)
         self.viewer_settings = viewer_settings
 
-    def _write_single_scale(self, g, out_key, image):
-        chunks = get_default_chunks(image)
-        ds = g.require_dataset(out_key, shape=image.shape, dtype=image.dtype,
-                               compression='gzip', chunks=chunks)
-        ds[:] = image
-        return ds
-
-    def _write_multi_scale(self, f, out_key, image, use_nearest):
-        g = f.require_group(out_key)
-        self._write_single_scale(g, "s0", image)
-
-        if self.scale_factors is None:
-            return g
-
-        prev_scale_factor = 1
-        # note: scale_factors[0] is always 1
-        for scale, scale_factor in enumerate(self.scale_factors[1:], 1):
-            rel_scale_factor = int(scale_factor / prev_scale_factor)
-            image = downscale_image(image, rel_scale_factor,
-                                    use_nearest=use_nearest)
-            key = "s%i" % scale
-            self._write_single_scale(g, key, image)
-            prev_scale_factor = scale_factor
-        return g
-
     #
     # read and write images
     #
@@ -321,110 +292,28 @@ class BatchJobOnContainer(BatchJob, ABC):
         # get the viewer and donw-sampling settings
         if settings is None:
             settings = self.viewer_settings.get(key, {})
-
-        # dimensionality is not to
-        # -> this is not in image format and we just writ the data
-        if image.ndim != 2:
-            g = self._write_single_scale(f, key, image)
-        # otherwise, write in  multi-scale format
-        else:
-            use_nearest = settings.get('use_nearest', None)
-            g = self._write_multi_scale(f, key, image, use_nearest)
-
-        assert isinstance(settings, dict)
-        write_viewer_settings(g, image,
-                              scale_factors=self.scale_factors,
-                              **settings)
+        io.write_image(f, key, image, settings, self.scale_factors)
 
     def read_image(self, f, key, channel=None, scale=0):
-        ds = f[key]
-        if is_group(ds):
-            ds = ds['s%i' % scale]
-        assert is_dataset(ds)
-        data = ds[:] if channel is None else ds[channel]
-        return data
+        return io.read_image(f, key, scale, channel)
+
+    def has_image(self, f, key):
+        return io.has_image(f, key)
 
     #
     # read and write tables
     #
 
     def write_table(self, f, name, column_names, table, visible=None, force_write=False):
-        if len(column_names) != table.shape[1]:
-            raise ValueError("Number of columns does not match")
-
-        # set None to np.nan
-        table[table == None] = np.nan
-
-        # make the table datasets. we follow the layout
-        # table/cells - contains the data
-        # table/columns - containse the column names
-        # table/visible - contains which columns are visible in the plate-viewer
-
-        key = 'tables/%s' % name
-        g = f.require_group(key)
-
-        def _write_dataset(name, data):
-            if name in g:
-                shape = g[name].shape
-                if shape != data.shape and force_write:
-                    del g[name]
-
-            ds = g.require_dataset(name, shape=data.shape, dtype=data.dtype,
-                                   compression='gzip')
-            ds[:] = data
-
-        # TODO try varlen string, and if that doesn't work with java,
-        # issue a warning if a string is cut
-        # cast all values to numpy string
-        _write_dataset('cells', table.astype(self.internal_table_string_type))
-        _write_dataset('columns', np.array(column_names, dtype=self.internal_table_string_type))
-
-        if visible is None:
-            visible = np.ones(len(column_names), dtype='uint8')
-        _write_dataset('visible', visible)
+        io.write_table(f, name, column_names, table,
+                       visible=visible, force_write=force_write,
+                       table_string_type=self.internal_table_string_type)
 
     def read_table(self, f, name):
-        key = 'tables/%s' % name
-        g = f[key]
-        ds = g['cells']
-        table = ds[:]
-
-        ds = g['columns']
-        column_names = [col_name.decode('utf-8') for col_name in ds[:]]
-
-        def _col_dtype(column):
-            try:
-                column.astype('int')
-                return 'int'
-            except ValueError:
-                pass
-            try:
-                column.astype('float')
-                return 'float'
-            except ValueError:
-                pass
-            return self.table_string_type
-
-        # find the proper dtypes for the columns and cast
-        dtypes = [_col_dtype(col) for col in table.T]
-        columns = [col.astype(dtype) for col, dtype in zip(table.T, dtypes)]
-        n_rows = table.shape[0]
-
-        table = [[col[row] for col in columns] for row in range(n_rows)]
-
-        # a bit hacky, but we use pandas to handle the mixed dataset
-        df = pd.DataFrame(table)
-
-        return column_names, df.values
+        return io.read_table(f, name)
 
     def has_table(self, f, name):
-        actual_key = 'tables/%s' % name
-        if actual_key not in f:
-            return False
-        g = f[actual_key]
-        if not ('cells' in g and 'columns' in g and 'visible' in g):
-            return False
-        return True
+        return io.has_table(f, name)
 
     @staticmethod
     def check_scale_factors(scale_factors):
@@ -479,7 +368,7 @@ class BatchJobOnContainer(BatchJob, ABC):
         if exp_keys is None:
             return True
 
-        with open_file(path, 'r') as f:
+        with io.open_file(path, 'r') as f:
             for key, ndim in zip(exp_keys, exp_ndims):
                 if key not in f:
                     return False
