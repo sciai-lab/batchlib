@@ -5,51 +5,15 @@ from datetime import datetime
 
 import git
 import h5py
-import numpy as np
-import pandas as pd
 from pymongo import MongoClient
 
 from batchlib.base import BatchJobOnContainer
 from batchlib.util import get_logger
+from batchlib.util.io import read_table
 
 ASSAY_ANALYSIS_RESULTS = 'immuno-assay-analysis-results'
 
 logger = get_logger('Workflow.BatchJob.DbResultWriter')
-
-
-def read_table(f, name):
-    key = 'tables/%s' % name
-    g = f[key]
-    ds = g['cells']
-    table = ds[:]
-
-    ds = g['columns']
-    column_names = [col_name.decode('utf-8') for col_name in ds[:]]
-
-    def _col_dtype(column):
-        try:
-            column.astype('int')
-            return 'int'
-        except ValueError:
-            pass
-        try:
-            column.astype('float')
-            return 'float'
-        except ValueError:
-            pass
-        return np.str
-
-    # find the proper dtypes for the columns and cast
-    dtypes = [_col_dtype(col) for col in table.T]
-    columns = [col.astype(dtype) for col, dtype in zip(table.T, dtypes)]
-    n_rows = table.shape[0]
-
-    table = [[col[row] for col in columns] for row in range(n_rows)]
-
-    # a bit hacky, but we use pandas to handle the mixed dataset
-    df = pd.DataFrame(table)
-
-    return column_names, df.values
 
 
 def _get_table_names(f):
