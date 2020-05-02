@@ -405,6 +405,15 @@ class BatchJobOnContainer(BatchJob, ABC):
         table = np.array(columns).T
         return column_names, table
 
+    def has_table(self, f, name):
+        actual_key = 'tables/%s' % name
+        if actual_key not in f:
+            return False
+        g = f[actual_key]
+        if not ('cells' in g and 'columns' in g and 'visible' in g):
+            return False
+        return True
+
     @staticmethod
     def check_scale_factors(scale_factors):
         if scale_factors is None:

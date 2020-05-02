@@ -1,10 +1,21 @@
 import json
 import logging
 import os
+from glob import glob
 
-from batchlib.util import add_file_handler, get_commit_id, get_file_lock, get_logger
+from batchlib.util import add_file_handler, get_commit_id, get_file_lock, get_logger, open_file
 
 logger = get_logger('Workflow')
+
+
+def write_commit_id(folder, commit_id):
+    extensions = ['*.h5', '*.hdf5', '*.n5', '*.zarr', '*.zr']
+    files = []
+    for ext in extensions:
+        files.extend(glob(os.path.join(folder, ext)))
+    for ff in files:
+        with open_file(ff, 'a') as f:
+            f.attrs['batchlib_commit'] = commit_id
 
 
 def _dump_status(status_file, status):
@@ -114,3 +125,7 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
 
             status[job_name] = state
             _dump_status(status_file, status)
+
+            # write commit id to all processed files, so we know which batchlib version was used
+            if commit_id is not None:
+                write_commit_id(folder, commit_id)
