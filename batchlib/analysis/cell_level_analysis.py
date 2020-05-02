@@ -666,6 +666,8 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         expected_names = set(os.path.splitext(os.path.split(in_file)[1])[0]
                              for in_file in input_files)
 
+        # FIXME this never evaluates to False,
+        #  since the strings loaded from the h5 are prefixed with b' and suffixed with '
         if image_names != expected_names:
             logger.warn("load_image_outliers: image names from table and expected image names do not agree")
 
