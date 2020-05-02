@@ -29,7 +29,7 @@ class BaseTestMixin(ABC):
         # so we just skip errors, all important files will be removed
         rmtree(self.folder, onerror=continue_removing)
 
-    def _tearDown(self):
+    def tearDown(self):
         if self.use_unsafe_remove:
             # this is necessary on some nfs, but we shouldn't use it as default
             self._unsafe_rm()
