@@ -134,5 +134,4 @@ class DbResultWriter(BatchJobOnContainer):
             "result_tables": result_tables
         }
 
-        # TODO: this should be an upsert: insert if not exist, update if (workflow_name, plate_name, batchlib_version) exist in the collection already
         self.db[ASSAY_ANALYSIS_RESULTS].insert_one(result_object)
