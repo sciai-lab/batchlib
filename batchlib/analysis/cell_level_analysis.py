@@ -744,7 +744,7 @@ class CellLevelAnalysis(BatchJobOnContainer):
             well_name = image_name_to_well_name(name)
             write_image_information(path,
                                     image_information=str(image_information[name]),
-                                    well_information=str(well_information[well_name]))
+                                    well_information=str(well_information.get(well_name, np.nan)))
 
     def write_summary_image(self, in_path, out_path):
 
