@@ -24,19 +24,30 @@ class ContainerJob(BatchJobOnContainer):
             im = self.read_image(f, self.key)
         seg = np.random.randint(0, 100, size=im.shape, dtype='uint32')
         ids = np.unique(seg)
-        table = np.random.rand(len(ids), 2)
-        table = np.concatenate([ids[:, None], table], axis=1)
+        n_rows = len(ids)
+        text = np.array(['lorem ipsum'] * len(ids))
+        table = np.array([ids, np.random.rand(n_rows), np.random.rand(n_rows), text]).T
 
-        columns = ['label_id', 'score1', 'score2']
+        columns = ['label_id', 'score1', 'score2', 'some_text']
         with open_file(path, 'a') as f:
             self.write_table(f, self.key, columns, table)
 
         with open_file(path, 'r') as f:
             cols_out, table_out = self.read_table(f, self.key)
 
-        tester.assertTrue(np.allclose(table, table_out))
+        # check that the column names agree
+        n_cols = len(columns)
+        tester.assertEqual(n_cols, len(cols_out))
         for co, co_out in zip(columns, cols_out):
             tester.assertEqual(co, co_out)
+
+        tester.assertEqual(n_cols, table.shape[1])
+        # check that the table values agree
+        tester.assertEqual(table.shape, table_out.shape)
+        for col_id in range(n_cols):
+            col = table[:, col_id]
+            col_out = table_out[:, col_id].astype(col.dtype)
+            tester.assertTrue(np.array_equal(col, col_out))
 
     def run(self, input_files, output_files, tester):
         for inp, outp in zip(input_files, output_files):

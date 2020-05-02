@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 from skimage.transform import downscale_local_mean, resize
 
+from ..config import get_default_chunks
+
 try:
     import z5py
 except ImportError:
@@ -89,40 +91,6 @@ def get_image_and_site_names(folder, pattern):
     im_names = [os.path.splitext(name)[0] for name in im_names]
     site_names = [image_name_to_site_name(name) for name in im_names]
     return im_names, site_names
-
-
-def read_table(path):
-    table = pd.read_csv(path, sep='\t')
-    columns = table.columns
-    if (columns[0] != 'image') or (columns[1] != 'site-name'):
-        raise ValueError("Invalid table columns")
-    column_names = columns[2:]
-
-    table = table.values[:, 1:]
-    column_dict = {row[0]: row[1:].astype('float32').tolist() for row in table}
-
-    return column_dict, column_names
-
-
-def write_table(folder, column_dict, column_names, out_path, pattern='*.h5'):
-
-    im_names, site_names = get_image_and_site_names(folder, pattern)
-    table = [im_names, site_names]
-
-    n_cols = len(column_names)
-    cols = [[column_dict[name][ii] for name in site_names] for ii in range(n_cols)]
-    table += cols
-
-    column_names = ['image', 'site-name'] + column_names
-    n_cols = len(column_names)
-    n_images = len(im_names)
-
-    table = np.array(table).T
-    exp_shape = (n_images, n_cols)
-    assert table.shape == exp_shape, "%s, %s" % (table.shape, exp_shape)
-
-    table = pd.DataFrame(table, columns=column_names)
-    table.to_csv(out_path, sep='\t', index=False)
 
 
 def sample_shape(shape, scale_factor, add_incomplete_blocks=False):
@@ -217,7 +185,7 @@ def write_image_information(path, image_information=None, well_information=None,
 
         def _write_info(info_key, info_val):
             if not isinstance(info_val, str):
-                raise ValueError("Expect %s to be str, got %s" % type(info_key, info_val))
+                raise ValueError("Expect %s to be str, got %s" % type(info_key), type(info_val))
             if not overwrite and info_key in attrs:
                 info_val = info_val + "; " + attrs[info_key]
             attrs[info_key] = info_val
@@ -274,3 +242,144 @@ def write_viewer_settings(ds, image, color=None, alpha=1., visible=False, skip=N
         attrs.update({'ContrastLimits': [mi, ma]})
 
     ds.attrs.update(attrs)
+
+
+# read/write images
+def read_image(f, key, scale=0, channel=None):
+    ds = f[key]
+    if is_group(ds):
+        ds = ds['s%i' % scale]
+    assert is_dataset(ds)
+    data = ds[:] if channel is None else ds[channel]
+    return data
+
+
+def _write_single_scale(g, out_key, image):
+    chunks = get_default_chunks(image)
+    ds = g.require_dataset(out_key, shape=image.shape, dtype=image.dtype,
+                           compression='gzip', chunks=chunks)
+    ds[:] = image
+    return ds
+
+
+def _write_multi_scale(f, out_key, image, use_nearest, scale_factors):
+    g = f.require_group(out_key)
+    _write_single_scale(g, "s0", image)
+
+    if scale_factors is None:
+        return g
+
+    prev_scale_factor = 1
+    # note: scale_factors[0] is always 1
+    for scale, scale_factor in enumerate(scale_factors[1:], 1):
+        rel_scale_factor = int(scale_factor / prev_scale_factor)
+        image = downscale_image(image, rel_scale_factor,
+                                use_nearest=use_nearest)
+        key = "s%i" % scale
+        _write_single_scale(g, key, image)
+        prev_scale_factor = scale_factor
+    return g
+
+
+def write_image(f, name, image, viewer_settings, scale_factors=None):
+    # dimensionality is not to
+    # -> this is not in image format and we just writ the data
+    if image.ndim != 2:
+        g = _write_single_scale(f, name, image)
+    # otherwise, write in  multi-scale format
+    else:
+        use_nearest = viewer_settings.get('use_nearest', None)
+        g = _write_multi_scale(f, name, image, use_nearest, scale_factors)
+
+    assert isinstance(viewer_settings, dict)
+    write_viewer_settings(g, image,
+                          scale_factors=scale_factors,
+                          **viewer_settings)
+
+
+def has_image(f, name):
+    if name not in f:
+        return False
+    return 's0' in f[name]
+
+
+# read/write tables
+def read_table(f, name, table_string_type='U100'):
+    key = 'tables/%s' % name
+    g = f[key]
+    ds = g['cells']
+    table = ds[:]
+
+    ds = g['columns']
+    column_names = [col_name.decode('utf-8') for col_name in ds[:]]
+
+    def _col_dtype(column):
+        try:
+            column.astype('int')
+            return 'int'
+        except ValueError:
+            pass
+        try:
+            column.astype('float')
+            return 'float'
+        except ValueError:
+            pass
+        return table_string_type
+
+    # find the proper dtypes for the columns and cast
+    dtypes = [_col_dtype(col) for col in table.T]
+    columns = [col.astype(dtype) for col, dtype in zip(table.T, dtypes)]
+    n_rows = table.shape[0]
+
+    table = [[col[row] for col in columns] for row in range(n_rows)]
+
+    # a bit hacky, but we use pandas to handle the mixed dataset
+    df = pd.DataFrame(table)
+    return column_names, df.values
+
+
+def write_table(f, name, column_names, table,
+                visible=None, force_write=False, table_string_type='S100'):
+    if len(column_names) != table.shape[1]:
+        raise ValueError("Number of columns does not match")
+
+    # set None to np.nan
+    table[np.equal(table, None)] = np.nan
+
+    # make the table datasets. we follow the layout
+    # table/cells - contains the data
+    # table/columns - containse the column names
+    # table/visible - contains which columns are visible in the plate-viewer
+
+    key = 'tables/%s' % name
+    g = f.require_group(key)
+
+    def _write_dataset(name, data):
+        if name in g:
+            shape = g[name].shape
+            if shape != data.shape and force_write:
+                del g[name]
+
+        ds = g.require_dataset(name, shape=data.shape, dtype=data.dtype,
+                               compression='gzip')
+        ds[:] = data
+
+    # TODO try varlen string, and if that doesn't work with java,
+    # issue a warning if a string is cut
+    # cast all values to numpy string
+    _write_dataset('cells', table.astype(table_string_type))
+    _write_dataset('columns', np.array(column_names, dtype=table_string_type))
+
+    if visible is None:
+        visible = np.ones(len(column_names), dtype='uint8')
+    _write_dataset('visible', visible)
+
+
+def has_table(f, name):
+    actual_key = 'tables/%s' % name
+    if actual_key not in f:
+        return False
+    g = f[actual_key]
+    if not ('cells' in g and 'columns' in g and 'visible' in g):
+        return False
+    return True

@@ -1,10 +1,21 @@
 import json
 import logging
 import os
+from glob import glob
 
-from batchlib.util import add_file_handler, get_commit_id, get_file_lock, get_logger
+from batchlib.util import add_file_handler, get_commit_id, get_file_lock, get_logger, open_file
 
 logger = get_logger('Workflow')
+
+
+def write_commit_id(folder, commit_id):
+    extensions = ['*.h5', '*.hdf5', '*.n5', '*.zarr', '*.zr']
+    files = []
+    for ext in extensions:
+        files.extend(glob(os.path.join(folder, ext)))
+    for ff in files:
+        with open_file(ff, 'a') as f:
+            f.attrs['batchlib_commit'] = commit_id
 
 
 def _dump_status(status_file, status):
@@ -34,10 +45,14 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
                  lock_folder=True):
     """ Run workflow of consecutive batch jobs.
 
-    The jobs to be run are specified in a dictionary:
+    The jobs to be run are specified in a dictionary, like
     job_dict = {FirstJob: {'build': {...},
                            'run': {...}},
                 SecondJob: {}}
+    or alternatively as a list of tuples, like
+    job_dict = [(FirstJob, {'build': {...},
+                           'run': {...}}),
+                (SecondJob, {})]
     All keys must be classes that inherit from batchlib.BatchJob and map
     to a dictionary with optional keys:
         build_kwargs - keyword arguments passed in class init
@@ -75,7 +90,7 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
 
         logger.info(f"Running workflow: '{name}'. Job spec: {job_dict}")
 
-        for job_id, (job_class, kwarg_dict) in enumerate(job_dict.items()):
+        for job_id, (job_class, kwarg_dict) in enumerate(job_dict.items() if isinstance(job_dict, dict) else job_dict):
             build_kwargs = kwarg_dict.get('build', {})
             run_kwargs = kwarg_dict.get('run', {})
 
@@ -110,3 +125,7 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
 
             status[job_name] = state
             _dump_status(status_file, status)
+
+            # write commit id to all processed files, so we know which batchlib version was used
+            if commit_id is not None:
+                write_commit_id(folder, commit_id)

@@ -28,6 +28,34 @@ def parse_channel_names(input_name):
     return tuple(channel_names)
 
 
+def get_serum_keys(folder):
+    mapping_file = os.path.join(folder, 'channel_mapping.json')
+    if not os.path.exists(mapping_file):
+        raise ValueError("The input folder %s does not contain channel_mapping.json" % mapping_file)
+    with open(mapping_file) as f:
+        channel_mapping = json.load(f)
+    names = list(channel_mapping.values())
+    serum_keys = [name for name in names if (name is not None and name.startswith('serum'))]
+    return serum_keys
+
+
+def get_barrel_corrector(barrel_corrector_root, input_folder, pattern='*.tiff'):
+
+    # read the image shape in this folder
+    files = glob(os.path.join(input_folder, pattern))
+    image_shape = imageio.volread(files[0]).shape[1:]
+
+    # find the corresponding barrel corrector
+    barrel_correctors = glob(os.path.join(barrel_corrector_root, '*.h5'))
+    for corrector_path in barrel_correctors:
+        with open_file(corrector_path, 'r') as f:
+            corrector_shape = tuple(f.attrs['image_shape'])
+        if corrector_shape == image_shape:
+            return corrector_path
+
+    raise RuntimeError(f"Could not find barrel corrector for image shape {image_shape}")
+
+
 class Preprocess(BatchJobOnContainer):
     """ Preprocess folder with tifs from high-throughput experiment
     """

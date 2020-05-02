@@ -4,12 +4,9 @@ import json
 from abc import ABC
 from glob import glob
 
-import numpy as np
-
-from .config import get_default_chunks, get_default_extension
-from .util import (downscale_image, is_group, is_dataset,
-                   open_file, get_file_lock, get_logger,
-                   write_viewer_settings)
+from .config import get_default_extension
+from .util import is_group, get_file_lock, get_logger
+from .util import io as io
 
 logger = get_logger('Workflow.BatchJob')
 
@@ -202,6 +199,9 @@ class BatchJob(ABC):
             input_folder_ = folder if input_folder is None else input_folder
             logger.info(f'{self.name}: input folder is {input_folder_}')
 
+            # monkey patch the folder, so that we can get this in the run and input / output validation methods
+            self.folder = folder
+
             # validate and get the input files to be processed
             input_files = self.get_inputs(folder, input_folder_, status,
                                           force_recompute, ignore_invalid_inputs)
@@ -212,9 +212,6 @@ class BatchJob(ABC):
             # get the output files corresponding to the input files
             output_files = self.to_outputs(input_files, folder)
             assert len(input_files) == len(output_files)
-
-            # monkey patch the folder, so that we can get this in the run method
-            self.folder = folder
 
             logger.info(f'{self.name}: call run method with {len(input_files)} inputs.')
             logger.debug(f'{self.name}: with the following inputs:\n {input_files}')
@@ -254,6 +251,8 @@ class BatchJobOnContainer(BatchJob, ABC):
     container file (= h5/n5/zarr file).
     """
     supported_container_extensions = {'.h5', '.hdf5', '.zarr', '.zr', '.n5'}
+    table_string_type = 'U100'  # TODO try varlen
+    internal_table_string_type = 'S100'  # TODO try varlen
 
     def __init__(self, input_pattern=None, output_ext=None, identifier=None,
                  input_key=None, output_key=None,
@@ -285,31 +284,6 @@ class BatchJobOnContainer(BatchJob, ABC):
                 raise ValueError("Key %s was not specified in the outputs" % key)
         self.viewer_settings = viewer_settings
 
-    def _write_single_scale(self, g, out_key, image):
-        chunks = get_default_chunks(image)
-        ds = g.require_dataset(out_key, shape=image.shape, dtype=image.dtype,
-                               compression='gzip', chunks=chunks)
-        ds[:] = image
-        return ds
-
-    def _write_multi_scale(self, f, out_key, image, use_nearest):
-        g = f.require_group(out_key)
-        self._write_single_scale(g, "s0", image)
-
-        if self.scale_factors is None:
-            return g
-
-        prev_scale_factor = 1
-        # note: scale_factors[0] is always 1
-        for scale, scale_factor in enumerate(self.scale_factors[1:], 1):
-            rel_scale_factor = int(scale_factor / prev_scale_factor)
-            image = downscale_image(image, rel_scale_factor,
-                                    use_nearest=use_nearest)
-            key = "s%i" % scale
-            self._write_single_scale(g, key, image)
-            prev_scale_factor = scale_factor
-        return g
-
     #
     # read and write images
     #
@@ -318,78 +292,28 @@ class BatchJobOnContainer(BatchJob, ABC):
         # get the viewer and donw-sampling settings
         if settings is None:
             settings = self.viewer_settings.get(key, {})
-
-        # dimensionality is not to
-        # -> this is not in image format and we just writ the data
-        if image.ndim != 2:
-            g = self._write_single_scale(f, key, image)
-        # otherwise, write in  multi-scale format
-        else:
-            use_nearest = settings.get('use_nearest', None)
-            g = self._write_multi_scale(f, key, image, use_nearest)
-
-        assert isinstance(settings, dict)
-        write_viewer_settings(g, image,
-                              scale_factors=self.scale_factors,
-                              **settings)
+        io.write_image(f, key, image, settings, self.scale_factors)
 
     def read_image(self, f, key, channel=None, scale=0):
-        ds = f[key]
-        if is_group(ds):
-            ds = ds['s%i' % scale]
-        assert is_dataset(ds)
-        data = ds[:] if channel is None else ds[channel]
-        return data
+        return io.read_image(f, key, scale, channel)
+
+    def has_image(self, f, key):
+        return io.has_image(f, key)
 
     #
     # read and write tables
     #
 
-    def write_table(self, f, name, column_names, table):
-        if len(column_names) != table.shape[1]:
-            raise ValueError("Number of columns does not match")
-        if column_names[0] != 'label_id':
-            raise ValueError("Expect label ids in first column")
-
-        # cast all values to numpy string
-        table_ = table.astype('S10')
-
-        # make the table datasets. we follow the layout
-        # table/cells - contains the data
-        # table/columns - containse the column names
-        key = 'tables/%s' % name
-        g = f.require_group(key)
-
-        ds = g.require_dataset('cells', shape=table_.shape, compression='gzip', dtype='S10')
-        ds[:] = table_
-
-        ds = g.require_dataset('columns', shape=(len(column_names),), dtype='S10')
-        ds[:] = np.array(column_names, dtype='S10')
+    def write_table(self, f, name, column_names, table, visible=None, force_write=False):
+        io.write_table(f, name, column_names, table,
+                       visible=visible, force_write=force_write,
+                       table_string_type=self.internal_table_string_type)
 
     def read_table(self, f, name):
-        key = 'tables/%s' % name
-        g = f[key]
-        ds = g['cells']
-        table = ds[:]
+        return io.read_table(f, name)
 
-        ds = g['columns']
-        column_names = [col_name.decode('utf-8') for col_name in ds[:]]
-
-        def _cast(column):
-            try:
-                return column.astype('int')
-            except ValueError:
-                pass
-            try:
-                return column.astype('float')
-            except ValueError:
-                pass
-            return column
-
-        # cast table columns back to proper dtypes
-        columns = [_cast(col) for col in table.T]
-        table = np.array(columns).T
-        return column_names, table
+    def has_table(self, f, name):
+        return io.has_table(f, name)
 
     @staticmethod
     def check_scale_factors(scale_factors):
@@ -444,7 +368,7 @@ class BatchJobOnContainer(BatchJob, ABC):
         if exp_keys is None:
             return True
 
-        with open_file(path, 'r') as f:
+        with io.open_file(path, 'r') as f:
             for key, ndim in zip(exp_keys, exp_ndims):
                 if key not in f:
                     return False

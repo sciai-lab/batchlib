@@ -1,16 +1,13 @@
 import json
-import os
 from concurrent import futures
 
 import numpy as np
 from tqdm import tqdm
 import scipy.stats
-import math
 
 from batchlib.util.logging import get_logger
 from ..base import BatchJobWithSubfolder
 from ..util.io import open_file
-from ..util.plate_visualizations import well_plot
 
 logger = get_logger('Workflow.BatchJob.PixelAnalysis')
 
@@ -37,59 +34,6 @@ def difference_over_sum(a, b):
         return (a - b) / (a + b)
     else:
         return 0.
-
-
-def get_colorbar_range(key):
-    colorbar_range = None
-
-    if key == "ratio_of_mean_over_mean":
-        colorbar_range = (1, 1.3)
-
-    if key == "plates_ratio_of_mean_over_mean_median":
-        colorbar_range = (1, 1.3)
-
-    return colorbar_range
-
-
-def all_plots(json_files, out_path, keys=None):
-    if keys is None:
-        # load first json file to get list of key
-        with open(json_files[0], "r") as key_file:
-            keys = [k for k in json.load(key_file).keys()]  # if k.startswith("ratio_of")]
-
-    for key in tqdm(keys, desc='making plots'):
-
-        stats_per_file = {}
-
-        for jf in json_files:
-            file_name = jf.split("/")[-1]
-
-            with open(jf, "r") as jf:
-                input_dict = json.load(jf)
-                if key in input_dict:
-                    stat = input_dict[key]
-                    if stat is not None and not math.isnan(stat):
-                        stats_per_file[file_name] = float(stat)
-
-        root_path = os.path.dirname(os.path.abspath(json_files[0]))
-        outfile = os.path.join(root_path, f"plates_{key}.png")
-
-        well_plot(stats_per_file,
-                  figsize=(14, 6),
-                  print_medians=True,
-                  # colorbar_range=get_colorbar_range(key),
-                  outfile=outfile,
-                  title=out_path + "\n" + key)
-
-        outfile = os.path.join(root_path, f"plates_{key}_median.png")
-
-        well_plot(stats_per_file,
-                  figsize=(14, 6),
-                  outfile=outfile,
-                  print_medians=True,
-                  wedge_width=0.,
-                  # colorbar_range=get_colorbar_range(key),
-                  title=out_path + "\n" + key + " median over wells")
 
 
 class PixellevelAnalysis(BatchJobWithSubfolder):

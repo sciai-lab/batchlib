@@ -1,44 +1,32 @@
 #! /home/covid19/software/miniconda3/envs/antibodies-gpu/bin/python
 
-from glob import glob
 import traceback
 import os
 import sys
-from instance_analysis_workflow2 import run_instance_analysis2, parse_instance_config2
-from instance_analysis_workflow2 import parser as instance_workflow_parser
-from pixel_analysis_workflow1 import run_pixel_analysis1, parse_pixel_config1
-from pixel_analysis_workflow1 import parser as pixel_workflow_parser
+from glob import glob
+
+from batchlib.workflows import run_cell_analysis, cell_analysis_parser
 
 
-def run_instance2(in_folder, use_unique_output_folder):
-    config, unknown = instance_workflow_parser().parse_known_args()
-    print(f'Arguments unknown to instance workflow: {unknown}')
-    config.input_folder = in_folder
-    config.use_unique_output_folder = use_unique_output_folder
-    run_instance_analysis2(config)
-
-
-def run_pixel1(in_folder, use_unique_output_folder):
-    config, unknown = pixel_workflow_parser().parse_known_args()
-    print(f'Arguments unknown to pixel workflow: {unknown}')
-    config.input_folder = in_folder
-    config.use_unique_output_folder = use_unique_output_folder
-    run_pixel_analysis1(config)
+def cell_analysis_workflow(folder):
+    parser = cell_analysis_parser('./configs', 'cell_analysis.conf')
+    config = parser.parse_args()
+    config.input_folder = folder
+    run_cell_analysis(config)
 
 
 def run_plates(folders):
     for folder in folders:
+
         if not os.path.isdir(folder):
             continue
         if 'channel_mapping.json' not in os.listdir(folder):
             print(f'\nSkipping {folder} because it is missing channel_mapping.json\n')
             continue
-        # run_all_workflows(folder)
-        # TODO don't hard-code to these workflows
+
         try:
-            run_instance2(folder, use_unique_output_folder=False)
-            run_pixel1(folder, use_unique_output_folder=False)
-        except Exception as e:
+            cell_analysis_workflow(folder)
+        except Exception:
             print(f'\nException while evaluating folder {folder}.')
             print(traceback.format_exc())
             print('\ncontinuing..\n')

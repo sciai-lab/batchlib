@@ -1,11 +1,16 @@
+import os
+import re
+from collections import defaultdict
+
 import numpy as np
+from tqdm import tqdm
+from batchlib.util.io import open_file
+
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use("Agg")
-import re
 from matplotlib.collections import PatchCollection
-from matplotlib.patches import Circle, Wedge, Polygon
-from collections import defaultdict
+from matplotlib.patches import Circle, Wedge
 
 row_letters = np.array(list('ABCDEFGH'))
 letter_to_row = {letter: i for i, letter in enumerate(row_letters)}
@@ -78,24 +83,34 @@ def well_plot(data_dict, infected_list=None,
 
     patches = []
     patch_values = []
+    nan_patches = []
     for well_position, values in per_well_dict.items():
         n_samples = len(values)
         center = well_position[1], 7 - well_position[0]
         if sort:
             values = sorted(values)
         # central circle is showing the median
-        patches.append(Circle(center, radius - wedge_width))
-        patch_values.append(np.median(values))
+        central_circle = Circle(center, radius - wedge_width)
+        median = np.median(values)
+        if median is not np.nan:
+            patches.append(central_circle)
+            patch_values.append(median)
+        else:
+            nan_patches.append(central_circle)
 
         # outer wedges show values for individual images
         if wedge_width == 0:
             continue
         for i, value in enumerate(values):
-            patches.append(Wedge(center, radius,
-                                 (360 / n_samples * (i + angular_gap)),
-                                 360 / n_samples * (i + 1 - angular_gap),
-                                 width=wedge_width))
-            patch_values.append(value)
+            wedge = Wedge(center, radius,
+                          (360 / n_samples * (i + angular_gap)),
+                          360 / n_samples * (i + 1 - angular_gap),
+                          width=wedge_width)
+            if value is not np.nan:
+                patches.append(wedge)
+                patch_values.append(value)
+            else:
+                nan_patches.append(wedge)
 
     if fig is None or ax is None:
         assert fig is None and ax is None, f'Please specify either neither or both fig and ax'
@@ -108,6 +123,8 @@ def well_plot(data_dict, infected_list=None,
 
     ax.add_collection(coll)
     fig.colorbar(coll, ax=ax)
+
+    ax.add_collection(PatchCollection(nan_patches, facecolors='r'))
 
     if infected_list is not None:
         # add red circles around infected patients
@@ -137,7 +154,7 @@ def well_plot(data_dict, infected_list=None,
     if title is not None:
         plt.title(title)
     if outfile is not None:
-        plt.savefig(outfile)
+        plt.savefig(outfile, dpi=300)
         plt.close()
 
 
@@ -186,7 +203,7 @@ def score_distribution_plots(infected_values, not_infected_values, infected_medi
         # per-well scatter and violins
         ax[0].scatter(y, x, alpha=0.2, marker='o', color='r', label='per patient ratios\nover all cells')
         violin_parts = ax[0].violinplot([not_infected_medians, infected_medians], vert=False,
-                                         bw_method=violin_bw_method)
+                                        bw_method=violin_bw_method)
         for pc in violin_parts['bodies']:
             pc.set_facecolor('green')
 
@@ -215,12 +232,68 @@ def score_distribution_plots(infected_values, not_infected_values, infected_medi
     if title is not None:
         plt.suptitle(title)
     if outfile is not None:
-        plt.savefig(outfile)
+        plt.savefig(outfile, dpi=300)
         plt.close()
 
 
+def get_colorbar_range(key):
+    colorbar_range = None
+
+    if key == "ratio_of_mean_over_mean":
+        colorbar_range = (1, 1.3)
+
+    if key == "plates_ratio_of_mean_over_mean_median":
+        colorbar_range = (1, 1.3)
+
+    return colorbar_range
+
+
+# TODO this function should be refactored into two functions:
+# 1 that accepts a well table and one that accepts an image table
+def all_plots(table_path, out_folder, table_key, stat_names, identifier=None, **well_plot_kwargs):
+    if not isinstance(stat_names, (list, tuple)):
+        raise ValueError(f"stat_names must be either list or tuple, got {type(stat_names)}")
+    os.makedirs(out_folder, exist_ok=True)
+
+    # load first file to get all the column names
+    with open_file(table_path, 'r') as f:
+        g = f[table_key]
+        column_names = g['columns'][:]
+        table = g['cells'][:]
+    column_names = [name.decode('utf8') for name in column_names]
+
+    if column_names[0] not in ['image_name', 'well_name']:
+        raise ValueError("all_plots can only be called on a table that contains the image or well statistics")
+
+    # check that we have all the stat names
+    available_stats = set(column_names[1:])
+    unknown_stats = list(set(stat_names) - available_stats)
+    if len(unknown_stats) > 0:
+        unknown_stats = ", ".join(unknown_stats)
+        raise ValueError(f"Did not find the names {unknown_stats} in the table columns")
+
+    plate_name = os.path.split(table_path)[0]
+
+    for name in tqdm(stat_names, desc='making plots'):
+
+        # 0th column is the image / well name
+        image_or_well_names = [str(im_name) for im_name in table[:, 0]]
+        # Hack for Wells
+        image_or_well_names = ['Well' + name[2:] if len(name) == 6 else name for name in image_or_well_names]
+        stat_id = column_names.index(name)
+        stats_per_file = dict(zip(image_or_well_names, table[:, stat_id].astype('float')))
+
+        outfile = os.path.join(out_folder, f"plates_{name}.png") if identifier is None else \
+            os.path.join(out_folder, f"plates_{name}_{identifier}.png")
+        well_plot(stats_per_file,
+                  print_medians=True,
+                  outfile=outfile,
+                  figsize=(11, 6),
+                  title=plate_name + "\n" + name,
+                  **well_plot_kwargs)
+
+
 if __name__ == '__main__':
-    import os
     result_dir = '/export/home/rremme/Datasets/antibodies/covid-data-vibor/20200406_210102_953/'
     well_plot({name: np.random.rand(1)[0]
                for name in os.listdir(result_dir)},

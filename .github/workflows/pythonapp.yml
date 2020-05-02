@@ -25,6 +25,7 @@ jobs:
       run: |
         conda env create -f environment.yaml
         source activate antibodies
+        pip install -e .
     - name: Lint with flake8
       run: |
         conda install flake8
@@ -35,5 +36,8 @@ jobs:
     - name: Test with unit-test
       run: |
         source activate antibodies
-        which python
-        python -m unittest discover -v test
+        # unittest discovery clashes with configargparse
+        # python -m unittest discover -v test
+        cd test
+        python test_workflows.py
+        python test_base.py
