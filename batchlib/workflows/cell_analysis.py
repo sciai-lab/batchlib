@@ -174,7 +174,7 @@ def run_cell_analysis(config):
                 'serum_key': serum_key,
                 'marker_key': marker_ana_in_key,
                 'cell_seg_key': config.seg_key,
-                'outlier_predicate': outlier_predicate,
+                # 'outlier_predicate': outlier_predicate,
                 'write_summary_images': True,
                 'scale_factors': config.scale_factors,
                 'identifier': identifier},

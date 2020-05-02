@@ -58,14 +58,13 @@ def compute_global_statistics(cell_properties):
                                                                      result[channel]['q0.5_of_cell_sums']), 0.5)
         result[channel]['q0.5_of_cell_means'] = robust_quantile(properties['means'], 0.5)
         result[channel]['mad_of_cell_means'] = robust_quantile(np.abs(properties['means'] -
-                                                                     result[channel]['q0.5_of_cell_means']), 0.5)
+                                                                      result[channel]['q0.5_of_cell_means']), 0.5)
         result[channel]['q0.3_of_cell_means'] = robust_quantile(properties['means'], 0.3)
         result[channel]['q0.7_of_cell_means'] = robust_quantile(properties['means'], 0.7)
         result[channel]['q0.1_of_cell_means'] = robust_quantile(properties['means'], 0.1)
         result[channel]['q0.9_of_cell_means'] = robust_quantile(properties['means'], 0.9)
         result[channel]['cell_mean'] = properties['means'].mean()
         result[channel]['cell_sum'] = properties['sums'].mean()
-
 
     return result
 
@@ -397,7 +396,7 @@ class FindInfectedCells(BatchJobOnContainer):
     def get_infected_and_control_indicators(self, feature_dict):
         infected_indicator = self.get_infected_indicator(feature_dict)
         # per default, everything that is not infected is control
-        control_indicator = infected_indicator == False
+        control_indicator = np.logical_not(infected_indicator)
         try:
             bg_ind = feature_dict['label_id'].tolist().index(0)
             control_indicator[bg_ind] = False  # the background should never be classified as control
@@ -407,7 +406,7 @@ class FindInfectedCells(BatchJobOnContainer):
 
     def compute_and_save_infected_and_control(self, in_file, out_file):
         feature_dict = self.load_feature_dict(in_file)
-        infected_indicator, control_indicator= self.get_infected_and_control_indicators(feature_dict)
+        infected_indicator, control_indicator = self.get_infected_and_control_indicators(feature_dict)
         column_names = ['label_id', 'is_infected', 'is_control']
         table = [feature_dict['label_id'], infected_indicator, control_indicator]
         table = np.asarray(table, dtype=float).T
@@ -419,30 +418,15 @@ class FindInfectedCells(BatchJobOnContainer):
             self.compute_and_save_infected_and_control(input_file, output_file)
 
 
-class CellLevelAnalysis(BatchJobOnContainer):
+class CellLevelAnalysisBase(BatchJobOnContainer):
+    """ Base class for cell level analysis, providing access
+    to the result_dict loaded from tables computed by InstanceFeatureExtraction.
     """
-    """
-    # TODO enable over-riding these keys to allow runnning CellLevelAnalysis Jobs
-    # with different settings on the same folder
-    image_table_key = 'images/default'
-    well_table_key = 'wells/default'
-
-    def __init__(self,
-                 cell_seg_key='cell_segmentation',
-                 serum_key='serum',
-                 marker_key='marker',
-                 serum_bg_key='plate_bg_median',
-                 marker_bg_key='plate_bg_median',
-                 outlier_predicate=lambda im: False,
-                 score_name='ratio_of_median_of_means',
-                 write_summary_images=False,
-                 infected_cell_mask_key='infected_cell_mask',
-                 serum_per_cell_mean_key='serum_per_cell_mean',
-                 edge_key='cell_segmentation_edges',
+    def __init__(self, cell_seg_key, serum_key, marker_key,
+                 serum_bg_key, marker_bg_key, output_key,
                  **super_kwargs):
 
-        self.outlier_predicate = outlier_predicate
-
+        self.cell_seg_key = cell_seg_key
         self.serum_bg_key = serum_bg_key
         self.marker_bg_key = marker_bg_key
 
@@ -451,20 +435,6 @@ class CellLevelAnalysis(BatchJobOnContainer):
         self.marker_key = cell_seg_key + '/' + marker_key
         self.classification_key = 'cell_classification/' + cell_seg_key + '/' + marker_key
 
-        self.score_name = score_name
-        self.write_summary_images = write_summary_images
-
-        if self.write_summary_images:
-            output_key = [infected_cell_mask_key,
-                          serum_per_cell_mean_key,
-                          edge_key]
-            self.edge_key = edge_key
-            self.infected_cell_mask_key = infected_cell_mask_key
-            self.serum_per_cell_mean_key = serum_per_cell_mean_key
-        else:
-            output_key = None
-
-        self.cell_seg_key = cell_seg_key
         super().__init__(input_key=[f'tables/{key}'
                                     for key in (self.serum_key, self.marker_key, self.classification_key)],
                          output_key=output_key,
@@ -481,11 +451,9 @@ class CellLevelAnalysis(BatchJobOnContainer):
         with open_file(path, 'r') as f:
             for key in exp_keys:
                 if key not in f:
-                    print("111", key)
                     return False
                 g = f[key]
                 if ('cells' not in g) or ('columns' not in g):
-                    print('AAA', key)
                     return False
         return True
 
@@ -499,34 +467,6 @@ class CellLevelAnalysis(BatchJobOnContainer):
     @property
     def table_out_path(self):
         return self.folder_to_table_path(self.folder, self.identifier)
-
-    def check_table(self):
-        table_path = self.table_out_path
-        if not os.path.exists(table_path):
-            return False
-        with open_file(table_path, 'r') as f:
-            if self.image_table_key not in f:
-                return False
-            if self.well_table_key not in f:
-                return False
-        return True
-
-    # we only write a single output file, so need to over-write the output validation and output checks
-    def check_output(self, path):
-        have_table = self.check_table()
-        if self.write_summary_images:
-            return have_table and super().check_output(path)
-        else:
-            return have_table
-
-    def validate_outputs(self, output_files, folder, status, ignore_failed_outputs):
-        have_table = self.check_table()
-        if self.write_summary_images:
-            return have_table and super().validate_outputs(output_files,
-                                                           folder, status,
-                                                           ignore_failed_outputs)
-        else:
-            return have_table
 
     def load_per_cell_statistics(self, in_path, subtract_background=True, split_infected_and_control=True):
         # if multiple paths are given, concatenate the individual statistics
@@ -570,29 +510,6 @@ class CellLevelAnalysis(BatchJobOnContainer):
         infected_indicator = table[:, 1]
         control_indicator = table[:, 2]
         return infected_indicator, control_indicator
-
-    # TODO for now, we only use manual outlier annotations, but we should
-    # also use some heuristics for automated QC, e.g.
-    # - number of cells
-    # - cell size distribution
-    # - negative ratios
-    @lru_cache(maxsize=None)
-    def check_for_outlier(self, in_file):
-
-        # outliers can have the following values:
-        # 0: not an outlier
-        # 1: outlier
-        # -1: no annotation available
-        image_name = os.path.splitext(os.path.split(in_file)[1])[0]
-        outlier = self.outlier_predicate(image_name)
-
-        outlier_type = 'none'
-        if outlier == 1:
-            outlier_type = 'manual'
-        if outlier == -1:
-            outlier_type = 'not annotated'
-
-        return outlier, outlier_type
 
     def subtract_background(self, per_cell_statistics):
         per_cell_statistics = deepcopy(per_cell_statistics)
@@ -638,6 +555,112 @@ class CellLevelAnalysis(BatchJobOnContainer):
                         bg_stat = np.nan
                     stat_dict[f'{bg_key}_{semantic_channel_name}'] = bg_stat
         return stat_dict
+
+
+class CellLevelAnalysisWithTableBase(CellLevelAnalysisBase):
+    """
+    """
+    def __init__(self, table_out_keys, check_image_outputs=False, **super_kwargs):
+        self.table_out_keys = table_out_keys
+        self.check_image_outputs = check_image_outputs
+        super().__init__(**super_kwargs)
+
+    def check_table(self):
+        table_path = self.table_out_path
+        if not os.path.exists(table_path):
+            return False
+        with open_file(table_path, 'r') as f:
+            if not all(key in f for key in self.table_out_keys):
+                return False
+        return True
+
+    # we only write a single output file, so need to over-write the output validation and output checks
+    def check_output(self, path):
+        have_table = self.check_table()
+        if self.check_image_outputs:
+            return have_table and super().check_output(path)
+        else:
+            return have_table
+
+    def validate_outputs(self, output_files, folder, status, ignore_failed_outputs):
+        have_table = self.check_table()
+        if self.check_image_outputs:
+            return have_table and super().validate_outputs(output_files,
+                                                           folder, status,
+                                                           ignore_failed_outputs)
+        else:
+            return have_table
+
+
+class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
+    """
+    """
+    # TODO enable over-riding these keys to allow runnning CellLevelAnalysis Jobs
+    # with different settings on the same folder
+    image_table_key = 'images/default'
+    well_table_key = 'wells/default'
+
+    def __init__(self,
+                 cell_seg_key='cell_segmentation',
+                 serum_key='serum',
+                 marker_key='marker',
+                 serum_bg_key='plate_bg_median',
+                 marker_bg_key='plate_bg_median',
+                 score_name='ratio_of_median_of_means',
+                 write_summary_images=False,
+                 infected_cell_mask_key='infected_cell_mask',
+                 serum_per_cell_mean_key='serum_per_cell_mean',
+                 edge_key='cell_segmentation_edges',
+                 **super_kwargs):
+
+        self.score_name = score_name
+        self.write_summary_images = write_summary_images
+
+        if self.write_summary_images:
+            output_key = [infected_cell_mask_key,
+                          serum_per_cell_mean_key,
+                          edge_key]
+            self.edge_key = edge_key
+            self.infected_cell_mask_key = infected_cell_mask_key
+            self.serum_per_cell_mean_key = serum_per_cell_mean_key
+        else:
+            output_key = None
+
+        super().__init__(table_out_keys=[self.image_table_key,
+                                         self.well_table_key],
+                         check_image_outputs=self.write_summary_images,
+                         cell_seg_key=cell_seg_key,
+                         serum_key=serum_key,
+                         marker_key=marker_key,
+                         serum_bg_key=serum_bg_key,
+                         marker_bg_key=marker_bg_key,
+                         output_key=output_key,
+                         **super_kwargs)
+
+    # TODO move to the qc jobs and load the tables instead
+    # TODO for now, we only use manual outlier annotations, but we should
+    # also use some heuristics for automated QC, e.g.
+    # - number of cells
+    # - cell size distribution
+    # - negative ratios
+    @lru_cache(maxsize=None)
+    def check_for_outlier(self, in_file):
+
+        # outliers can have the following values:
+        # 0: not an outlier
+        # 1: outlier
+        # -1: no annotation available
+        image_name = os.path.splitext(os.path.split(in_file)[1])[0]
+        # outlier = self.outlier_predicate(image_name)
+        outlier = -1
+
+        outlier_type = 'none'
+        if outlier == 1:
+            outlier_type = 'manual'
+        if outlier == -1:
+            outlier_type = 'not annotated'
+
+        return outlier, outlier_type
 
     # this is what should be run for each h5 file
     def write_image_table(self, input_files):
