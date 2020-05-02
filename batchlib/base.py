@@ -5,6 +5,7 @@ from abc import ABC
 from glob import glob
 
 import numpy as np
+import pandas as pd
 
 from .config import get_default_chunks, get_default_extension
 from .util import (downscale_image, is_group, is_dataset,
@@ -254,6 +255,8 @@ class BatchJobOnContainer(BatchJob, ABC):
     container file (= h5/n5/zarr file).
     """
     supported_container_extensions = {'.h5', '.hdf5', '.zarr', '.zr', '.n5'}
+    table_string_type = 'U100'  # TODO try varlen
+    internal_table_string_type = 'S100'  # TODO try varlen
 
     def __init__(self, input_pattern=None, output_ext=None, identifier=None,
                  input_key=None, output_key=None,
@@ -373,8 +376,8 @@ class BatchJobOnContainer(BatchJob, ABC):
         # TODO try varlen string, and if that doesn't work with java,
         # issue a warning if a string is cut
         # cast all values to numpy string
-        _write_dataset('cells', table.astype('S100'))
-        _write_dataset('columns', np.array(column_names, dtype='S100'))
+        _write_dataset('cells', table.astype(self.internal_table_string_type))
+        _write_dataset('columns', np.array(column_names, dtype=self.internal_table_string_type))
 
         if visible is None:
             visible = np.ones(len(column_names), dtype='uint8')
@@ -389,21 +392,30 @@ class BatchJobOnContainer(BatchJob, ABC):
         ds = g['columns']
         column_names = [col_name.decode('utf-8') for col_name in ds[:]]
 
-        def _cast(column):
+        def _col_dtype(column):
             try:
-                return column.astype('int')
+                column.astype('int')
+                return 'int'
             except ValueError:
                 pass
             try:
-                return column.astype('float')
+                column.astype('float')
+                return 'float'
             except ValueError:
                 pass
-            return column
+            return self.table_string_type
 
-        # cast table columns back to proper dtypes
-        columns = [_cast(col) for col in table.T]
-        table = np.array(columns).T
-        return column_names, table
+        # find the proper dtypes for the columns and cast
+        dtypes = [_col_dtype(col) for col in table.T]
+        columns = [col.astype(dtype) for col, dtype in zip(table.T, dtypes)]
+        n_rows = table.shape[0]
+
+        table = [[col[row] for col in columns] for row in range(n_rows)]
+
+        # a bit hacky, but we use pandas to handle the mixed dataset
+        df = pd.DataFrame(table)
+
+        return column_names, df.values
 
     def has_table(self, f, name):
         actual_key = 'tables/%s' % name
