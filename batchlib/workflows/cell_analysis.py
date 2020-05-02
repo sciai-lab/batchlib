@@ -140,18 +140,18 @@ def run_cell_analysis(config):
     job_list.append((InstanceFeatureExtraction, {
         'build': {
             'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
-            'nuc_seg_key_to_ignore': config.nuc_key,
+            'nuc_seg_key_to_ignore': config.nuc_key if not config.dont_ignore_nuclei else None,
             'cell_seg_key': config.seg_key},
         'run': {'gpu_id': config.gpu}}))
 
-    # Also compute features with nuclei if they should be used later
-    job_list.append((InstanceFeatureExtraction, {
-        'build': {
-            'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
-            'nuc_seg_key_to_ignore': None,
-            'identifier': 'with_nuclei',
-            'cell_seg_key': config.seg_key},
-        'run': {'gpu_id': config.gpu}}))
+    # # Also compute features with nuclei if they should be used later
+    # job_list.append((InstanceFeatureExtraction, {
+    #     'build': {
+    #         'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
+    #         'nuc_seg_key_to_ignore': None,
+    #         'identifier': 'with_nuclei',
+    #         'cell_seg_key': config.seg_key},
+    #     'run': {'gpu_id': config.gpu}}))
 
     job_list.append((FindInfectedCells, {
         'build': {
@@ -192,7 +192,7 @@ def run_cell_analysis(config):
 
     # run all plots on the output files
     plot_folder = os.path.join(config.folder, 'plots')
-    stat_names = ['ratio_of_median_of_means', 'ratio_of_median_of_sums']
+    stat_names = ['ratio_of_median_of_means', 'ratio_of_median_of_sums', 'robust_z_score_sums', 'robust_z_score_means']
     for identifier in table_identifiers:
         table_path = CellLevelAnalysis.folder_to_table_path(config.folder, identifier)
         all_plots(table_path, plot_folder,
@@ -259,6 +259,8 @@ def cell_analysis_parser(config_folder, default_config_name):
 
     # marker denoising
     parser.add("--marker_denoise_radius", default=0, type=int)
+
+    parser.add("--dont_ignore_nuclei", action='store_true')
 
     # runtime options
     parser.add("--batch_size", default=4)
