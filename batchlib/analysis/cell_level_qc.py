@@ -8,14 +8,42 @@ class CellLevelQC(CellLevelAnalysisBase):
     """ Heuristic quality control for individual cells
     """
 
-    # TODO output key
     def __init__(self,
                  cell_seg_key='cell_segmentation',
-                 table_out_name='outliers'):
-        pass
+                 serum_key='serum',
+                 marker_key='marker',
+                 serum_bg_key='plate_bg_median',
+                 marker_bg_key='plate_bg_median',
+                 table_out_name='outliers',
+                 **super_kwargs):
+        super().__init__(cell_seg_key=cell_seg_key,
+                         serum_key=serum_key,
+                         marker_key=marker_key,
+                         serum_bg_key=serum_bg_key,
+                         marker_bg_key=marker_bg_key,
+                         **super_kwargs)
+        output_group = cell_seg_key if self.identifier is None else cell_seg_key + '_' + self.identifier
+        self.table_out_key = output_group + '/' + serum_key
+
+    # TODO compute actual cell level outliers based on cell features
+    def cell_level_heuristics(self, cell_stats):
+        n_cells = len(cell_stats)
+        columns = ['label_id', 'is_outlier', 'outlier_type']
+        table = np.array([list(range(n_cells)),
+                          [-1] * n_cells,
+                          ['not checked'] * n_cells])
+        return columns, table
+
+    def outlier_heuristics(self, in_file, out_file):
+        cell_stats = self.load_per_cell_statistics(in_file, split_infected_and_control=False)
+        columns, table = self.cell_level_heuristics(cell_stats)
+        with open_file(out_file, 'a') as f:
+            self.write_table(f, self.table_out_key, columns, table)
 
     def run(self, input_files, output_files):
-        pass
+        # TODO parallelize and tqdm
+        for in_file, out_file in zip(input_files, output_files):
+            self.outlier_heuristics(in_file, out_file)
 
 
 class ImageLevelQC(CellLevelAnalysisWithTableBase):
@@ -41,7 +69,6 @@ class ImageLevelQC(CellLevelAnalysisWithTableBase):
                          marker_key=marker_key,
                          serum_bg_key=serum_bg_key,
                          marker_bg_key=marker_bg_key,
-                         output_key=None,
                          **super_kwargs)
 
     # TODO implement this

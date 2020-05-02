@@ -421,9 +421,10 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
     """ Base class for cell level analysis, providing access
     to the result_dict loaded from tables computed by InstanceFeatureExtraction.
     """
-    def __init__(self, cell_seg_key, serum_key, marker_key,
-                 serum_bg_key, marker_bg_key, output_key,
-                 **super_kwargs):
+    def __init__(self,
+                 cell_seg_key, serum_key, marker_key,
+                 serum_bg_key, marker_bg_key,
+                 output_key=None, **super_kwargs):
 
         self.cell_seg_key = cell_seg_key
         self.serum_bg_key = serum_bg_key
@@ -609,6 +610,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
                  infected_cell_mask_key='infected_cell_mask',
                  serum_per_cell_mean_key='serum_per_cell_mean',
                  edge_key='cell_segmentation_edges',
+                 cell_outlier_table_name='outliers',
                  image_outlier_table='images/outliers',
                  **super_kwargs):
 
@@ -638,9 +640,14 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
                          output_key=output_key,
                          **super_kwargs)
 
+        output_group = cell_seg_key if self.identifier is None else cell_seg_key + '_' + self.identifier
+        self.cell_outlier_table = output_group + '/' + serum_key
+
     def load_image_outliers(self, input_files):
+        # TODO implement 'has_table' in the base class instead
+        actual_key = 'tables/' + self.image_outlier_table
         with open_file(self.table_out_path, 'r') as f:
-            if self.image_outlier_table not in f:
+            if actual_key not in f:
                 logger.warn("load_image_outliers: did not find an image outlier table")
                 return {}
             keys, table = self.read_table(f, self.image_outlier_table)
@@ -657,6 +664,22 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
             logger.warn("load_image_outliers: image names from table and expected image names do not agree")
 
         outlier_dict = {table[ii, im_name_id]: (table[ii, outlier_id], table[ii, outlier_type_id])
+                        for ii in range(len(table))}
+        return outlier_dict
+
+    def load_cell_outliers(self, input_file):
+        actual_key = 'tables/' + self.cell_outlier_table
+        with open_file(input_file, 'r') as f:
+            if actual_key not in f:
+                logger.warn("load_cell_outliers: did not find a cell outlier table")
+                return {}
+            keys, table = self.read_table(f, self.cell_outlier_table)
+
+        label_id = keys.index('label_id')
+        outlier_id = keys.index('is_outlier')
+        outlier_type_id = keys.index('outlier_type')
+
+        outlier_dict = {table[ii, label_id]: (table[ii, outlier_id], table[ii, outlier_type_id])
                         for ii in range(len(table))}
         return outlier_dict
 

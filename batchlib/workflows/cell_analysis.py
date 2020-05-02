@@ -8,7 +8,7 @@ from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    DenoiseByGrayscaleOpening,
                                                    InstanceFeatureExtraction,
                                                    FindInfectedCells)
-from batchlib.analysis.cell_level_qc import ImageLevelQC
+from batchlib.analysis.cell_level_qc import CellLevelQC, ImageLevelQC
 from batchlib.outliers.outlier import get_outlier_predicate
 from batchlib.preprocessing import get_barrel_corrector, get_serum_keys, Preprocess
 from batchlib.segmentation import SeededWatershed
@@ -170,6 +170,13 @@ def run_cell_analysis(config):
 
     table_identifiers = serum_ana_in_keys
     for serum_key, identifier in zip(serum_ana_in_keys, table_identifiers):
+        job_list.append((CellLevelQC, {
+            'build': {
+                'cell_seg_key': config.seg_key,
+                'serum_key': serum_key,
+                'marker_key': marker_ana_in_key,
+                'identifier': identifier}
+        }))
         job_list.append((ImageLevelQC, {
             'build': {
                 'cell_seg_key': config.seg_key,
