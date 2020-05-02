@@ -175,11 +175,14 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
                  channel_keys=('serum', 'marker'),
                  nuc_seg_key_to_ignore=None,
                  cell_seg_key='cell_segmentation',
+                 topk=(10, 30, 50),
                  identifier=None):
 
         self.channel_keys = tuple(channel_keys)
         self.nuc_seg_key_to_ignore = nuc_seg_key_to_ignore
         self.cell_seg_key = cell_seg_key
+
+        self.topk = topk
 
         # all inputs should be 2d
         input_ndim = [2] * (1 + len(channel_keys) + (1 if nuc_seg_key_to_ignore else 0))
@@ -214,12 +217,9 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         sums = data.new([arr.sum() for arr in per_cell_values])
         means = data.new([arr.mean() for arr in per_cell_values])
         instance_sizes = data.new([len(arr.view(-1)) for arr in per_cell_values])
-        top50 = np.array([0 if len(t) < 50 else t.topk(50)[0][-1].item()
-                          for t in per_cell_values])
-        top30 = np.array([0 if len(t) < 30 else t.topk(30)[0][-1].item()
-                          for t in per_cell_values])
-        top10 = np.array([0 if len(t) < 10 else t.topk(10)[0][-1].item()
-                          for t in per_cell_values])
+        topkdict = {f'top{k}': np.array([0 if len(t) < k else t.topk(k)[0][-1].item()
+                                         for t in per_cell_values])
+                    for k in self.topk}
         medians = np.array([t.median().item()
                             for t in per_cell_values])
         mads = np.array([(t - median).abs().median().item()
@@ -232,9 +232,7 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
                     medians=medians,
                     mads=mads,
                     sizes=instance_sizes.cpu().numpy(),
-                    top50=top50,
-                    top30=top30,
-                    top10=top10)
+                    **topkdict)
 
     def eval_cells(self, channels, cell_seg,
                    ignore_label=0):
@@ -531,7 +529,7 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
                 # no cells, nothing to do
                 continue
             for key in channel_statistics.keys():
-                if key in ['means', 'medians', 'top50', 'top30', 'top10']:
+                if key in ['means', 'medians'] or key.startswith('top'):
                     channel_statistics[key] -= bg_offset
                 elif key == 'sums':
                     # sums are special case
