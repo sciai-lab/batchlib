@@ -691,7 +691,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
 
         image_outlier_dict = self.load_image_outliers(input_files)
 
-        column_names = ['image_name', 'site_name', 'is_outlier', 'outlier_type']
+        column_names = ['image_name', 'site_name', 'is_outlier', 'outlier_type', 'n_outlier_cells']
         table = []
 
         # TODO parallelize and tqdm
@@ -716,7 +716,10 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
 
             site_name = image_name_to_site_name(image_name)
 
-            table.append([image_name, site_name, outlier, outlier_type] + stat_list)
+            # get number of ignored outlier cells
+            n_outlier_cells = sum(1 for v in self.load_cell_outliers(in_file) if v[0] == 1)
+
+            table.append([image_name, site_name, outlier, outlier_type, n_outlier_cells] + stat_list)
 
         table = np.array(table)
         n_cols = len(column_names)
@@ -740,7 +743,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
             input_files_per_well[well_name].append(in_file)
 
         image_outlier_dict = self.load_image_outliers(input_files)
-        column_names = ['well_name', 'number_of_outliers']
+        column_names = ['well_name', 'n_outlier_images', 'n_outlier_cells']
         table = []
 
         for ii, (well_name, in_files_for_current_well) in enumerate(input_files_per_well.items()):
@@ -751,7 +754,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
             in_files_for_current_well = [in_file for in_file, im_name in zip(in_files_for_current_well,
                                                                              image_names_for_current_well)
                                          if not image_outlier_dict.get(im_name, (-1, ''))[0] == 1]
-            n_outliers = n_total - len(in_files_for_current_well)
+            n_outlier_images = n_total - len(in_files_for_current_well)
             if len(in_files_for_current_well) == 0:
                 # TODO: add row full of np.nan for wells of outliers
                 logger.info(f'Skipping well {well_name} as it consists entirely of outliers. '
@@ -772,7 +775,11 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
             if ii == 0:
                 column_names += list(stat_names)
 
-            table.append([well_name, n_outliers] + stat_list)
+            # get number of ignored outlier cells
+            n_outlier_cells = sum(sum(1 for v in self.load_cell_outliers(in_file) if v[0] == 1)
+                                  for in_file in in_files_for_current_well)
+
+            table.append([well_name, n_outlier_images, n_outlier_cells] + stat_list)
 
         table = np.array(table)
         n_cols = len(column_names)
