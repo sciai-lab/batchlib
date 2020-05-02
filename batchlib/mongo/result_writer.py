@@ -93,9 +93,8 @@ def _get_git_sha():
 
 
 class DbResultWriter(BatchJobOnContainer):
-    def __init__(self, username, password, host, port=27017, db_name='covid',
-                 input_pattern='*.hdf5', **super_kwargs):
-        super().__init__(input_pattern=input_pattern, **super_kwargs)
+    def __init__(self, username, password, host, port=27017, db_name='covid', **super_kwargs):
+        super().__init__(input_pattern='*.hdf5', **super_kwargs)
 
         username = urllib.parse.quote_plus(username)
         password = urllib.parse.quote_plus(password)
@@ -117,10 +116,9 @@ class DbResultWriter(BatchJobOnContainer):
             return
 
         assert len(input_files) == 1, f'Expected a single table file, but {len(input_files)} was given'
+        input_file = input_files[0]
 
         plate_name = os.path.split(self.folder)[1]
-
-        input_file = input_files[0]
 
         result_tables = _get_result_tables(input_file)
 
