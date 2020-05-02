@@ -14,24 +14,26 @@ class CellLevelQC(CellLevelAnalysisBase):
                  marker_key='marker',
                  serum_bg_key='plate_bg_median',
                  marker_bg_key='plate_bg_median',
-                 table_out_name='outliers',
+                 identifier=None,
                  **super_kwargs):
+        output_group = cell_seg_key if identifier is None else cell_seg_key + '_' + identifier
+        self.table_out_key = output_group + '/' + serum_key
         super().__init__(cell_seg_key=cell_seg_key,
                          serum_key=serum_key,
                          marker_key=marker_key,
                          serum_bg_key=serum_bg_key,
                          marker_bg_key=marker_bg_key,
+                         output_key='tables/' + self.table_out_key,
+                         identifier=identifier,
                          **super_kwargs)
-        output_group = cell_seg_key if self.identifier is None else cell_seg_key + '_' + self.identifier
-        self.table_out_key = output_group + '/' + serum_key
 
     # TODO compute actual cell level outliers based on cell features
     def cell_level_heuristics(self, cell_stats):
-        n_cells = len(cell_stats)
+        n_cells = len(cell_stats['labels'])
         columns = ['label_id', 'is_outlier', 'outlier_type']
         table = np.array([list(range(n_cells)),
                           [-1] * n_cells,
-                          ['not checked'] * n_cells])
+                          ['not checked'] * n_cells]).T
         return columns, table
 
     def outlier_heuristics(self, in_file, out_file):
