@@ -83,24 +83,34 @@ def well_plot(data_dict, infected_list=None,
 
     patches = []
     patch_values = []
+    nan_patches = []
     for well_position, values in per_well_dict.items():
         n_samples = len(values)
         center = well_position[1], 7 - well_position[0]
         if sort:
             values = sorted(values)
         # central circle is showing the median
-        patches.append(Circle(center, radius - wedge_width))
-        patch_values.append(np.median(values))
+        central_circle = Circle(center, radius - wedge_width)
+        median = np.median(values)
+        if median is not np.nan:
+            patches.append(central_circle)
+            patch_values.append(median)
+        else:
+            nan_patches.append(central_circle)
 
         # outer wedges show values for individual images
         if wedge_width == 0:
             continue
         for i, value in enumerate(values):
-            patches.append(Wedge(center, radius,
-                                 (360 / n_samples * (i + angular_gap)),
-                                 360 / n_samples * (i + 1 - angular_gap),
-                                 width=wedge_width))
-            patch_values.append(value)
+            wedge = Wedge(center, radius,
+                          (360 / n_samples * (i + angular_gap)),
+                          360 / n_samples * (i + 1 - angular_gap),
+                          width=wedge_width)
+            if value is not np.nan:
+                patches.append(wedge)
+                patch_values.append(value)
+            else:
+                nan_patches.append(wedge)
 
     if fig is None or ax is None:
         assert fig is None and ax is None, f'Please specify either neither or both fig and ax'
@@ -113,6 +123,8 @@ def well_plot(data_dict, infected_list=None,
 
     ax.add_collection(coll)
     fig.colorbar(coll, ax=ax)
+
+    ax.add_collection(PatchCollection(nan_patches, facecolors='r'))
 
     if infected_list is not None:
         # add red circles around infected patients
