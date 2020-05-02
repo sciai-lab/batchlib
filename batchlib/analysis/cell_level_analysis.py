@@ -644,10 +644,8 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         self.cell_outlier_table = output_group + '/' + serum_key
 
     def load_image_outliers(self, input_files):
-        # TODO implement 'has_table' in the base class instead
-        actual_key = 'tables/' + self.image_outlier_table
         with open_file(self.table_out_path, 'r') as f:
-            if actual_key not in f:
+            if not self.has_table(f, self.image_outlier_table):
                 logger.warn("load_image_outliers: did not find an image outlier table")
                 return {}
             keys, table = self.read_table(f, self.image_outlier_table)
@@ -668,9 +666,8 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         return outlier_dict
 
     def load_cell_outliers(self, input_file):
-        actual_key = 'tables/' + self.cell_outlier_table
         with open_file(input_file, 'r') as f:
-            if actual_key not in f:
+            if not self.has_table(f, self.cell_outlier_table):
                 logger.warn("load_cell_outliers: did not find a cell outlier table")
                 return {}
             keys, table = self.read_table(f, self.cell_outlier_table)
