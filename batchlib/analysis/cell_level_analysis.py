@@ -719,7 +719,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
             site_name = image_name_to_site_name(image_name)
 
             # get number of ignored outlier cells
-            n_outlier_cells = sum(1 for v in self.load_cell_outliers(in_file) if v[0] == 1)
+            n_outlier_cells = sum(1 for v in self.load_cell_outliers(in_file).values() if v[0] == 1)
 
             table.append([image_name, site_name, outlier, outlier_type, n_outlier_cells] + stat_list)
 
@@ -778,7 +778,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
                 column_names += list(stat_names)
 
             # get number of ignored outlier cells
-            n_outlier_cells = sum(sum(1 for v in self.load_cell_outliers(in_file) if v[0] == 1)
+            n_outlier_cells = sum(sum(1 for v in self.load_cell_outliers(in_file).values() if v[0] == 1)
                                   for in_file in in_files_for_current_well)
 
             table.append([well_name, n_outlier_images, n_outlier_cells] + stat_list)
