@@ -90,27 +90,22 @@ class ImageLevelQC(CellLevelAnalysisWithTableBase):
 
             # check if this image was marked as outlier manually
             manual_outlier = self.outlier_predicate(image_name)
-            # if it was marked, this image is set to be an outlier
-            if manual_outlier == 1:
-                outlier_type = 'manual'
-                table.append([image_name, site_name, 1, outlier_type])
-                continue
+            if manual_outlier not in (-1, 0, 1):
+                raise ValueError(f"Invalid value for outlier {manual_outlier}")
 
-            # if the image was not marked as outlier, run the heuristic outlier detection
+            # check if the image is an outlier according to the heuristics
             qc_outlier, qc_outlier_type = self.outlier_heuristics(image_name)
+            if qc_outlier not in (-1, 0, 1):
+                raise ValueError(f"Invalid value for outlier {qc_outlier}")
 
-            if qc_outlier == 0:
-                outlier = 0
-                outlier_type = 'none'
-            elif qc_outlier == 1:
-                outlier = 1
-                outlier_type = qc_outlier_type
-            elif qc_outlier == -1:
-                # if we don't have heuristic qc, we take the manual outlier annotation
+            # check the heuristic outlier status
+            outlier_type = f'manual: {manual_outlier}; heuristic: {qc_outlier_type}'
+            outlier = qc_outlier
+
+            # if we have a manual outlier or no heuristic check was done,
+            # we over-ride the heuristic result
+            if (manual_outlier == 1) or (qc_outlier == -1):
                 outlier = manual_outlier
-                outlier_type = 'none' if manual_outlier == 0 else 'not checked'
-            else:
-                raise RuntimeError(f"Unexpected outlier value: {qc_outlier}")
 
             table.append([image_name, site_name, outlier, outlier_type])
 
