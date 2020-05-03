@@ -3,12 +3,11 @@ import os
 import urllib.parse
 from datetime import datetime
 
-import git
 import h5py
 from pymongo import MongoClient
 
 from batchlib.base import BatchJobOnContainer
-from batchlib.util import get_logger
+from batchlib.util import get_logger, get_commit_id
 from batchlib.util.io import read_table
 
 ASSAY_ANALYSIS_RESULTS = 'immuno-assay-analysis-results'
@@ -83,15 +82,6 @@ def _parse_workflow_name(work_dir):
     return workflow_name
 
 
-def _get_git_sha():
-    try:
-        repo = git.Repo(search_parent_directories=True)
-        return repo.head.object.hexsha
-    except Exception as e:
-        logger.warning(f'Cannot get batchlib_version: {e}')
-        return None
-
-
 class DbResultWriter(BatchJobOnContainer):
     def __init__(self, username, password, host, port=27017, db_name='covid', **super_kwargs):
         super().__init__(input_pattern='*.hdf5', **super_kwargs)
@@ -110,6 +100,24 @@ class DbResultWriter(BatchJobOnContainer):
         except Exception as e:
             logger.warning(f'Connection failure: {e}. Skipping DbResultWriter job.')
             self.db = None
+
+    def check_output(self, path):
+        if self.db is None:
+            return True
+        # check if result document already exist for a given (batchlib_version, workflow_name, plate_name)
+        work_dir = os.path.join(self.folder, 'batchlib')
+        _filter = {
+            "workflow_name": _parse_workflow_name(work_dir),
+            "plate_name": os.path.split(self.folder)[1],
+            "batchlib_version": get_commit_id()
+        }
+        result = self.db[ASSAY_ANALYSIS_RESULTS].find_one(_filter)
+        # return False if no entry in the DB
+        return result is not None
+
+    def validate_output(self, path):
+        # the output is stored in the DB and it's assumed to be valid
+        return True
 
     def run(self, input_files, output_files, **kwargs):
         if self.db is None:
@@ -130,8 +138,15 @@ class DbResultWriter(BatchJobOnContainer):
             "workflow_name": _parse_workflow_name(work_dir),
             "workflow_duration": _parse_workflow_duration(work_dir),
             "plate_name": plate_name,
-            "batchlib_version": _get_git_sha(),
+            "batchlib_version": get_commit_id(),
             "result_tables": result_tables
         }
 
-        self.db[ASSAY_ANALYSIS_RESULTS].insert_one(result_object)
+        # we've reached this point, so there is either no result document for a given (batchlib_versin, workflow_name, plate_name)
+        # or there is one and we want to replace it (i.e. force_recompute=True)
+        _filter = {
+            "workflow_name": result_object["workflow_name"],
+            "plate_name": result_object["plate_name"],
+            "batchlib_version": result_object["batchlib_version"]
+        }
+        self.db[ASSAY_ANALYSIS_RESULTS].find_one_and_replace(_filter, result_object, upsert=True)

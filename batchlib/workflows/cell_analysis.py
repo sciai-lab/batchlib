@@ -204,8 +204,7 @@ def run_cell_analysis(config):
                 "host": config.db_host,
                 "port": config.db_port,
                 "db_name": config.db_name
-            },
-            'run': {'force_recompute': True}}))
+            }}))
 
     t0 = time.time()
 
