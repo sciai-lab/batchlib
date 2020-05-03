@@ -1,4 +1,3 @@
-import glob
 import os
 import urllib.parse
 from datetime import datetime
@@ -7,10 +6,10 @@ import h5py
 from pymongo import MongoClient
 
 from batchlib.base import BatchJobOnContainer
+from batchlib.mongo.utils import ASSAY_ANALYSIS_RESULTS, ASSAY_METADATA, create_plate_doc, parse_workflow_duration, \
+    parse_workflow_name
 from batchlib.util import get_logger, get_commit_id
 from batchlib.util.io import read_table
-
-ASSAY_ANALYSIS_RESULTS = 'immuno-assay-analysis-results'
 
 logger = get_logger('Workflow.BatchJob.DbResultWriter')
 
@@ -55,44 +54,6 @@ def _get_analysis_tables(in_file):
         return tables
 
 
-def _get_log_path(work_dir):
-    logs = list(glob.glob(os.path.join(work_dir, '*.log')))
-    assert len(logs) == 1
-    return logs[0]
-
-
-def _parse_workflow_duration(work_dir):
-    """
-    Reads workflow duration by parsing the first and the last log event in the log file and taking the time difference
-    """
-    log_path = _get_log_path(work_dir)
-    with open(log_path, 'r') as fh:
-        lines = list(fh)
-        for first_log in lines:
-            if 'INFO' in first_log:
-                break
-
-        for last_log in reversed(lines):
-            if 'INFO' in last_log:
-                break
-
-        start = datetime.strptime(first_log.split('[')[0].strip(), '%Y-%m-%d %H:%M:%S')
-        end = datetime.strptime(last_log.split('[')[0].strip(), '%Y-%m-%d %H:%M:%S')
-
-        delta = end - start
-        return delta.seconds
-
-
-def _parse_workflow_name(work_dir):
-    """
-    Parses workflow name from the log file
-    """
-    log_path = _get_log_path(work_dir)
-    logfile = os.path.split(log_path)[1]
-    workflow_name = os.path.splitext(logfile)[0]
-    return workflow_name
-
-
 class DbResultWriter(BatchJobOnContainer):
     def __init__(self, username, password, host, port=27017, db_name='covid', **super_kwargs):
         super().__init__(input_pattern='*.hdf5', **super_kwargs)
@@ -118,7 +79,7 @@ class DbResultWriter(BatchJobOnContainer):
         # check if result document already exist for a given (batchlib_version, workflow_name, plate_name)
         work_dir = os.path.join(self.folder, 'batchlib')
         _filter = {
-            "workflow_name": _parse_workflow_name(work_dir),
+            "workflow_name": parse_workflow_name(work_dir),
             "plate_name": os.path.split(self.folder)[1],
             "batchlib_version": get_commit_id()
         }
@@ -152,8 +113,8 @@ class DbResultWriter(BatchJobOnContainer):
         work_dir = os.path.join(self.folder, 'batchlib')
         result_object = {
             "created_at": datetime.now(),
-            "workflow_name": _parse_workflow_name(work_dir),
-            "workflow_duration": _parse_workflow_duration(work_dir),
+            "workflow_name": parse_workflow_name(work_dir),
+            "workflow_duration": parse_workflow_duration(work_dir),
             "plate_name": plate_name,
             "batchlib_version": get_commit_id(),
             "result_tables": result_tables
@@ -167,3 +128,9 @@ class DbResultWriter(BatchJobOnContainer):
             "batchlib_version": result_object["batchlib_version"]
         }
         self.db[ASSAY_ANALYSIS_RESULTS].find_one_and_replace(_filter, result_object, upsert=True)
+
+        # create plate metadata
+        # TODO: replace with the folder where the tifs are stored
+        plate_dir = self.folder
+        plate_doc = create_plate_doc(plate_name, plate_dir)
+        self.db[ASSAY_METADATA].find_one_and_replace({"name": plate_name}, plate_doc, upsert=True)

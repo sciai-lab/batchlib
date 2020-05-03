@@ -1,22 +1,17 @@
-import argparse
-import json
-from datetime import datetime
 import glob
-
-import pymongo
-from pymongo import MongoClient
+import json
+import os
+from datetime import datetime
 
 from batchlib.outliers.outlier import OutlierPredicate, DEFAULT_OUTLIER_DIR
 from batchlib.util import get_logger
-import urllib.parse
-import os
 
 ASSAY_METADATA = 'immuno-assay-metadata'
 ASSAY_ANALYSIS_RESULTS = 'immuno-assay-analysis-results'
 
-SUPPORTED_FORMATS = ['*.tif', '*.tiff']
+SUPPORTED_FORMATS = ['*.h5', '*.tif', '*.tiff']
 
-logger = get_logger('MongoDB Migrator')
+logger = get_logger(ASSAY_METADATA)
 
 default_channel_mapping = {
     "DAPI": "nuclei",
@@ -110,7 +105,7 @@ def _create_wells(plate_name, plate_dir):
     return wells
 
 
-def _create_plate_doc(plate_name, plate_dir):
+def create_plate_doc(plate_name, plate_dir):
     logger.info(f'Creating plate object for: {plate_name}')
     result = {
         "name": plate_name,
@@ -125,66 +120,39 @@ def _create_plate_doc(plate_name, plate_dir):
     return result
 
 
-def migrate(input_folder, db):
-    logger.info(f'Migrating plates from: {input_folder}...')
-    # get assay metadata collection
-    assay_metadata = db[ASSAY_METADATA]
-    assay_results = db[ASSAY_ANALYSIS_RESULTS]
-    # create necessary indexes
-    assay_metadata.create_index([('name', pymongo.ASCENDING)], unique=True)
-    # create unique compound index on (workflow_name, plate_name, batchlib_version), i.e. reject result objects
-    # for which those 3 values already exist in the collection
-    assay_results.create_index([
-        ('workflow_name', pymongo.ASCENDING),
-        ('plate_name', pymongo.ASCENDING),
-        ('batchlib_version', pymongo.ASCENDING),
-    ], unique=True)
-
-    plate_docs = []
-    for filename in os.listdir(input_folder):
-        plate_name = filename
-        plate_dir = os.path.join(input_folder, plate_name)
-        if os.path.isdir(plate_dir):
-            plate_doc = _create_plate_doc(plate_name, plate_dir)
-            if plate_doc is not None:
-                plate_docs.append(plate_doc)
-
-    # import plates
-    logger.info(f'Importing {len(plate_docs)} plates')
-    assay_metadata.insert_many(plate_docs)
+def _get_log_path(work_dir):
+    logs = list(glob.glob(os.path.join(work_dir, '*.log')))
+    assert len(logs) == 1
+    return logs[0]
 
 
-def update_well_assessment(plate_name, well_assessments):
-    # TODO: implement when we have this info in parseable format
-    pass
+def parse_workflow_duration(work_dir):
+    """
+    Reads workflow duration by parsing the first and the last log event in the log file and taking the time difference
+    """
+    log_path = _get_log_path(work_dir)
+    with open(log_path, 'r') as fh:
+        lines = list(fh)
+        for first_log in lines:
+            if 'INFO' in first_log:
+                break
+
+        for last_log in reversed(lines):
+            if 'INFO' in last_log:
+                break
+
+        start = datetime.strptime(first_log.split('[')[0].strip(), '%Y-%m-%d %H:%M:%S')
+        end = datetime.strptime(last_log.split('[')[0].strip(), '%Y-%m-%d %H:%M:%S')
+
+        delta = end - start
+        return delta.seconds
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='MongoDB migrator')
-    parser.add_argument('--input_folder', type=str, help='Path to the directory containing all the plates',
-                        required=True)
-
-    parser.add_argument('--host', type=str, help='IP of the MongoDB primary DB', required=True)
-    parser.add_argument('--port', type=int, help='MongoDB port', default=27017)
-
-    parser.add_argument('--user', type=str, help='MongoDB user', required=True)
-    parser.add_argument('--password', type=str, help='MongoDB password', required=True)
-
-    parser.add_argument('--db', type=str, help='Default database', default='covid')
-    args = parser.parse_args()
-
-    # escape username and password to be URL friendly
-    username = urllib.parse.quote_plus(args.user)
-    password = urllib.parse.quote_plus(args.password)
-
-    mongodb_uri = f'mongodb://{username}:{password}@{args.host}:{args.port}/?authSource={args.db}'
-
-    logger.info(f'Connecting to MongoDB instance: {args.host}:{args.port}, user: {args.user}, authSource: {args.db}')
-
-    client = MongoClient(mongodb_uri)
-
-    logger.info(f'Getting database: {args.db}')
-
-    db = client[args.db]
-
-    migrate(args.input_folder, db)
+def parse_workflow_name(work_dir):
+    """
+    Parses workflow name from the log file
+    """
+    log_path = _get_log_path(work_dir)
+    logfile = os.path.split(log_path)[1]
+    workflow_name = os.path.splitext(logfile)[0]
+    return workflow_name
