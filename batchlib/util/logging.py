@@ -5,7 +5,8 @@ import glob
 
 ROOT_LOGGER_NAME = 'Workflow'
 
-LOGGING_FORMATTER = logging.Formatter('%(asctime)s [%(threadName)s] %(levelname)s %(name)s - %(message)s')
+LOGGING_FORMATTER = logging.Formatter('%(asctime)s [%(threadName)s] %(levelname)s %(name)s - %(message)s',
+                                      '%Y-%m-%d %H:%M:%S')
 
 # log level can be passed via env var LOGLEVEL during the workflow execution
 LOG_LEVEL = os.environ.get('LOGLEVEL', 'INFO').upper()

@@ -128,15 +128,16 @@ def compute_ratios(not_infected_properties, infected_properties, serum_key='seru
     for key, value in infected_global_properties[serum_key].items():
         result[f'infected_{key}'] = value
     for key, value in not_infected_global_properties[serum_key].items():
-        result[f'not_infected_{key}'] = value
+        result[f'control_{key}'] = value
 
     for mode in ('means', 'sums'):
         result[f'robust_z_score_{mode}'] = robust_z_score(mode)
 
+    # extra infected / control stuff
     result['infected_mean'] = infected_global_properties[serum_key]['global_mean']
     result['infected_median'] = infected_global_properties[serum_key]['q0.5_of_cell_means']
-    result['not_infected_mean'] = not_infected_global_properties[serum_key]['global_mean']
-    result['not_infected_median'] = not_infected_global_properties[serum_key]['q0.5_of_cell_means']
+    result['control_mean'] = not_infected_global_properties[serum_key]['global_mean']
+    result['control_median'] = not_infected_global_properties[serum_key]['q0.5_of_cell_means']
     return result
 
 
@@ -555,6 +556,11 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
         # this only accounts for cells that were either classified as infected or control
         stat_dict['n_cells'] = stat_dict['n_infected'] + stat_dict['n_control']
         stat_dict['fraction_infected'] = stat_dict['n_infected'] / stat_dict['n_cells']
+
+        stat_dict['cell_size_median_infected'] = np.median(infected_cell_statistics[self.serum_key]['sizes'])
+        stat_dict['cell_size_mean_infected'] = np.mean(infected_cell_statistics[self.serum_key]['sizes'])
+        stat_dict['cell_size_median_control'] = np.median(control_cell_statistics[self.serum_key]['sizes'])
+        stat_dict['cell_size_mean_control'] = np.mean(control_cell_statistics[self.serum_key]['sizes'])
 
         if bg_keys is not None:
             # the background statistics are saved for every cell, so get them from an arbitrary one
