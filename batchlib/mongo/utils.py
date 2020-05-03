@@ -5,13 +5,14 @@ from datetime import datetime
 
 from batchlib.outliers.outlier import OutlierPredicate, DEFAULT_OUTLIER_DIR
 from batchlib.util import get_logger
+from batchlib.util.io import image_name_to_site_name
 
 ASSAY_METADATA = 'immuno-assay-metadata'
 ASSAY_ANALYSIS_RESULTS = 'immuno-assay-analysis-results'
 
 SUPPORTED_FORMATS = ['*.h5', '*.tif', '*.tiff']
 
-logger = get_logger(ASSAY_METADATA)
+logger = get_logger('Workflow.BatchJob.DbResultWriter.Utils')
 
 default_channel_mapping = {
     "DAPI": "nuclei",
@@ -67,6 +68,7 @@ def _create_images(well_name, well_files, outlier_predicate):
             {
                 "name": im_file,
                 "well_name": well_name,
+                "site_name": image_name_to_site_name(im_file),
                 "outlier": outlier_predicate(im_file),
                 "outlier_type": "manual"
             }
@@ -118,6 +120,32 @@ def create_plate_doc(plate_name, plate_dir):
     }
 
     return result
+
+
+def parse_plate_dir(work_dir, default_dir):
+    """
+    Parses plate dir containing the original tiff files and channel mapping from the log file.
+    Returns default_dir if the plate dir cannot be parsed from the log file.
+    """
+    try:
+        log_path = _get_log_path(work_dir)
+        with open(log_path, 'r') as fh:
+            lines = list(fh)
+            input_dir_line = None
+            for line in lines:
+                if 'input folder is' in line:
+                    input_dir_line = line
+                    break
+
+        if input_dir_line is not None:
+            plate_dir = input_dir_line.split('input folder is ')[1].strip()
+            if os.path.isdir(plate_dir):
+                return plate_dir
+
+        return default_dir
+    except Exception as e:
+        logger.warning(f'Cannot parse plate dir: {e}. Using default {default_dir}')
+        return default_dir
 
 
 def _get_log_path(work_dir):

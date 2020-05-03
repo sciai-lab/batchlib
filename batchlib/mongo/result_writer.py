@@ -7,7 +7,7 @@ from pymongo import MongoClient
 
 from batchlib.base import BatchJobOnContainer
 from batchlib.mongo.utils import ASSAY_ANALYSIS_RESULTS, ASSAY_METADATA, create_plate_doc, parse_workflow_duration, \
-    parse_workflow_name
+    parse_workflow_name, parse_plate_dir
 from batchlib.util import get_logger, get_commit_id
 from batchlib.util.io import read_table
 
@@ -130,7 +130,6 @@ class DbResultWriter(BatchJobOnContainer):
         self.db[ASSAY_ANALYSIS_RESULTS].find_one_and_replace(_filter, result_object, upsert=True)
 
         # create plate metadata
-        # TODO: replace with the folder where the tifs are stored
-        plate_dir = self.folder
+        plate_dir = parse_plate_dir(work_dir, default_dir=self.folder)
         plate_doc = create_plate_doc(plate_name, plate_dir)
         self.db[ASSAY_METADATA].find_one_and_replace({"name": plate_name}, plate_doc, upsert=True)

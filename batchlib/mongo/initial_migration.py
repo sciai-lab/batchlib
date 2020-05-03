@@ -10,9 +10,8 @@ from batchlib.util import get_logger
 logger = get_logger('MongoDB Migrator')
 
 
-def migrate(input_folder, db):
+def create_indexes(db):
     logger.info(f'Creating indexes on {ASSAY_METADATA} and {ASSAY_ANALYSIS_RESULTS}')
-    # get assay metadata collection
     assay_metadata = db[ASSAY_METADATA]
     assay_results = db[ASSAY_ANALYSIS_RESULTS]
     # create necessary indexes
@@ -33,8 +32,6 @@ def update_well_assessment(plate_name, well_assessments):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='MongoDB migrator')
-    parser.add_argument('--input_folder', type=str, help='Path to the directory containing all the plates',
-                        required=True)
 
     parser.add_argument('--host', type=str, help='IP of the MongoDB primary DB', required=True)
     parser.add_argument('--port', type=int, help='MongoDB port', default=27017)
@@ -57,6 +54,4 @@ if __name__ == '__main__':
 
     logger.info(f'Getting database: {args.db}')
 
-    db = client[args.db]
-
-    migrate(args.input_folder, db)
+    create_indexes(client[args.db])
