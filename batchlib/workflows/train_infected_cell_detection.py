@@ -2,7 +2,6 @@ import numpy as np
 import os
 import configargparse
 from batchlib.base import BatchJobOnContainer
-from batchlib.base import BatchJobOnContainer
 from functools import partial
 from batchlib.util import open_file
 from collections import defaultdict
@@ -20,6 +19,15 @@ from glob import glob
 import shutil
 
 from ..util.grid_search import grid_evaluate
+
+
+class DummyJob(BatchJobOnContainer):
+    def run(self):
+        pass
+
+
+dummy_job = DummyJob()
+read_table = dummy_job.read_table
 
 
 class CopyImg(BatchJobOnContainer):
@@ -46,6 +54,13 @@ def get_input_files(config):
     return tiff_files
 
 
+def in_to_out_file(config, in_file):
+    plate = os.path.dirname(in_file)
+    out_file = os.path.join(config.out_dir, os.path.basename(plate) + '_' +
+                            os.path.basename(in_file).rstrip('.tiff') + '.h5')
+    return out_file
+
+
 def preprocess(config, tiff_files):
     os.makedirs(config.out_dir, exist_ok=True)
     # group files by plate
@@ -54,12 +69,6 @@ def preprocess(config, tiff_files):
         plate = os.path.dirname(in_file)
         files_per_plate[plate].append(in_file)
 
-    def in_to_out_file(in_file):
-        plate = os.path.dirname(in_file)
-        out_file = os.path.join(config.out_dir, os.path.basename(plate) + '_' +
-                                os.path.basename(in_file).rstrip('.tiff') + '.h5')
-        return out_file
-
     # preprocess files by plate
     barrel_corrector_root = os.path.join(config.misc_folder, 'barrel_correctors')
     for plate, in_files in files_per_plate.items():
@@ -67,7 +76,7 @@ def preprocess(config, tiff_files):
             input_folder=plate,
             barrel_corrector_path=get_barrel_corrector(barrel_corrector_root, plate)
         )
-        out_files = list(map(in_to_out_file, in_files))
+        out_files = list(map(partial(in_to_out_file, config), in_files))
         preprocess.run(in_files, out_files)
 
         serum_keys = get_serum_keys(plate)
@@ -205,6 +214,47 @@ def find_infected_grid(config, SearchSpace):
                   n_jobs=0)
 
 
+# TODO use proper score function
+def even_split_score(in_file, infected_indicator):
+    return (0.5 - np.mean(infected_indicator)) ** 2
+
+
+def get_score_grid(config, SearchSpace, in_files, score_func):
+    def get_prediction_and_eval_score(
+        score_func,
+        seg_key,
+        ignore_nuclei,
+        split_statistic,
+        infected_threshold
+    ):
+        identifier = get_identifier(seg_key, ignore_nuclei, split_statistic, infected_threshold)
+        scores = []
+        for in_file in in_files:
+            out_file = in_to_out_file(config, in_file)
+            assert os.path.isfile(out_file), f'Output file missing: {out_file}'
+            with open_file(out_file, 'r') as f:
+                column_names, table = read_table(f, 'cell_classification/' + seg_key + '_' +
+                                                 get_identifier(seg_key, ignore_nuclei) +
+                                                 '/marker_corrected_' + identifier)
+            infected_indicator = table[:, column_names.index('is_infected')]
+            control_indicator = table[:, column_names.index('is_control')]
+            labels = table[:, column_names.index('label_id')].astype(np.int32)
+            #n_cells = np.sum(labels != 0)
+            scores.append(even_split_score(in_file, infected_indicator))
+        return np.mean(scores)
+
+    score_grid = grid_evaluate(
+        partial(get_prediction_and_eval_score, score_func=even_split_score),
+        seg_key=SearchSpace.segmentation_key,
+        ignore_nuclei=SearchSpace.ignore_nuclei,
+        split_statistic=SearchSpace.split_statistic,
+        infected_threshold=SearchSpace.infected_threshold,
+        n_jobs=0
+    )
+
+    return score_grid
+
+
 def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSpace):
     print('number of points on grid:', np.product([len(v) for v in [
         SearchSpace.segmentation_key,
@@ -226,6 +276,11 @@ def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSp
     extract_feature_grid(config, SubParamRanges, SearchSpace)
 
     find_infected_grid(config, SearchSpace)
+
+    score_grid = get_score_grid(config, SearchSpace, tiff_files, even_split_score)
+    print(score_grid)
+    np.save(os.path.join(config.out_dir, 'score_grid.npy'), score_grid)
+
 
 
 
