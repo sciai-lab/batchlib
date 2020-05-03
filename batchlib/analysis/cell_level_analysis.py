@@ -653,7 +653,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
                          **super_kwargs)
 
         output_group = cell_seg_key if self.identifier is None else cell_seg_key + '_' + self.identifier
-        self.cell_outlier_table = output_group + '/' + serum_key
+        self.cell_outlier_table = output_group + '/' + serum_key + '_' + cell_outlier_table_name
 
     def load_image_outliers(self, input_files):
         with open_file(self.table_out_path, 'r') as f:
