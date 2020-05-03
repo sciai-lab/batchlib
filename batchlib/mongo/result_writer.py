@@ -34,14 +34,25 @@ def _table_object(column_names, table):
     ]
 
 
-def _get_result_tables(in_file):
+def _get_analysis_name(in_file):
+    filename = os.path.split(in_file)[1]
+    # remove .hdf5 extension
+    return os.path.splitext(filename)[0]
+
+
+def _get_analysis_tables(in_file):
     with h5py.File(in_file, 'r') as f:
-        result_tables = {}
+        tables = []
         for table_name in _get_table_names(f):
             column_names, table = read_table(f, table_name)
-            result_tables[table_name] = _table_object(column_names, table)
+            tables.append(
+                {
+                    "table_name": table_name,
+                    "results": _table_object(column_names, table)
+                }
+            )
 
-        return result_tables
+        return tables
 
 
 def _get_log_path(work_dir):
@@ -123,12 +134,18 @@ class DbResultWriter(BatchJobOnContainer):
         if self.db is None:
             return
 
-        assert len(input_files) == 1, f'Expected a single table file, but {len(input_files)} was given'
-        input_file = input_files[0]
-
         plate_name = os.path.split(self.folder)[1]
 
-        result_tables = _get_result_tables(input_file)
+        result_tables = []
+        for input_file in input_files:
+            analysis_name = _get_analysis_name(input_file)
+            analysis_tables = _get_analysis_tables(input_file)
+            result_tables.append(
+                {
+                    "analysis_name": analysis_name,
+                    "tables": analysis_tables
+                }
+            )
 
         # this is a bit hacky: parsing the workflow name and execution duration from the log file in the work_dir,
         # but I don't see a better way to do it atm

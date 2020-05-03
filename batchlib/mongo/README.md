@@ -131,24 +131,31 @@ Schema of a single document:
   "workflow_name": "name of the workflow",
   "plate_name": "name of the plate",
   "batchlib_version": "version of batchlib the that produced the result",
-  "result_tables": {
-    "wells/default": {
-      
-    },
-    "images/default": [
-      {
-        
-      }
-    ],
-    "cells/default": [
-      {
-      
-      }
-    ],
-    "....": [
-    
-    ]
-  }
+  "result_tables": [
+    {
+      "analysis_name": "analysis1_table",
+      "tables": [
+        {
+          "table_name": "wells/default",
+          "results": [
+          
+          ]
+        }, 
+        {
+          "table_name": "images/default",
+          "results": [
+          
+          ]
+        },
+        {
+          "table_name": "cells/default",
+          "results": [
+          
+          ]
+        }
+      ]
+    }
+  ]
 }
 ```
 
