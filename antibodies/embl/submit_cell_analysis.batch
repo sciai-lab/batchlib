@@ -1,0 +1,21 @@
+#!/bin/bash
+
+#SBATCH -N 1
+#SBATCH -t 04:00:00
+#SBATCH -p gpu
+#SBATCH --mem 64G
+#SBATCH -c 8
+#SBATCH --qos normal
+
+# do we want mail ?
+# #SBATCH --mail-user=constantin.pape@embl.de
+# #SBATCH --mail-type=ALL
+
+# need to load open-mpi compatible with stardist
+module purge
+module load OpenMPI/3.1.4-GCC-7.3.0-2.30
+
+PYTHON="/g/kreshuk/software/miniconda3/envs/antibodies-gpu/bin/python"
+SCRIPT="../cell_analysis_workflow.py"
+
+$PYTHON $SCRIPT -c configs/cell_analysis.conf --input_folder $1 --gpu 0 --n_cpus 8
