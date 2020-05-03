@@ -80,6 +80,73 @@ def preprocess(config, tiff_files):
             rename_serum_key.run(out_files, out_files)
 
 
+def compute_segmentations(config, SubParamRanges):
+    nuc_seg_in_key = 'nuclei_corrected'
+
+    misc_folder = config.misc_folder
+
+    torch_model_path = os.path.join(misc_folder, 'models/torch/fg_and_boundaries_V1.torch')
+    torch_model_class = UNet2D
+    torch_model_kwargs = {
+        'in_channels': 1,
+        'out_channels': 2,
+        'f_maps': [32, 64, 128, 256, 512],
+        'testing': True
+    }
+
+    model_root = os.path.join(misc_folder, 'models/stardist')
+    model_name = '2D_dsb2018'
+
+    job_list = [
+        (TorchPrediction, {
+            'build': {
+                'input_key': 'serum_corrected',
+                'output_key': [config.mask_key, config.bd_key],
+                'model_path': torch_model_path,
+                'model_class': torch_model_class,
+                'model_kwargs': torch_model_kwargs},
+            'run': {
+                'gpu_id': config.gpu,
+                'batch_size': config.batch_size,
+                'threshold_channels': {0: 0.5}}}),
+        (StardistPrediction, {
+            'build': {
+                'model_root': model_root,
+                'model_name': model_name,
+                'input_key': nuc_seg_in_key,
+                'output_key': config.nuc_key},
+            'run': {
+                'gpu_id': config.gpu,
+                'n_jobs': config.n_cpus}}),
+        (SeededWatershed, {
+            'build': {
+                'pmap_key': config.bd_key,
+                'seed_key': config.nuc_key,
+                'output_key': config.seg_key,
+                'mask_key': config.mask_key},
+            'run': {
+                'erode_mask': 20,
+                'dilate_seeds': 3,
+                'n_jobs': config.n_cpus}})
+    ]
+
+    for r in SubParamRanges.ring_widths:
+        job_list.append((VoronoiRingSegmentation, {
+            'build': {
+                'input_key': nuc_seg_in_key,
+                'output_key': f'voronoi_ring_segmentation{r}',
+                'ring_width': r
+            }
+        }))
+
+    run_workflow('Segmentation Workflow',
+                 config.out_dir,
+                 job_list,
+                 force_recompute=False)
+
+
+
+
 def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSpace):
     print('number of points on grid:', np.product([len(v) for v in [
         SearchSpace.segmentation_key,
@@ -95,6 +162,8 @@ def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSp
     [print(f) for f in tiff_files]
 
     preprocess(config, tiff_files)
+
+    compute_segmentations(config, SubParamRanges)
 
 
 
