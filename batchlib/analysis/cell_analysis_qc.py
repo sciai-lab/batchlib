@@ -5,10 +5,9 @@ from tqdm import tqdm
 from .cell_level_analysis import CellLevelAnalysisBase, CellLevelAnalysisWithTableBase
 from ..util.io import open_file, image_name_to_site_name
 
-# TODO add a value for the min size threshold
 # default size threshold provided by Vibor
 DEFAULT_CELL_OUTLIER_CRITERIA = {'max_size_threshold': 10000,
-                                 'min_size_threshold': None}
+                                 'min_size_threshold': 1000}
 
 
 class CellLevelQC(CellLevelAnalysisBase):
