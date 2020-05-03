@@ -176,6 +176,7 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
                  nuc_seg_key_to_ignore=None,
                  cell_seg_key='cell_segmentation',
                  topk=(10, 30, 50),
+                 quantiles=tuple(),
                  identifier=None):
 
         self.channel_keys = tuple(channel_keys)
@@ -183,6 +184,7 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         self.cell_seg_key = cell_seg_key
 
         self.topk = topk
+        self.quantiles = quantiles
 
         # all inputs should be 2d
         input_ndim = [2] * (1 + len(channel_keys) + (1 if nuc_seg_key_to_ignore else 0))
@@ -220,6 +222,9 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         topkdict = {f'top{k}': np.array([0 if len(t) < k else t.topk(k)[0][-1].item()
                                          for t in per_cell_values])
                     for k in self.topk}
+        quantile_dict = {f'quantile{q}': np.array([np.quantile(t.cpu().numpy(), q)
+                                                   for t in per_cell_values])
+                         for q in self.quantiles}
         medians = np.array([t.median().item()
                             for t in per_cell_values])
         mads = np.array([(t - median).abs().median().item()
@@ -232,7 +237,8 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
                     medians=medians,
                     mads=mads,
                     sizes=instance_sizes.cpu().numpy(),
-                    **topkdict)
+                    **topkdict,
+                    **quantile_dict)
 
     def eval_cells(self, channels, cell_seg,
                    ignore_label=0):
@@ -529,7 +535,7 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
                 # no cells, nothing to do
                 continue
             for key in channel_statistics.keys():
-                if key in ['means', 'medians'] or key.startswith('top'):
+                if key in ['means', 'medians'] or key.startswith('top') or key.startswith('quantile'):
                     channel_statistics[key] -= bg_offset
                 elif key == 'sums':
                     # sums are special case
