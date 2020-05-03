@@ -68,16 +68,16 @@ def compute_global_statistics(cell_properties):
     return result
 
 
-def compute_ratios(not_infected_properties, infected_properties, serum_key='serum'):
+def compute_ratios(control_properties, infected_properties, serum_key='serum'):
     # input should be the return value of eval_cells
-    not_infected_global_properties = compute_global_statistics(not_infected_properties)
+    control_global_properties = compute_global_statistics(control_properties)
     infected_global_properties = compute_global_statistics(infected_properties)
     result = dict()
 
     def serum_ratio(key, key2=None):
         key2 = key if key2 is None else key
         try:
-            result = (infected_global_properties[serum_key][key2]) / (not_infected_global_properties[serum_key][key])
+            result = (infected_global_properties[serum_key][key2]) / (control_global_properties[serum_key][key])
         except Exception:
             result = np.nan
         return result
@@ -85,7 +85,7 @@ def compute_ratios(not_infected_properties, infected_properties, serum_key='seru
     def diff_over_sum(key, key2=None):
         key2 = key if key2 is None else key
         try:
-            inf, not_inf = infected_global_properties[serum_key][key], not_infected_global_properties[serum_key][key2]
+            inf, not_inf = infected_global_properties[serum_key][key], control_global_properties[serum_key][key2]
             result = (inf - not_inf) / (inf + not_inf)
         except Exception:
             result = np.nan
@@ -94,7 +94,7 @@ def compute_ratios(not_infected_properties, infected_properties, serum_key='seru
     def diff(key, key2=None):
         key2 = key if key2 is None else key
         try:
-            inf, not_inf = infected_global_properties[serum_key][key], not_infected_global_properties[serum_key][key2]
+            inf, not_inf = infected_global_properties[serum_key][key], control_global_properties[serum_key][key2]
             result = inf - not_inf
         except Exception:
             result = np.nan
@@ -104,8 +104,8 @@ def compute_ratios(not_infected_properties, infected_properties, serum_key='seru
         assert mode in ('sums', 'means')
         try:
             inf = infected_global_properties[serum_key][f'q0.5_of_cell_{mode}']
-            not_inf = not_infected_global_properties[serum_key][f'q0.5_of_cell_{mode}']
-            mad = not_infected_global_properties[serum_key][f'mad_of_cell_{mode}']
+            not_inf = control_global_properties[serum_key][f'q0.5_of_cell_{mode}']
+            mad = control_global_properties[serum_key][f'mad_of_cell_{mode}']
             result = (inf - not_inf) / mad
         except Exception:
             result = np.nan
@@ -127,7 +127,7 @@ def compute_ratios(not_infected_properties, infected_properties, serum_key='seru
     # add infected / non-infected global statistics
     for key, value in infected_global_properties[serum_key].items():
         result[f'infected_{key}'] = value
-    for key, value in not_infected_global_properties[serum_key].items():
+    for key, value in control_global_properties[serum_key].items():
         result[f'control_{key}'] = value
 
     for mode in ('means', 'sums'):
@@ -136,8 +136,8 @@ def compute_ratios(not_infected_properties, infected_properties, serum_key='seru
     # extra infected / control stuff
     result['infected_mean'] = infected_global_properties[serum_key]['global_mean']
     result['infected_median'] = infected_global_properties[serum_key]['q0.5_of_cell_means']
-    result['control_mean'] = not_infected_global_properties[serum_key]['global_mean']
-    result['control_median'] = not_infected_global_properties[serum_key]['q0.5_of_cell_means']
+    result['control_mean'] = control_global_properties[serum_key]['global_mean']
+    result['control_median'] = control_global_properties[serum_key]['q0.5_of_cell_means']
     return result
 
 
