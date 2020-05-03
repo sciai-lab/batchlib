@@ -142,9 +142,10 @@ def compute_segmentations(config, SubParamRanges):
     for r in SubParamRanges.ring_widths:
         job_list.append((VoronoiRingSegmentation, {
             'build': {
-                'input_key': nuc_seg_in_key,
+                'input_key': config.nuc_key,
                 'output_key': f'voronoi_ring_segmentation{r}',
-                'ring_width': r
+                'ring_width': r,
+                'disk_not_rings': True,
             }
         }))
 
@@ -190,7 +191,7 @@ def find_infected_grid(config, SearchSpace):
                 'marker_key': 'marker_corrected',
                 'cell_seg_key': seg_key + '_' + get_identifier(seg_key, ignore_nuclei),
                 # old method
-                'bg_correction_key': 'image_bg_median',
+                'bg_correction_key': 'image_bg_median',  #FIXME this is now referring to the current segmentatin (e.g. voronoi rings). should always be cell segmentation..
                 'split_statistic': split_statistic,
                 'infected_threshold': infected_threshold,
                 'identifier': get_identifier(seg_key, ignore_nuclei, split_statistic, infected_threshold)
@@ -215,8 +216,10 @@ def find_infected_grid(config, SearchSpace):
 
 
 # TODO use proper score function
-def even_split_score(in_file, infected_indicator):
-    return (0.5 - np.mean(infected_indicator)) ** 2
+def dummy_score(in_file, infected_indicator):
+    return (np.mean(infected_indicator),
+            np.sum(infected_indicator),
+            len(infected_indicator) - np.sum(infected_indicator))
 
 
 def get_score_grid(config, SearchSpace, in_files, score_func):
@@ -240,11 +243,11 @@ def get_score_grid(config, SearchSpace, in_files, score_func):
             control_indicator = table[:, column_names.index('is_control')]
             labels = table[:, column_names.index('label_id')].astype(np.int32)
             #n_cells = np.sum(labels != 0)
-            scores.append(even_split_score(in_file, infected_indicator))
-        return np.mean(scores)
+            scores.append(dummy_score(in_file, infected_indicator))
+        return np.mean(scores, axis=0)
 
     score_grid = grid_evaluate(
-        partial(get_prediction_and_eval_score, score_func=even_split_score),
+        partial(get_prediction_and_eval_score, score_func=dummy_score),
         seg_key=SearchSpace.segmentation_key,
         ignore_nuclei=SearchSpace.ignore_nuclei,
         split_statistic=SearchSpace.split_statistic,
@@ -263,7 +266,8 @@ def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSp
         SearchSpace.infected_threshold,
     ]]))
 
-    shutil.rmtree(config.out_dir)
+    if os.path.isdir(config.out_dir):
+        shutil.rmtree(config.out_dir)
 
     tiff_files = get_input_files(config)
     print(f'Found input tiff files:')
