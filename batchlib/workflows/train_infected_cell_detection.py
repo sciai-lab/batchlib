@@ -174,6 +174,37 @@ def extract_feature_grid(config, SubParamRanges, SearchSpace):
                   n_jobs=0)
 
 
+def find_infected_grid(config, SearchSpace):
+    def find_infected(seg_key, ignore_nuclei, split_statistic, infected_threshold):
+        job_list = [((FindInfectedCells, {
+            'build': {
+                'marker_key': 'marker_corrected',
+                'cell_seg_key': seg_key + '_' + get_identifier(seg_key, ignore_nuclei),
+                # old method
+                'bg_correction_key': 'image_bg_median',
+                'split_statistic': split_statistic,
+                'infected_threshold': infected_threshold,
+                'identifier': get_identifier(seg_key, ignore_nuclei, split_statistic, infected_threshold)
+                # new method
+                # 'bg_correction_key': 'well_bg_median',
+                # 'infected_threshold_scale_key': 'well_bg_mad',
+                # 'infected_threshold': 7,
+            }}))]
+        run_workflow(f'Infected Classification Workflow '
+                     f'({get_identifier(seg_key, ignore_nuclei, split_statistic, infected_threshold)})',
+                     config.out_dir,
+                     job_list,
+                     force_recompute=False)
+
+    # TODO what about well wise / plate wise bgs? get them from somewhere!
+    grid_evaluate(find_infected,
+                  seg_key=SearchSpace.segmentation_key,
+                  ignore_nuclei=SearchSpace.ignore_nuclei,
+                  split_statistic=SearchSpace.split_statistic,
+                  infected_threshold=SearchSpace.infected_threshold,
+                  n_jobs=0)
+
+
 def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSpace):
     print('number of points on grid:', np.product([len(v) for v in [
         SearchSpace.segmentation_key,
@@ -193,6 +224,8 @@ def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSp
     compute_segmentations(config, SubParamRanges)
 
     extract_feature_grid(config, SubParamRanges, SearchSpace)
+
+    find_infected_grid(config, SearchSpace)
 
 
 
