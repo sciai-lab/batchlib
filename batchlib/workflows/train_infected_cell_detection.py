@@ -145,6 +145,33 @@ def compute_segmentations(config, SubParamRanges):
                  force_recompute=False)
 
 
+def get_identifier(*args):
+    return '_'.join(map(str, args))
+
+
+def extract_feature_grid(config, SubParamRanges, SearchSpace):
+    # TODO: add denoise radius argument
+    def extract_features(seg_key, ignore_nuclei):
+        print('\n', seg_key, ignore_nuclei)
+        job_list = [((InstanceFeatureExtraction, {
+            'build': {
+                'channel_keys': ['marker_corrected'],
+                'nuc_seg_key_to_ignore': config.nuc_key if ignore_nuclei else None,
+                'cell_seg_key': seg_key,
+                'identifier': get_identifier(seg_key, ignore_nuclei),
+                'topk': SubParamRanges.ks_for_topk,
+                'quantiles': SubParamRanges.quantiles,
+            },
+            'run': {'gpu_id': config.gpu}}))]
+        run_workflow('Feature Extraction Workflow',
+                     config.out_dir,
+                     job_list,
+                     force_recompute=True)
+
+    grid_evaluate(extract_features,
+                  seg_key=SearchSpace.segmentation_key,
+                  ignore_nuclei=SearchSpace.ignore_nuclei,
+                  n_jobs=0)
 
 
 def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSpace):
@@ -164,6 +191,8 @@ def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSp
     preprocess(config, tiff_files)
 
     compute_segmentations(config, SubParamRanges)
+
+    extract_feature_grid(config, SubParamRanges, SearchSpace)
 
 
 
