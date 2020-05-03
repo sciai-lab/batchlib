@@ -113,7 +113,7 @@ def _argparse():
     parser = argparse.ArgumentParser(description='Pmaps Quality Evaluation Script')
     parser.add_argument('--data', type=str,
                         help='Path to directory with the plates collection',
-                        default='/mnt/covid19/data/data-processed-seg-new')
+                        default='/mnt/covid19/data/data-processed')
 
     parser.add_argument('--results', type=str,
                         help='defines where the results will be saved',
@@ -125,7 +125,7 @@ def _argparse():
 if __name__ == '__main__':
     args = _argparse()
 
-    all_stacks = glob.glob(f"{args.data}/**/*.h5")
+    all_stacks = glob.glob(f"{args.data}/plateK**/*.h5")
     random.shuffle(all_stacks)
 
     now = datetime.datetime.now()

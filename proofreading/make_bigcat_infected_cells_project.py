@@ -133,8 +133,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('input_path', type=str)
     parser.add_argument('output_path', type=str)
-    parser.add_argument('--order', type=str, default="smn",
-                        help="example oder: smn (serum, marker, nuclei)")
+    parser.add_argument('--order', type=str, default="mns",
+                        help="example oder: smn (serum, marker, nuclei) or mns")
     parser.add_argument('--use_corrected', type=int, default=0)
     args = parser.parse_args()
 
