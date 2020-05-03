@@ -12,7 +12,8 @@ DEFAULT_CELL_OUTLIER_CRITERIA = {'max_size_threshold': 10000,
 
 # TODO determine the values for this
 DEFAULT_IMAGE_OUTLIER_CRITERIA = {'min_number_cells': None,
-                                  'min_number_control_cells': None}
+                                  'min_number_control_cells': None,
+                                  'check_ratios': True}
 
 
 class CellLevelQC(CellLevelAnalysisBase):
@@ -153,13 +154,14 @@ class ImageLevelQC(CellLevelAnalysisWithTableBase):
             outlier_type += 'too few control cells;'
 
         # check for negative ratios
-        ratios = compute_ratios(control_stats, infected_stats, serum_key=self.serum_key)
-        for name, val in ratios.items():
-            if not name.startswith('ratio'):
-                continue
-            if val < 0.:
-                is_outlier = 1
-                outlier_type += f'{name} is negative'
+        if self.outlier_criteria['check_ratios']:
+            ratios = compute_ratios(control_stats, infected_stats, serum_key=self.serum_key)
+            for name, val in ratios.items():
+                if not name.startswith('ratio'):
+                    continue
+                if val < 0.:
+                    is_outlier = 1
+                    outlier_type += f'{name} is negative'
 
         if outlier_type == '':
             outlier_type = 'none'

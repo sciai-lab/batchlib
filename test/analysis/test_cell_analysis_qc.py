@@ -87,5 +87,43 @@ class TestCellLevelQC(unittest.TestCase):
                 self.assertEqual(otype, 'none')
 
 
+class TestImageLevelQC(unittest.TestCase):
+    folder = './out'
+
+    # TODO write images that:
+    # - clear te qc
+    # - violate number of cell criteria
+    # - violate number of control cell criteria
+    # - violate the ratio criteria
+    def setUp(self):
+        pass
+
+    def tearDown(self):
+        try:
+            rmtree(self.folder)
+        except OSError:
+            pass
+
+    def run_wf(self, outlier_criteria):
+        from batchlib.analysis.cell_level_analysis import InstanceFeatureExtraction, FindInfectedCells
+        from batchlib.analysis.cell_analysis_qc import ImageLevelQC
+        from batchlib.workflow import run_workflow
+
+        job_dict = {
+            InstanceFeatureExtraction: {'build': {'cell_seg_key': self.cell_seg_key}},
+            FindInfectedCells: {'build': {'cell_seg_key': self.cell_seg_key}},
+            ImageLevelQC: {'build': {'cell_seg_key': self.cell_seg_key,
+                                     'outlier_criteria': outlier_criteria}}
+        }
+        run_workflow('test', self.folder, job_dict)
+
+    def test_qc(self):
+        outlier_criteria = {'min_number_cells': 10,
+                            'min_number_control_cells': 5,
+                            'check_ratios': True}
+        self.run_wf(outlier_criteria)
+        # TODO check the qc results
+
+
 if __name__ == '__main__':
     unittest.main()
