@@ -2,3 +2,4 @@ __pycache__/
 batchlib.egg-info/
 # don't add the db config to git
 antibodies/embl/configs/cell_analysis_db.conf
+slurm-*.out
