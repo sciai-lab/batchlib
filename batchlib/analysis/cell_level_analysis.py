@@ -112,13 +112,13 @@ def compute_ratios(not_infected_properties, infected_properties, channel_name_di
                 result[f'{table_key}_dos_of_{key_result}'] = diff_over_sum(key1, key2, channel_key)
                 result[f'{table_key}_diff_of_{key_result}'] = diff(key1, key2, channel_key)
 
+            result[f'{table_key}_robust_z_score_{sums_or_means}'] = robust_z_score(sums_or_means, channel_key)
+
         # add infected / non-infected global statistics
         for key, value in infected_global_properties[channel_key].items():
             result[f'{table_key}_infected_{key}'] = value
         for key, value in not_infected_global_properties[channel_key].items():
             result[f'{table_key}_control_{key}'] = value
-
-        result[f'{table_key}_robust_z_score_{sums_or_means}'] = robust_z_score(sums_or_means, channel_key)
 
     # should be included above
     # extra infected / control stuff
@@ -719,10 +719,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         table = np.array(table)
         n_cols = len(column_names)
         assert n_cols == table.shape[1]
-        print()
-        for col in column_names:
-            print(col)
-        print()
+
         # set image name to non-visible for the plateViewer (something else?)
         visible = np.ones(n_cols, dtype='uint8')
         visible[0] = False
@@ -783,10 +780,6 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         table = np.array(table)
         n_cols = len(column_names)
         assert n_cols == table.shape[1]
-        print()
-        for col in column_names:
-            print(col)
-        print()
 
         with open_file(self.table_out_path, 'a') as f:
             self.write_table(f, self.well_table_key, column_names, table)
