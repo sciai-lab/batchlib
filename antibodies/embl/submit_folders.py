@@ -40,10 +40,11 @@ def get_not_processed_folders():
     not_processed_folders = [os.path.join(ROOT_IN, name) for name in not_processed]
     print("Folders that still need to be processed:")
     print("\n".join(not_processed_folders))
+    print()
 
     return not_processed_folders
 
 
 if __name__ == '__main__':
     not_processed_list = get_not_processed_folders()
-    submit_folders(not_processed_list[:1])
+    submit_folders(not_processed_list)
