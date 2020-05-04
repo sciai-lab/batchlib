@@ -361,8 +361,9 @@ class BatchJobOnContainer(BatchJob, ABC):
         return ndim, exp_ndim
 
     @staticmethod
-    def _check_impl(path, exp_keys, exp_ndims):
+    def _check_impl(path, exp_keys, exp_ndims, log_on_fail):
         if not os.path.exists(path):
+            log_on_fail(f'BatchJobOnContainer: check failed: {path} does not exist')
             return False
 
         if exp_keys is None:
@@ -371,6 +372,7 @@ class BatchJobOnContainer(BatchJob, ABC):
         with io.open_file(path, 'r') as f:
             for key, ndim in zip(exp_keys, exp_ndims):
                 if key not in f:
+                    log_on_fail(f'BatchJobOnContainer: check failed: could not find {key} in {path}')
                     return False
                 if ndim is None:
                     continue
@@ -378,14 +380,15 @@ class BatchJobOnContainer(BatchJob, ABC):
                 if is_group(ds):
                     ds = ds['s0']
                 if ds.ndim != ndim:
+                    log_on_fail(f'BatchJobOnContainer: check failed: {ds.ndim} != {ndim} for {key}')
                     return False
         return True
 
     def check_output(self, path):
-        return self._check_impl(path, self._output_exp_key, self._output_exp_ndim)
+        return self._check_impl(path, self._output_exp_key, self._output_exp_ndim, logger.debug)
 
     def validate_input(self, path):
-        return self._check_impl(path, self._input_exp_key, self._input_exp_ndim)
+        return self._check_impl(path, self._input_exp_key, self._input_exp_ndim, logger.warning)
 
 
 class BatchJobWithSubfolder(BatchJobOnContainer, ABC):

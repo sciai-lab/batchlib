@@ -1,12 +1,25 @@
 import os
 import numpy as np
+from tqdm import tqdm
+
 from .cell_level_analysis import CellLevelAnalysisBase, CellLevelAnalysisWithTableBase
 from ..util.io import open_file, image_name_to_site_name
+
+# default size threshold provided by Vibor
+DEFAULT_CELL_OUTLIER_CRITERIA = {'max_size_threshold': 10000,
+                                 'min_size_threshold': 1000}
 
 
 class CellLevelQC(CellLevelAnalysisBase):
     """ Heuristic quality control for individual cells
     """
+
+    @staticmethod
+    def validate_outlier_criteria(outlier_criteria):
+        keys = set(outlier_criteria.keys())
+        expected_keys = set(DEFAULT_CELL_OUTLIER_CRITERIA.keys())
+        if keys != expected_keys:
+            raise ValueError("Invalid cell outlier criteria")
 
     def __init__(self,
                  cell_seg_key='cell_segmentation',
@@ -14,10 +27,15 @@ class CellLevelQC(CellLevelAnalysisBase):
                  marker_key='marker',
                  serum_bg_key='plate_bg_median',
                  marker_bg_key='plate_bg_median',
+                 table_out_name='outliers',
+                 outlier_criteria=DEFAULT_CELL_OUTLIER_CRITERIA,
                  identifier=None,
                  **super_kwargs):
+        self.validate_outlier_criteria(outlier_criteria)
+        self.outlier_criteria = outlier_criteria
+
         output_group = cell_seg_key if identifier is None else cell_seg_key + '_' + identifier
-        self.table_out_key = output_group + '/' + serum_key
+        self.table_out_key = output_group + '/' + serum_key + '_' + table_out_name
         super().__init__(cell_seg_key=cell_seg_key,
                          serum_key=serum_key,
                          marker_key=marker_key,
@@ -27,13 +45,36 @@ class CellLevelQC(CellLevelAnalysisBase):
                          identifier=identifier,
                          **super_kwargs)
 
-    # TODO compute actual cell level outliers based on cell features
     def cell_level_heuristics(self, cell_stats):
-        n_cells = len(cell_stats['labels'])
         columns = ['label_id', 'is_outlier', 'outlier_type']
-        table = np.array([list(range(n_cells)),
-                          [-1] * n_cells,
-                          ['not checked'] * n_cells]).T
+
+        max_size_threshold = self.outlier_criteria['max_size_threshold']
+        min_size_threshold = self.outlier_criteria['min_size_threshold']
+
+        label_ids = cell_stats['labels']
+        sizes = cell_stats[self.serum_key]['sizes']
+
+        n_cells = len(label_ids)
+        if n_cells != len(sizes):
+            raise RuntimeError(f"Labels and sizes are not same length: {n_cells}, {len(sizes)}")
+
+        if max_size_threshold is None:
+            outlier_max = np.zeros(n_cells, dtype='bool')
+        else:
+            outlier_max = sizes > max_size_threshold
+
+        if min_size_threshold is None:
+            outlier_min = np.zeros(n_cells, dtype='bool')
+        else:
+            outlier_min = sizes < min_size_threshold
+
+        is_outlier = np.logical_or(outlier_max, outlier_min).astype('uint8')
+        outlier_types = ['too_large' if is_max else ('too_small' if is_min else 'none')
+                         for is_min, is_max in zip(outlier_min, outlier_max)]
+
+        table = np.array([label_ids.tolist(),
+                          is_outlier.tolist(),
+                          outlier_types]).T
         return columns, table
 
     def outlier_heuristics(self, in_file, out_file):
@@ -43,8 +84,9 @@ class CellLevelQC(CellLevelAnalysisBase):
             self.write_table(f, self.table_out_key, columns, table)
 
     def run(self, input_files, output_files):
-        # TODO parallelize and tqdm
-        for in_file, out_file in zip(input_files, output_files):
+        for in_file, out_file in tqdm(zip(input_files, output_files),
+                                      total=len(input_files),
+                                      desc='Cell level quality control'):
             self.outlier_heuristics(in_file, out_file)
 
 

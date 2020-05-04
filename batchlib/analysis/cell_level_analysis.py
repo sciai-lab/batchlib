@@ -430,6 +430,7 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
     # in the long run we should merge this into BatchJobOnContainer somehow
     def validate_input(self, path):
         if not os.path.exists(path):
+            logger.warning(f'{self.name}: validate_input failed: {path} does not exist')
             return False
 
         exp_keys = self._input_exp_key
@@ -438,9 +439,12 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
         with open_file(path, 'r') as f:
             for key in exp_keys:
                 if key not in f:
+                    logger.warning(f'{self.name}: validate_input failed: could not find {key} in {path}')
                     return False
                 g = f[key]
                 if ('cells' not in g) or ('columns' not in g):
+                    msg = f"{self.name}: validate_input failed: could not find 'cells' or 'columns' in {path}:{key}"
+                    logger.warning(msg)
                     return False
         return True
 
@@ -643,12 +647,12 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
                          **super_kwargs)
 
         output_group = cell_seg_key if self.identifier is None else cell_seg_key + '_' + self.identifier
-        self.cell_outlier_table = output_group + '/' + serum_key
+        self.cell_outlier_table = output_group + '/' + serum_key + '_' + cell_outlier_table_name
 
     def load_image_outliers(self, input_files):
         with open_file(self.table_out_path, 'r') as f:
             if not self.has_table(f, self.image_outlier_table):
-                logger.warn("load_image_outliers: did not find an image outlier table")
+                logger.warning(f"{self.name}: load_image_outliers: did not find an image outlier table")
                 return {}
             keys, table = self.read_table(f, self.image_outlier_table)
 
@@ -662,7 +666,8 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
 
         # TODO check if this actually works now
         if image_names != expected_names:
-            logger.warn("load_image_outliers: image names from table and expected image names do not agree")
+            msg = f"{self.name}: load_image_outliers: image names from table and expected image names do not agree"
+            logger.warning(msg)
 
         outlier_dict = {table[ii, im_name_id]: (table[ii, outlier_id], table[ii, outlier_type_id])
                         for ii in range(len(table))}
@@ -671,7 +676,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
     def load_cell_outliers(self, input_file):
         with open_file(input_file, 'r') as f:
             if not self.has_table(f, self.cell_outlier_table):
-                logger.warn("load_cell_outliers: did not find a cell outlier table")
+                logger.warning(f"{self.name}: load_cell_outliers: did not find a cell outlier table")
                 return {}
             keys, table = self.read_table(f, self.cell_outlier_table)
 

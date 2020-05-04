@@ -56,7 +56,7 @@ Start mongo shell and authenticate as admin
 
 ```
 use admin // switch to admin db
-db.auth("myUserAdmin", passwordPrompt()) // or cleartext password
+db.auth("admin", passwordPrompt()) // or cleartext password
 ```
 
 Create create `covid` db and `covid19` user

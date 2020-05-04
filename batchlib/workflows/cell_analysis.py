@@ -8,7 +8,7 @@ from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    DenoiseByGrayscaleOpening,
                                                    InstanceFeatureExtraction,
                                                    FindInfectedCells)
-from batchlib.analysis.cell_level_qc import CellLevelQC, ImageLevelQC
+from batchlib.analysis.cell_analysis_qc import CellLevelQC, ImageLevelQC
 from batchlib.mongo.result_writer import DbResultWriter
 from batchlib.outliers.outlier import get_outlier_predicate
 from batchlib.preprocessing import get_barrel_corrector, get_serum_keys, Preprocess
@@ -197,14 +197,15 @@ def run_cell_analysis(config):
                 'identifier': identifier},
             'run': {'force_recompute': False}}))
 
-        job_list.append((DbResultWriter, {
-            'build': {
-                "username": config.db_username,
-                "password": config.db_password,
-                "host": config.db_host,
-                "port": config.db_port,
-                "db_name": config.db_name
-            }}))
+    # make sure that db job is executed when all result tables hdf5 are ready (outside of the loop)
+    job_list.append((DbResultWriter, {
+        'build': {
+            "username": config.db_username,
+            "password": config.db_password,
+            "host": config.db_host,
+            "port": config.db_port,
+            "db_name": config.db_name
+        }}))
 
     t0 = time.time()
 

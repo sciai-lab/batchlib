@@ -281,7 +281,7 @@ def _write_multi_scale(f, out_key, image, use_nearest, scale_factors):
     return g
 
 
-def write_image(f, name, image, viewer_settings, scale_factors=None):
+def write_image(f, name, image, viewer_settings={}, scale_factors=None):
     # dimensionality is not to
     # -> this is not in image format and we just writ the data
     if image.ndim != 2:
