@@ -46,5 +46,7 @@ def get_not_processed_folders():
 
 
 if __name__ == '__main__':
-    not_processed_list = get_not_processed_folders()
+    # not_processed_list = get_not_processed_folders()
+    with open('./left_to_process.json') as f:
+        not_processed_list = json.load(f)
     submit_folders(not_processed_list)

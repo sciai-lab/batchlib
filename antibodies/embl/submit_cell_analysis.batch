@@ -7,6 +7,8 @@
 #SBATCH -c 8
 #SBATCH --qos normal
 
+#SBATCH --constraint="2080Ti|1080Ti"
+
 # do we want mail ?
 # #SBATCH --mail-user=constantin.pape@embl.de
 # #SBATCH --mail-type=ALL
