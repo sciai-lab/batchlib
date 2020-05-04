@@ -7,7 +7,7 @@
 #SBATCH -c 8
 #SBATCH --qos normal
 
-#SBATCH --constraint="2080Ti|1080Ti"
+#SBATCH -C "gpu=2080Ti|gpu=1080Ti"
 
 # do we want mail ?
 # #SBATCH --mail-user=constantin.pape@embl.de

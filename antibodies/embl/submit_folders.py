@@ -14,7 +14,11 @@ def submit_folders(folder_list):
     assert all(os.path.exists(folder) for folder in folder_list)
     for folder in folder_list:
         cmd = ['sbatch', 'submit_cell_analysis.batch', folder]
-        output = check_output(cmd).decode('utf8').rstrip('\n')
+        try:
+            output = check_output(cmd).decode('utf8').rstrip('\n')
+        except Exception as e:
+            print("job submission failed with", str(e))
+            raise e
         print(output, "for input folder", folder)
 
 
