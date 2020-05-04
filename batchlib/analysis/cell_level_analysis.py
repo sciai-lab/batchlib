@@ -35,6 +35,16 @@ def join_cell_properties(*cell_property_list):
             for channel, per_channel_properties in cell_property_list[0].items()}
 
 
+def nan_on_exception(func):
+    def inner(*args, **kwargs):
+        try:
+            result = func(*args, **kwargs)
+        except Exception:
+            result = np.nan
+        return result
+    return inner
+
+
 def compute_global_statistics(cell_properties):
     result = dict()
     for channel, properties in cell_properties.items():
@@ -42,102 +52,78 @@ def compute_global_statistics(cell_properties):
             continue
         result[channel] = dict()
         result[channel]['n_pixels'] = properties['sizes'].sum()
-        result[channel]['sum'] = properties['sums'].sum()
-        result[channel]['global_mean'] = result[channel]['sum'] / result[channel]['n_pixels']
+        result[channel]['sum_over_pixels'] = properties['sums'].sum()
+        result[channel]['mean_over_pixels'] = result[channel]['sum_over_pixels'] / result[channel]['n_pixels']
 
-        def robust_quantile(arr, q):
-            try:
-                result = np.quantile(arr, q)
-            except Exception:
-                result = np.nan
-            return result
+        robust_quantile = nan_on_exception(np.quantile)
 
-        result[channel]['q0.5_of_cell_sums'] = robust_quantile(properties['sums'], 0.5)
-        result[channel]['mad_of_cell_sums'] = robust_quantile(np.abs(properties['sums'] -
-                                                                     result[channel]['q0.5_of_cell_sums']), 0.5)
-        result[channel]['q0.5_of_cell_means'] = robust_quantile(properties['means'], 0.5)
-        result[channel]['mad_of_cell_means'] = robust_quantile(np.abs(properties['means'] -
-                                                                      result[channel]['q0.5_of_cell_means']), 0.5)
-        result[channel]['q0.3_of_cell_means'] = robust_quantile(properties['means'], 0.3)
-        result[channel]['q0.7_of_cell_means'] = robust_quantile(properties['means'], 0.7)
-        result[channel]['q0.1_of_cell_means'] = robust_quantile(properties['means'], 0.1)
-        result[channel]['q0.9_of_cell_means'] = robust_quantile(properties['means'], 0.9)
-        result[channel]['cell_mean'] = properties['means'].mean()
-        result[channel]['cell_sum'] = properties['sums'].mean()
+        for sums_or_means in ('sums', 'means'):
+            result[channel][f'q0.5_of_cell_{sums_or_means}'] = robust_quantile(properties[f'{sums_or_means}'], 0.5)
+            result[channel][f'mad_of_cell_{sums_or_means}'] = robust_quantile(
+                np.abs(properties[f'{sums_or_means}'] - result[channel][f'q0.5_of_cell_{sums_or_means}']), 0.5)
+            result[channel][f'q0.3_of_cell_{sums_or_means}'] = robust_quantile(properties[f'{sums_or_means}'], 0.3)
+            result[channel][f'q0.7_of_cell_{sums_or_means}'] = robust_quantile(properties[f'{sums_or_means}'], 0.7)
+            result[channel][f'q0.1_of_cell_{sums_or_means}'] = robust_quantile(properties[f'{sums_or_means}'], 0.1)
+            result[channel][f'q0.9_of_cell_{sums_or_means}'] = robust_quantile(properties[f'{sums_or_means}'], 0.9)
+            result[channel][f'mean_of_cell_{sums_or_means}'] = properties[f'{sums_or_means}'].mean()
 
     return result
 
 
-def compute_ratios(not_infected_properties, infected_properties, serum_key='serum'):
+def compute_ratios(not_infected_properties, infected_properties, channel_name_dict):
     # input should be the return value of eval_cells
+    # channel_name_dict is a map from names in the table to channel keys, e.g. {'serum': 'serum_IgA_corrected'}
     not_infected_global_properties = compute_global_statistics(not_infected_properties)
     infected_global_properties = compute_global_statistics(infected_properties)
     result = dict()
 
-    def serum_ratio(key, key2=None):
-        key2 = key if key2 is None else key
-        try:
-            result = (infected_global_properties[serum_key][key2]) / (not_infected_global_properties[serum_key][key])
-        except Exception:
-            result = np.nan
-        return result
+    @nan_on_exception
+    def serum_ratio(key, key2, serum_key):
+        return (infected_global_properties[serum_key][key2]) / (not_infected_global_properties[serum_key][key])
 
-    def diff_over_sum(key, key2=None):
-        key2 = key if key2 is None else key
-        try:
-            inf, not_inf = infected_global_properties[serum_key][key], not_infected_global_properties[serum_key][key2]
-            result = (inf - not_inf) / (inf + not_inf)
-        except Exception:
-            result = np.nan
-        return result
+    @nan_on_exception
+    def diff_over_sum(key, key2, serum_key):
+        inf, not_inf = infected_global_properties[serum_key][key], not_infected_global_properties[serum_key][key2]
+        return (inf - not_inf) / (inf + not_inf)
 
-    def diff(key, key2=None):
-        key2 = key if key2 is None else key
-        try:
-            inf, not_inf = infected_global_properties[serum_key][key], not_infected_global_properties[serum_key][key2]
-            result = inf - not_inf
-        except Exception:
-            result = np.nan
-        return result
+    @nan_on_exception
+    def diff(key, key2, serum_key):
+        inf, not_inf = infected_global_properties[serum_key][key], not_infected_global_properties[serum_key][key2]
+        return inf - not_inf
 
-    def robust_z_score(mode='sums'):
-        assert mode in ('sums', 'means')
-        try:
-            inf = infected_global_properties[serum_key][f'q0.5_of_cell_{mode}']
-            not_inf = not_infected_global_properties[serum_key][f'q0.5_of_cell_{mode}']
-            mad = not_infected_global_properties[serum_key][f'mad_of_cell_{mode}']
-            result = (inf - not_inf) / mad
-        except Exception:
-            result = np.nan
-        return result
+    @nan_on_exception
+    def robust_z_score(sums_or_means, serum_key):
+        inf = infected_global_properties[serum_key][f'q0.5_of_cell_{sums_or_means}']
+        not_inf = not_infected_global_properties[serum_key][f'q0.5_of_cell_{sums_or_means}']
+        mad = not_infected_global_properties[serum_key][f'mad_of_cell_{sums_or_means}']
+        return (inf - not_inf) / mad
 
-    for key_result, key1, key2 in [
-        ['global_means', 'global_mean', 'global_mean'],
-        ['mean_of_means', 'cell_mean', 'cell_mean'],
-        ['mean_of_sums', 'cell_sum', 'cell_sum'],
-        ['median_of_means', 'q0.5_of_cell_means', 'q0.5_of_cell_means'],
-        ['median_of_sums', 'q0.5_of_cell_sums', 'q0.5_of_cell_sums'],
-        ['q0.7_vs_q0.3', 'q0.7_of_cell_means', 'q0.3_of_cell_means'],
-        ['q0.3_vs_q0.7', 'q0.3_of_cell_means', 'q0.7_of_cell_means'],
-    ]:
-        result[f'ratio_of_{key_result}'] = serum_ratio(key1, key2)
-        result[f'dos_of_{key_result}'] = diff_over_sum(key1, key2)
-        result[f'diff_of_{key_result}'] = diff(key1, key2)
+    # For now, I removed 'means_over_pixels'. 
+    # If we want to look at this, we should also consider the same with median / quantiles
+    for table_key, channel_key in channel_name_dict.items():
+        for sums_or_means in ('sums', 'means'):
+            for key_result, key1, key2 in [
+                [f'mean_of_{sums_or_means}', f'mean_of_cell_{sums_or_means}', f'mean_of_cell_{sums_or_means}'],
+                [f'q0.5_of_{sums_or_means}', f'q0.5_of_cell_{sums_or_means}', f'q0.5_of_cell_{sums_or_means}'],
+                [f'q0.7_vs_q0.3_of_{sums_or_means}', f'q0.7_of_cell_{sums_or_means}', f'q0.3_of_cell_{sums_or_means}'],
+                [f'q0.3_vs_q0.7_of_{sums_or_means}', f'q0.3_of_cell_{sums_or_means}', f'q0.7_of_cell_{sums_or_means}'],
+            ]:
+                result[f'{table_key}_ratio_of_{key_result}'] = serum_ratio(key1, key2, channel_key)
+                result[f'{table_key}_dos_of_{key_result}'] = diff_over_sum(key1, key2, channel_key)
+                result[f'{table_key}_diff_of_{key_result}'] = diff(key1, key2, channel_key)
 
-    # add infected / non-infected global statistics
-    for key, value in infected_global_properties[serum_key].items():
-        result[f'infected_{key}'] = value
-    for key, value in not_infected_global_properties[serum_key].items():
-        result[f'control_{key}'] = value
+            result[f'{table_key}_robust_z_score_{sums_or_means}'] = robust_z_score(sums_or_means, channel_key)
 
-    for mode in ('means', 'sums'):
-        result[f'robust_z_score_{mode}'] = robust_z_score(mode)
+        # add infected / non-infected global statistics
+        for key, value in infected_global_properties[channel_key].items():
+            result[f'{table_key}_infected_{key}'] = value
+        for key, value in not_infected_global_properties[channel_key].items():
+            result[f'{table_key}_control_{key}'] = value
 
+    # should be included above
     # extra infected / control stuff
-    result['infected_mean'] = infected_global_properties[serum_key]['global_mean']
-    result['infected_median'] = infected_global_properties[serum_key]['q0.5_of_cell_means']
-    result['control_mean'] = not_infected_global_properties[serum_key]['global_mean']
-    result['control_median'] = not_infected_global_properties[serum_key]['q0.5_of_cell_means']
+    #     result[f'{table_key}_infected_median'] = infected_global_properties[channel_key]['q0.5_of_cell_means']
+    #     result[f'{table_key}_control_median'] = not_infected_global_properties[channel_key]['q0.5_of_cell_means']
     return result
 
 
@@ -548,8 +534,10 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
         return per_cell_statistics
 
     def get_stat_dict(self, infected_cell_statistics, control_cell_statistics, bg_keys=None):
-        stat_dict = compute_ratios(control_cell_statistics, infected_cell_statistics, serum_key=self.serum_key)
-        stat_dict['score'] = stat_dict[self.score_name]
+        stat_dict = compute_ratios(control_cell_statistics, infected_cell_statistics,
+                                   channel_name_dict=dict(serum=self.serum_key, marker=self.marker_key))
+        if hasattr(self, 'score_name') and self.score_name is not None:
+            stat_dict['score'] = stat_dict[self.score_name]
         stat_dict['n_infected'] = len(next(iter(infected_cell_statistics[self.serum_key].values())))
         stat_dict['n_control'] = len(next(iter(control_cell_statistics[self.serum_key].values())))
 
@@ -623,12 +611,12 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
                  marker_key='marker',
                  serum_bg_key='plate_bg_median',
                  marker_bg_key='plate_bg_median',
-                 score_name='ratio_of_median_of_means',
+                 score_name='serum_ratio_of_q0.5_of_means',
                  write_summary_images=False,
                  infected_cell_mask_key='infected_cell_mask',
                  serum_per_cell_mean_key='serum_per_cell_mean',
                  edge_key='cell_segmentation_edges',
-                 cell_outlier_table_name='outliers',
+                 cell_outlier_table_name='outliers',  # FIXME where should this be used?
                  image_outlier_table='images/outliers',
                  **super_kwargs):
 
@@ -706,8 +694,8 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         column_names = ['image_name', 'site_name', 'is_outlier', 'outlier_type', 'n_outlier_cells']
         table = []
 
-        # TODO parallelize and tqdm
-        for ii, in_file in enumerate(input_files):
+        # TODO parallelize
+        for ii, in_file in enumerate(tqdm(input_files, desc='generating image table')):
             image_name = os.path.splitext(os.path.split(in_file)[1])[0]
 
             infected_cell_statistics, control_cell_statistics = self.load_per_cell_statistics(in_file)
@@ -758,7 +746,8 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         column_names = ['well_name', 'n_outlier_images', 'n_outlier_cells']
         table = []
 
-        for ii, (well_name, in_files_for_current_well) in enumerate(input_files_per_well.items()):
+        for ii, (well_name, in_files_for_current_well) in enumerate(tqdm(input_files_per_well.items(),
+                                                                        desc='generating well table')):
             n_total = len(in_files_for_current_well)
             image_names_for_current_well = [os.path.splitext(os.path.split(in_file)[1])[0]
                                             for in_file in in_files_for_current_well]

@@ -219,7 +219,10 @@ def run_cell_analysis(config):
 
     # run all plots on the output files
     plot_folder = os.path.join(config.folder, 'plots')
-    stat_names = ['ratio_of_median_of_means', 'ratio_of_median_of_sums', 'robust_z_score_sums', 'robust_z_score_means']
+    stat_names = ['serum_ratio_of_q0.5_of_means',
+                  'serum_ratio_of_q0.5_of_sums',
+                  'serum_robust_z_score_sums',
+                  'serum_robust_z_score_means']
     for identifier in table_identifiers:
         table_path = CellLevelAnalysis.folder_to_table_path(config.folder, identifier)
         all_plots(table_path, plot_folder,
