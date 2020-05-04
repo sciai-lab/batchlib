@@ -1,6 +1,5 @@
 from subprocess import check_output
-
-from batchlib.util import get_logger
+from .logging import get_logger
 
 logger = get_logger('Workflow.GitUtil')
 
