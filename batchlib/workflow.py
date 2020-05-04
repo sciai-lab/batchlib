@@ -2,6 +2,7 @@ import json
 import logging
 import os
 from glob import glob
+from tqdm.auto import tqdm
 
 from batchlib.util import add_file_handler, get_commit_id, get_file_lock, get_logger, open_file
 
@@ -90,7 +91,9 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
 
         logger.info(f"Running workflow: '{name}'. Job spec: {job_dict}")
 
-        for job_id, (job_class, kwarg_dict) in enumerate(job_dict.items() if isinstance(job_dict, dict) else job_dict):
+        for job_id, (job_class, kwarg_dict) in tqdm(list(
+                enumerate(job_dict.items() if isinstance(job_dict, dict) else job_dict)),
+                desc=f"Running jobs of workflow '{name}'"):
             build_kwargs = kwarg_dict.get('build', {})
             run_kwargs = kwarg_dict.get('run', {})
 

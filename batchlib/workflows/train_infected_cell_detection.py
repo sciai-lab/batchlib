@@ -46,12 +46,22 @@ class CopyImg(BatchJobOnContainer):
                 self.write_image(f, self.output_key, img)
 
 
-def get_input_files(config):
-    # for now, get some dummy files with which I can do everything up to evaluation
-    plates = ['titration_plate_20200403_154849', '20200420_152417_316', 'plateK12rep1_20200430_155932_313']
-    tiff_files = np.concatenate([np.random.choice(glob(os.path.join(config.data_dir, plate, '*.tiff')), 2)
-                                 for plate in plates])
-    return tiff_files
+def get_ann_and_tiff_files(config):
+    # return gt_annotation files and corresponding raw tiffs
+    ann_files = glob(os.path.join(config.ann_dir, 'infection/*/*.h5'))
+    tiff_files = list(map(partial(ann_to_in_file, config), ann_files))
+    return ann_files, tiff_files
+
+
+def ann_to_in_file(config, ann_file):
+    plate = os.path.dirname(ann_file)
+    if plate.endswith('_IgA') or plate.endswith('_IgG'):
+        plate = plate[:-4]
+    filename = os.path.basename(ann_file).rstrip('.h5') + '.tiff'
+    filename = filename.replace('_infected_nuclei', '')
+    filename = filename.replace('_infected', '')
+    in_file = os.path.join(config.data_dir, os.path.basename(plate), filename)
+    return in_file
 
 
 def in_to_out_file(config, in_file):
@@ -61,7 +71,7 @@ def in_to_out_file(config, in_file):
     return out_file
 
 
-def preprocess(config, tiff_files):
+def preprocess(config, ann_files, tiff_files):
     os.makedirs(config.out_dir, exist_ok=True)
     # group files by plate
     files_per_plate = defaultdict(list)
@@ -72,6 +82,7 @@ def preprocess(config, tiff_files):
     # preprocess files by plate
     barrel_corrector_root = os.path.join(config.misc_folder, 'barrel_correctors')
     for plate, in_files in files_per_plate.items():
+        print(plate)
         preprocess = Preprocess.from_folder(
             input_folder=plate,
             barrel_corrector_path=get_barrel_corrector(barrel_corrector_root, plate)
@@ -87,6 +98,12 @@ def preprocess(config, tiff_files):
         if serum_seg_in_key != 'serum_corrected':
             rename_serum_key = CopyImg(serum_seg_in_key, 'serum_corrected')
             rename_serum_key.run(out_files, out_files)
+
+    # copy the infected gt to the out_files
+
+    out_files = list(map(partial(in_to_out_file, config), tiff_files))
+    move_infected_gt = CopyImg('infected', 'infected')
+    move_infected_gt.run(ann_files, out_files)
 
 
 def compute_segmentations(config, SubParamRanges):
@@ -161,7 +178,7 @@ def get_identifier(*args):
 
 def extract_feature_grid(config, SubParamRanges, SearchSpace):
     # TODO: add denoise radius argument
-    def extract_features(seg_key, ignore_nuclei):
+    def extract_feature_job_specification(seg_key, ignore_nuclei):
         print('\n', seg_key, ignore_nuclei)
         job_list = [((InstanceFeatureExtraction, {
             'build': {
@@ -173,15 +190,18 @@ def extract_feature_grid(config, SubParamRanges, SearchSpace):
                 'quantiles': SubParamRanges.quantiles,
             },
             'run': {'gpu_id': config.gpu}}))]
-        run_workflow('Feature Extraction Workflow',
-                     config.out_dir,
-                     job_list,
-                     force_recompute=True)
+        return job_list[0]
 
-    grid_evaluate(extract_features,
-                  seg_key=SearchSpace.segmentation_key,
-                  ignore_nuclei=SearchSpace.ignore_nuclei,
-                  n_jobs=0)
+    job_list = grid_evaluate(
+        extract_feature_job_specification,
+        seg_key=SearchSpace.segmentation_key,
+        ignore_nuclei=SearchSpace.ignore_nuclei,
+        n_jobs=0)['result'].to_list()
+
+    run_workflow('Feature Extraction Workflow',
+                 config.out_dir,
+                 job_list,
+                 force_recompute=True)
 
 
 def find_infected_grid(config, SearchSpace):
@@ -200,19 +220,71 @@ def find_infected_grid(config, SearchSpace):
                 # 'infected_threshold_scale_key': 'well_bg_mad',
                 # 'infected_threshold': 7,
             }}))]
-        run_workflow(f'Infected Classification Workflow '
-                     f'({get_identifier(seg_key, ignore_nuclei, split_statistic, infected_threshold)})',
-                     config.out_dir,
-                     job_list,
-                     force_recompute=False)
+        return job_list[0]
+        # run_workflow(f'Infected Classification Workflow '
+        #              f'({get_identifier(seg_key, ignore_nuclei, split_statistic, infected_threshold)})',
+        #              config.out_dir,
+        #              job_list,
+        #              force_recompute=True,
+        #              lock_folder=False)
 
     # TODO what about well wise / plate wise bgs? get them from somewhere!
-    grid_evaluate(find_infected,
+    job_grid = grid_evaluate(find_infected,
                   seg_key=SearchSpace.segmentation_key,
                   ignore_nuclei=SearchSpace.ignore_nuclei,
                   split_statistic=SearchSpace.split_statistic,
                   infected_threshold=SearchSpace.infected_threshold,
                   n_jobs=0)
+    job_list = job_grid['result'].reshape(-1).tolist()
+    print(len(job_list))
+    print(job_list[0])
+    run_workflow(f'Infected Classification Workflow ',
+                 config.out_dir,
+                 job_list,
+                 force_recompute=True,
+                 lock_folder=False)
+
+
+class GetGTInfectedTable(BatchJobOnContainer):
+    def __init__(self, nuc_seg_key, infected_key, out_key='infected', **super_kwargs):
+        self.nuc_seg_key = nuc_seg_key
+        self.infected_key = infected_key
+        self.table_out_key = out_key
+        super().__init__(
+            input_key=[self.nuc_seg_key, self.infected_key],
+            output_key='tables/' + out_key,
+            **super_kwargs
+        )
+
+    def run(self, in_files, out_files):
+        for in_file, out_file in zip(tqdm(in_files, desc='Extracting GT infected tables'), out_files):
+            with open_file(in_file, 'r') as f:
+                nuc_seg = self.read_image(f, self.nuc_seg_key)
+                gt_img = self.read_image(f, self.infected_key)
+            infected_mask = gt_img == 2
+            labels = np.unique(nuc_seg)
+            infected_indicator = np.array([i > 0 and np.mean(infected_mask[nuc_seg == i].astype(np.float32)) < 0.5
+                                           for i in labels])
+            control_indicator = np.array([i > 0 and np.mean(infected_mask[nuc_seg == i].astype(np.float32)) >= 0.5
+                                          for i in labels])
+
+            column_names = ['label_id', 'is_infected', 'is_control']
+            table = [labels, infected_indicator, control_indicator]
+            table = np.asarray(table, dtype=float).T
+            with open_file(out_file, 'a') as f:
+                self.write_table(f, self.table_out_key, column_names, table)
+
+
+def save_gt_infected(config):
+    job_list = [((GetGTInfectedTable, {
+        'build': {
+            'nuc_seg_key': config.nuc_key,
+            'infected_key': 'infected',
+        }}))]
+    run_workflow(f'Infected Classification Workflow ',
+                 config.out_dir,
+                 job_list,
+                 force_recompute=True)
 
 
 # TODO use proper score function
@@ -239,13 +311,26 @@ def get_score_grid(config, SearchSpace, in_files, score_func):
                 column_names, table = read_table(f, 'cell_classification/' + seg_key + '_' +
                                                  get_identifier(seg_key, ignore_nuclei) +
                                                  '/marker_corrected_' + identifier)
+                gt_column_names, gt_table = read_table(f, 'infected')
             infected_indicator = table[:, column_names.index('is_infected')]
             control_indicator = table[:, column_names.index('is_control')]
             labels = table[:, column_names.index('label_id')].astype(np.int32)
+            infected_dict = dict(zip(labels, infected_indicator))
+
+            gt_infected_indicator = gt_table[:, gt_column_names.index('is_infected')]
+            gt_control_indicator = gt_table[:, gt_column_names.index('is_control')]
+            gt_labels = gt_table[:, gt_column_names.index('label_id')].astype(np.int32)
+            gt_infected_dict = dict(zip(gt_labels, gt_infected_indicator))
+
+            #assert np.sum(labels != gt_labels) == 0, f'{len(labels), len(gt_labels)}'
+            # TODO: remove background label
+            accuracy = np.mean([infected_dict.get(i, 0) == gt_infected_dict.get(i, 0)
+                                for i in set(labels).union(gt_labels)])
             #n_cells = np.sum(labels != 0)
-            scores.append(dummy_score(in_file, infected_indicator))
+            scores.append(accuracy)
         return np.mean(scores, axis=0)
 
+    print('computing scores')
     score_grid = grid_evaluate(
         partial(get_prediction_and_eval_score, score_func=dummy_score),
         seg_key=SearchSpace.segmentation_key,
@@ -259,6 +344,7 @@ def get_score_grid(config, SearchSpace, in_files, score_func):
 
 
 def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSpace):
+
     print('number of points on grid:', np.product([len(v) for v in [
         SearchSpace.segmentation_key,
         SearchSpace.ignore_nuclei,
@@ -266,26 +352,25 @@ def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSp
         SearchSpace.infected_threshold,
     ]]))
 
-    if os.path.isdir(config.out_dir):
-        shutil.rmtree(config.out_dir)
+    # if os.path.isdir(config.out_dir):
+    #     shutil.rmtree(config.out_dir)
 
-    tiff_files = get_input_files(config)
+    ann_files, tiff_files = get_ann_and_tiff_files(config)
     print(f'Found input tiff files:')
     [print(f) for f in tiff_files]
 
-    preprocess(config, tiff_files)
+    #preprocess(config, ann_files, tiff_files)
+    #
+    # compute_segmentations(config, SubParamRanges)
+    #
+    # extract_feature_grid(config, SubParamRanges, SearchSpace)
 
-    compute_segmentations(config, SubParamRanges)
+    save_gt_infected(config)
 
-    extract_feature_grid(config, SubParamRanges, SearchSpace)
+    # find_infected_grid(config, SearchSpace)
 
-    find_infected_grid(config, SearchSpace)
-
-    score_grid = get_score_grid(config, SearchSpace, tiff_files, even_split_score)
+    score_grid = get_score_grid(config, SearchSpace, tiff_files, dummy_score)
     print(score_grid)
+    print(score_grid['result'])
+
     np.save(os.path.join(config.out_dir, 'score_grid.npy'), score_grid)
-
-
-
-
-
