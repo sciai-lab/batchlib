@@ -35,6 +35,16 @@ def join_cell_properties(*cell_property_list):
             for channel, per_channel_properties in cell_property_list[0].items()}
 
 
+def nan_on_exception(func):
+    def inner(*args, **kwargs):
+        try:
+            result = func(*args, **kwargs)
+        except Exception:
+            result = np.nan
+        return result
+    return inner
+
+
 def compute_global_statistics(cell_properties):
     result = dict()
     for channel, properties in cell_properties.items():
@@ -45,12 +55,7 @@ def compute_global_statistics(cell_properties):
         result[channel]['sum_over_pixels'] = properties['sums'].sum()
         result[channel]['mean_over_pixels'] = result[channel]['sum_over_pixels'] / result[channel]['n_pixels']
 
-        def robust_quantile(arr, q):
-            try:
-                result = np.quantile(arr, q)
-            except Exception:
-                result = np.nan
-            return result
+        robust_quantile = nan_on_exception(np.quantile)
 
         for sums_or_means in ('sums', 'means'):
             result[channel][f'q0.5_of_cell_{sums_or_means}'] = robust_quantile(properties[f'{sums_or_means}'], 0.5)
@@ -72,39 +77,26 @@ def compute_ratios(not_infected_properties, infected_properties, channel_name_di
     infected_global_properties = compute_global_statistics(infected_properties)
     result = dict()
 
+    @nan_on_exception
     def serum_ratio(key, key2, serum_key):
-        try:
-            result = (infected_global_properties[serum_key][key2]) / (not_infected_global_properties[serum_key][key])
-        except Exception:
-            result = np.nan
-        return result
+        return (infected_global_properties[serum_key][key2]) / (not_infected_global_properties[serum_key][key])
 
+    @nan_on_exception
     def diff_over_sum(key, key2, serum_key):
-        try:
-            inf, not_inf = infected_global_properties[serum_key][key], not_infected_global_properties[serum_key][key2]
-            result = (inf - not_inf) / (inf + not_inf)
-        except Exception:
-            result = np.nan
-        return result
+        inf, not_inf = infected_global_properties[serum_key][key], not_infected_global_properties[serum_key][key2]
+        return (inf - not_inf) / (inf + not_inf)
 
+    @nan_on_exception
     def diff(key, key2, serum_key):
-        try:
-            inf, not_inf = infected_global_properties[serum_key][key], not_infected_global_properties[serum_key][key2]
-            result = inf - not_inf
-        except Exception:
-            result = np.nan
-        return result
+        inf, not_inf = infected_global_properties[serum_key][key], not_infected_global_properties[serum_key][key2]
+        return inf - not_inf
 
+    @nan_on_exception
     def robust_z_score(sums_or_means, serum_key):
-        assert sums_or_means in ('sums', 'means')
-        try:
-            inf = infected_global_properties[serum_key][f'q0.5_of_cell_{sums_or_means}']
-            not_inf = not_infected_global_properties[serum_key][f'q0.5_of_cell_{sums_or_means}']
-            mad = not_infected_global_properties[serum_key][f'mad_of_cell_{sums_or_means}']
-            result = (inf - not_inf) / mad
-        except Exception:
-            result = np.nan
-        return result
+        inf = infected_global_properties[serum_key][f'q0.5_of_cell_{sums_or_means}']
+        not_inf = not_infected_global_properties[serum_key][f'q0.5_of_cell_{sums_or_means}']
+        mad = not_infected_global_properties[serum_key][f'mad_of_cell_{sums_or_means}']
+        return (inf - not_inf) / mad
 
     # For now, I removed 'means_over_pixels'. 
     # If we want to look at this, we should also consider the same with median / quantiles
