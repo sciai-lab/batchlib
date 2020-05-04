@@ -64,3 +64,9 @@ def grid_evaluate(func, *args, return_structured_array=True, **kwargs):
         data = [(result,) + args_kwargs for result, args_kwargs in zip(result.flatten(), args_and_kwargs)]
         result = np.array(data, dtype).reshape(shape)
     return result
+
+
+def optimal_parameters(result_grid):
+    ind = np.unravel_index(np.argmin(result_grid['result']), result_grid.shape)
+
+    return {name: result_grid[name][ind] for name in result_grid.dtype.names}
