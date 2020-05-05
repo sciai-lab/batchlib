@@ -167,7 +167,7 @@ def run_cell_analysis(config):
             # new method
             'bg_correction_key': 'well_bg_median',
             'infected_threshold_scale_key': 'well_bg_mad',
-            'infected_threshold': 7,
+            'infected_threshold': 6.0,
         },
         'run': {'force_recompute': None}}))
 
