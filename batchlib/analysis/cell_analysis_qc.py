@@ -155,9 +155,6 @@ class ImageLevelQC(CellLevelAnalysisWithTableBase):
             if (manual_outlier == 1) or (qc_outlier == -1):
                 outlier = manual_outlier
 
-            outlier = np.random.randint(-1, 2)
-            print(outlier)
-
             table.append([image_name, site_name, outlier, outlier_type])
 
         table = np.array(table)

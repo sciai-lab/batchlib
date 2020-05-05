@@ -288,6 +288,9 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
                 self.write_table(f, output_key, columns, table)
 
     def get_bg_stats(self, bg_values):
+        if bg_values is None:
+            return {'median': [np.nan] * len(self.channel_keys),
+                    'mad': [np.nan] * len(self.channel_keys)}
         # bg_vales should have shape n_channels, n_pixels
         bg_values = bg_values.cpu().numpy().astype(np.float32)
         medians = np.median(bg_values, axis=1)
@@ -343,16 +346,20 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         # ignore image outliers in per_well and per_plate backgrounds
         outlier_dict = self.load_image_outliers(input_files)
         bg_per_well_dict = defaultdict(list)
+        wells = set()
         for file, bg_segment in bg_dict.items():
+            well = image_name_to_well_name(os.path.basename(file))
+            wells.add(well)
             image_name = os.path.splitext(os.path.split(file)[1])[0]
             if outlier_dict.get(image_name, (-1, None))[0] == 1:
                 logger.info(f'{self.name}: skipping outlier image in bg calculation')
                 continue
-            bg_per_well_dict[image_name_to_well_name(os.path.basename(file))].append(bg_segment)
-        # FIXME what happens if whole well is ignored? It misses in output table!
+            bg_per_well_dict[well].append(bg_segment)
         bg_per_well_dict = {well: torch.cat(bg_segments, dim=1) for well, bg_segments in bg_per_well_dict.items()}
-        bg_per_well_stats = {well: self.get_bg_stats(bg_pixels) for well, bg_pixels in bg_per_well_dict.items()}
-        bg_plate_stats = self.get_bg_stats(torch.cat(list(bg_per_well_dict.values()), dim=1))
+        bg_per_well_stats = {well: self.get_bg_stats(bg_per_well_dict.get(well, None)) for well in wells}
+
+        bg_plate_stats = self.get_bg_stats(torch.cat(list(bg_per_well_dict.values()), dim=1)
+                                           if len(bg_per_well_dict) > 0 else None)
         with torch.no_grad():
             if gpu_id is not None:
                 os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
