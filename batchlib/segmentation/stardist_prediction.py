@@ -5,7 +5,9 @@ from functools import partial
 from tqdm import tqdm
 
 from batchlib.base import BatchJobOnContainer
-from batchlib.util import open_file, normalize_percentile
+from batchlib.util import get_logger, open_file, normalize_percentile
+
+logger = get_logger('Workflow.BatchJob.StardistPrediction')
 
 
 def limit_gpu_memory(fraction, allow_growth=False):
@@ -65,7 +67,7 @@ class StardistPrediction(BatchJobOnContainer):
         os.remove(tmp_path_prob)
         os.remove(tmp_path_dist)
 
-    def run(self, input_files, output_files, gpu_id=None, n_jobs=1):
+    def run(self, input_files, output_files, gpu_id=None, n_jobs=1, on_cluster=False):
 
         # set number of OMP threads to 1, so we can properly parallelize over
         # the segmentation via NMS properly
@@ -76,7 +78,13 @@ class StardistPrediction(BatchJobOnContainer):
             # need to do this for the conda tensorflow cpu version
             os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
         else:
-            os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
+            if not on_cluster:
+                logger.info(f"{self.name}: setting CUDA_VISIBLE_DEVICES to {gpu_id}")
+                os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
+
+            vis_devices = os.environ.get('CUDA_VISIBLE_DEVICES', '')
+            logger.info(f"{self.name}: CUDA_VISIBLE_DEVICES are set to {vis_devices}")
+
             # limit the gpu memory demand, so we can run tasks with pytorch later
             # (otherwise tf will block all gpu memory for the rest of the python process)
             limit_gpu_memory(.25)

@@ -108,7 +108,8 @@ def run_cell_analysis(config):
             'run': {
                 'gpu_id': config.gpu,
                 'batch_size': config.batch_size,
-                'threshold_channels': {0: 0.5}}}),
+                'threshold_channels': {0: 0.5},
+                'on_cluster': config.on_cluster}}),
         (StardistPrediction, {
             'build': {
                 'model_root': model_root,
@@ -118,7 +119,8 @@ def run_cell_analysis(config):
                 'scale_factors': config.scale_factors},
             'run': {
                 'gpu_id': config.gpu,
-                'n_jobs': config.n_cpus}}),
+                'n_jobs': config.n_cpus,
+                'on_cluster': config.on_cluster}}),
         (SeededWatershed, {
             'build': {
                 'pmap_key': config.bd_key,
@@ -226,16 +228,19 @@ def run_cell_analysis(config):
 
     # run all plots on the output files
     plot_folder = os.path.join(config.folder, 'plots')
-    stat_names = ['ratio_of_median_of_means', 'ratio_of_median_of_sums', 'robust_z_score_sums', 'robust_z_score_means']
+    stat_names = ['serum_ratio_of_q0.5_of_means',
+                  'serum_ratio_of_q0.5_of_sums',
+                  'serum_robust_z_score_sums',
+                  'serum_robust_z_score_means']
     for identifier in table_identifiers:
         table_path = CellLevelAnalysis.folder_to_table_path(config.folder, identifier)
         all_plots(table_path, plot_folder,
-                  table_key=f'tables/{CellLevelAnalysis.image_table_key}',
+                  table_key=f'tables/images/{identifier}',
                   identifier=identifier + '_per-image',
                   stat_names=stat_names,
                   wedge_width=0.3)
         all_plots(table_path, plot_folder,
-                  table_key=f'tables/{CellLevelAnalysis.well_table_key}',
+                  table_key=f'tables/wells/{identifier}',
                   identifier=identifier + '_per-well',
                   stat_names=stat_names,
                   wedge_width=0)
@@ -312,5 +317,8 @@ def cell_analysis_parser(config_folder, default_config_name):
     # default_scale_factors = None
     default_scale_factors = [1, 2, 4, 8, 16]
     parser.add("--scale_factors", default=default_scale_factors)
+
+    # do we run on cluster?
+    parser.add("--on_cluster", type=int, default=0)
 
     return parser

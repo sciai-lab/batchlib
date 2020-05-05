@@ -64,6 +64,8 @@ def _load_channel_mapping(plate_dir):
 def _create_images(well_name, well_files, outlier_predicate):
     images = []
     for im_file in well_files:
+        # take only image name without file extension
+        im_file = os.path.splitext(im_file)[0]
         images.append(
             {
                 "name": im_file,

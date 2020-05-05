@@ -283,7 +283,8 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
 
         # check for negative ratios
         if self.outlier_criteria['check_ratios']:
-            ratios = compute_ratios(control_stats, infected_stats, serum_key=self.serum_key)
+            ratios = compute_ratios(control_stats, infected_stats,
+                                    channel_name_dict=dict(serum=self.serum_key, marker=self.marker_key))
             for name, val in ratios.items():
                 if not name.startswith('ratio'):
                     continue
