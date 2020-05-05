@@ -15,7 +15,8 @@ def execute_parallel(func, args_list=None, kwargs_list=None, n_jobs=0):
             return func(*args, **kwds)
     if args_list is not None and kwargs_list is not None:
         results = [apply(func, args=args, kwds=kwargs)
-                   for args, kwargs in zip(tqdm(args_list), kwargs_list)]
+                   for args, kwargs in zip(tqdm(args_list, desc='executing sequentially') if n_jobs == 0 else args_list,
+                   kwargs_list)]
     elif args_list is not None:
         results = [apply(func, args=args)
                    for args in tqdm(args_list)]
@@ -25,7 +26,7 @@ def execute_parallel(func, args_list=None, kwargs_list=None, n_jobs=0):
     else:
         assert False, 'either args_list or kwargs_list must not be None'
     if n_jobs > 0:
-        results = [p.get() for p in results]
+        results = [p.get() for p in tqdm(results, desc='getting results')]
     return results
 
 
