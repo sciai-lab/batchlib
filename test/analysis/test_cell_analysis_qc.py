@@ -3,6 +3,7 @@ import unittest
 from shutil import rmtree
 
 import numpy as np
+import pandas as pd
 from batchlib.util.io import open_file, read_table, write_image
 
 
@@ -116,18 +117,32 @@ class TestImageLevelQC(unittest.TestCase):
         self.segs.append(np.arange(self.segs[0].size, dtype='uint64').reshape(shape))
 
         self.exp_heuristic_results = {}
+        self.exp_mixed_results = {}
+        manual_outlier = []
+
         for ii, seg in enumerate(self.segs):
             path = self.get_image_path(ii)
             name = os.path.splitext(os.path.split(path)[1])[0]
 
-            if ii < 3:
+            if ii < 2:
                 res = (0, 'none')
+                res_mixed = (0, 'none', '0')
+                manual_outlier.append([name, 0])
+            elif ii == 2:
+                res = (0, 'none')
+                res_mixed = (1, 'none', '1')
+                manual_outlier.append([name, 1])
             elif ii == 3:
                 res = (1, 'too few cells')
+                res_mixed = (1, 'too few cells', '0')
+                manual_outlier.append([name, 0])
             elif ii == 4:
                 res = (1, 'too many cells')
+                res_mixed = (1, 'too many cells', '0')
+                manual_outlier.append([name, 0])
 
             self.exp_heuristic_results[name] = res
+            self.exp_mixed_results[name] = res_mixed
 
             with open_file(path, 'a') as f:
                 write_image(f, self.cell_seg_key, seg)
@@ -139,13 +154,17 @@ class TestImageLevelQC(unittest.TestCase):
             with open_file(path, 'a') as f:
                 write_image(f, 'marker', dummy)
 
+        tagged_path = os.path.join(self.folder, 'out_tagger_state.csv')
+        manual_outlier = pd.DataFrame(manual_outlier, columns=['filename', 'label'])
+        manual_outlier.to_csv(tagged_path, index=False)
+
     def tearDown(self):
         try:
             rmtree(self.folder)
         except OSError:
             pass
 
-    def run_wf(self, outlier_criteria):
+    def run_wf(self, outlier_criteria, outlier_predicate=lambda im: -1):
         from batchlib.analysis.cell_level_analysis import (InstanceFeatureExtraction,
                                                            FindInfectedCells)
         from batchlib.analysis.cell_analysis_qc import ImageLevelQC
@@ -155,7 +174,8 @@ class TestImageLevelQC(unittest.TestCase):
             InstanceFeatureExtraction: {'build': {'cell_seg_key': self.cell_seg_key}},
             FindInfectedCells: {'build': {'cell_seg_key': self.cell_seg_key}},
             ImageLevelQC: {'build': {'cell_seg_key': self.cell_seg_key,
-                                     'outlier_criteria': outlier_criteria}}
+                                     'outlier_criteria': outlier_criteria,
+                                     'outlier_predicate': outlier_predicate}}
         }
         run_workflow('test', self.folder, job_dict)
 
@@ -193,6 +213,50 @@ class TestImageLevelQC(unittest.TestCase):
             idx = res_type.find(keyword) + len(keyword)
             res_type = res_type[idx:]
             self.assertEqual(res_type, exp_type)
+
+    def test_qc_with_manual_outliers(self):
+        from batchlib.outliers.outlier import OutlierPredicate
+        outlier_criteria = {'min_number_cells': 10,
+                            'max_number_cells': 1000}
+        outlier_predicate = OutlierPredicate(self.folder, 'out')
+        self.run_wf(outlier_criteria, outlier_predicate)
+
+        path = os.path.join(self.folder, 'out_table.hdf5')
+        self.assertTrue(os.path.exists(path))
+        qc_table_name = 'images/outliers'
+        with open_file(path, 'r') as f:
+            col_names, table = read_table(f, qc_table_name)
+
+        n_images = len(self.segs)
+        n_cols = 4
+        exp_shape = (n_images, n_cols)
+
+        self.assertEqual(len(col_names), n_cols)
+        self.assertEqual(table.shape, exp_shape)
+
+        im_name_col = col_names.index('image_name')
+        outlier_col = col_names.index('is_outlier')
+        outlier_type_col = col_names.index('outlier_type')
+        results = {row[im_name_col]: (row[outlier_col], row[outlier_type_col])
+                   for row in table}
+
+        keyword_manual = 'manual: '
+        keyword_heuristic = 'heuristic: '
+        exp_results = self.exp_mixed_results
+        for im_name, (res_outlier, res_type) in results.items():
+            self.assertIn(im_name, exp_results)
+            exp_outlier, exp_type_heuristic, exp_type_manual = exp_results[im_name]
+            self.assertEqual(res_outlier, exp_outlier)
+
+            idx_heuristic = res_type.find(keyword_heuristic) + len(keyword_heuristic)
+            res_type_heuristic = res_type[idx_heuristic:]
+            self.assertEqual(res_type_heuristic, exp_type_heuristic)
+
+            idx_manual = res_type.find(keyword_manual) + len(keyword_manual)
+            idx_heuristic_start = res_type.find(keyword_heuristic)
+            res_type_manual = res_type[idx_manual:idx_heuristic_start].rstrip()
+            res_type_manual = res_type_manual.rstrip(';')
+            self.assertEqual(res_type_manual, exp_type_manual)
 
 
 if __name__ == '__main__':
