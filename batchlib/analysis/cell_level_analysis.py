@@ -451,8 +451,7 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
     @staticmethod
     def folder_to_table_path(folder, identifier):
         # NOTE, we call this .hdf5 to avoid pattern matching, it's a bit hacky ...
-        table_file_name = os.path.split(folder)[1] + \
-                          ('_table.hdf5' if identifier is None else f'_table_{identifier}.hdf5')
+        table_file_name = os.path.split(folder)[1] + '_table.hdf5'
         return os.path.join(folder, table_file_name)
 
     @property
@@ -601,10 +600,6 @@ class CellLevelAnalysisWithTableBase(CellLevelAnalysisBase):
 class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
     """
     """
-    # for now, we hard-code the table keys and write to different table files instead
-    image_table_key = 'images/default'
-    well_table_key = 'wells/default'
-
     def __init__(self,
                  cell_seg_key='cell_segmentation',
                  serum_key='serum',
@@ -618,7 +613,12 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
                  edge_key='cell_segmentation_edges',
                  cell_outlier_table_name='outliers',  # FIXME where should this be used?
                  image_outlier_table='images/outliers',
+                 identifier=None,
                  **super_kwargs):
+
+        # table keys in the plate-wise *_table.hdf5
+        self.image_table_key = f'images/{identifier if identifier is not None else "default"}'
+        self.well_table_key = f'wells/{identifier if identifier is not None else "default"}'
 
         self.score_name = score_name
         self.write_summary_images = write_summary_images
@@ -644,6 +644,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
                          serum_bg_key=serum_bg_key,
                          marker_bg_key=marker_bg_key,
                          output_key=output_key,
+                         identifier=identifier,
                          **super_kwargs)
 
         output_group = cell_seg_key if self.identifier is None else cell_seg_key + '_' + self.identifier
