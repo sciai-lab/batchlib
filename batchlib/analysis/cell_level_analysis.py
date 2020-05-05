@@ -861,8 +861,8 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         infected_label_ids = label_ids[infected_indicator.astype('bool')]  # cast to bool again to be sure
         infected_mask = np.isin(cell_seg, infected_label_ids).astype(cell_seg.dtype)
 
-        # TODO: should we subtract the background here?
-        result = self.load_per_cell_statistics(in_path, subtract_background=True, split_infected_and_control=False)
+        result = self.load_per_cell_statistics(in_path, subtract_background=True,
+                                               split_infected_and_control=False)
         mean_serum_image = np.zeros_like(cell_seg, dtype=np.float32)
         for label, intensity in zip(filter(lambda x: x != 0, label_ids),
                                     result[self.serum_key]['means']):

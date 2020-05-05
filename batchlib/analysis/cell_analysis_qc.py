@@ -268,7 +268,7 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
         max_cells_per_im = self.outlier_criteria['max_number_cells_per_image']
         if max_cells_per_im is not None and n_cells < max_cells_per_im * n_images:
             is_outlier = 1
-            outlier_type += 'too few cells;'
+            outlier_type += 'too many cells;'
 
         min_control_per_im = self.outlier_criteria['min_number_control_cells_per_image']
         if min_control_per_im is not None and n_control < min_control_per_im * n_images:
@@ -284,7 +284,8 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
         # check for negative ratios
         if self.outlier_criteria['check_ratios']:
             ratios = compute_ratios(control_stats, infected_stats,
-                                    channel_name_dict=dict(serum=self.serum_key, marker=self.marker_key))
+                                    channel_name_dict=dict(serum=self.serum_key,
+                                                           marker=self.marker_key))
             for name, val in ratios.items():
                 if not name.startswith('ratio'):
                     continue
@@ -307,24 +308,10 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
             image_name = os.path.splitext(os.path.split(in_file)[1])[0]
             site_name = image_name_to_site_name(image_name)
 
-            # check if this image was marked as outlier manually
-            manual_outlier = self.outlier_predicate(image_name)
-            if manual_outlier not in (-1, 0, 1):
-                raise ValueError(f"Invalid value for outlier {manual_outlier}")
-
             # check if the image is an outlier according to the heuristics
-            qc_outlier, qc_outlier_type = self.outlier_heuristics(in_file)
-            if qc_outlier not in (-1, 0, 1):
-                raise ValueError(f"Invalid value for outlier {qc_outlier}")
-
-            # check the heuristic outlier status
-            outlier_type = f'manual: {manual_outlier}; heuristic: {qc_outlier_type}'
-            outlier = qc_outlier
-
-            # if we have a manual outlier or no heuristic check was done,
-            # we over-ride the heuristic result
-            if (manual_outlier == 1) or (qc_outlier == -1):
-                outlier = manual_outlier
+            outlier, outlier_type = self.outlier_heuristics(in_file)
+            if outlier not in (-1, 0, 1):
+                raise ValueError(f"Invalid value for outlier {outlier}")
 
             table.append([image_name, site_name, outlier, outlier_type])
 

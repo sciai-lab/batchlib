@@ -259,99 +259,113 @@ class TestWellLevelQC(unittest.TestCase):
     n_wells = 8
     ims_per_well = 4
     folder = './out'
+    shape = (32, 32)
+    cell_seg_key = 'seg'
 
     def get_image_path(self, well_id, image_id):
         name_pattern = 'WellC0%i_PointC0%i_000%i_ChannelDAPI,WF_GFP,TRITC,WF_Cy5_Seq0216.h5'
         return os.path.join(self.folder, name_pattern % (well_id, image_id + 1, image_id))
 
+    def get_well_name(self, well_id):
+        return 'WellC0%i' % well_id
+
+    def write_dummy_channels(self, path):
+        dummy = np.zeros(self.shape, dtype='float32')
+        with open_file(path, 'a') as f:
+            write_image(f, 'serum', dummy)
+        with open_file(path, 'a') as f:
+            write_image(f, 'marker', dummy)
+
     # write a normal well that passes QC
     def normal_well(self, well_id):
-        pass
+        for im_id in range(self.ims_per_well):
+            path = self.get_image_path(well_id, im_id)
+
+            # write the segmentation and dummy images
+            seg = np.random.randint(0, 100, size=self.shape, dtype='uint64')
+            with open_file(path, 'a') as f:
+                write_image(f, self.cell_seg_key, seg)
+            self.write_dummy_channels(path)
+        return 0, 'none'
 
     # write a well that has too few cells
     def few_cell_well(self, well_id):
-        pass
+        segs = [np.random.randint(0, 15, size=self.shape, dtype='uint64'),
+                np.ones(self.shape, dtype='uint64'),
+                np.ones(self.shape, dtype='uint64'),
+                np.random.randint(0, 15, size=self.shape, dtype='uint64')]
+        for im_id in range(self.ims_per_well):
+            path = self.get_image_path(well_id, im_id)
+            with open_file(path, 'a') as f:
+                write_image(f, self.cell_seg_key, segs[im_id])
+            self.write_dummy_channels(path)
+        return 1, 'too few cells'
 
     # write a well that has too many cells
     def many_cell_well(self, well_id):
-        pass
+        size = np.prod(list(self.shape))
+        segs = [np.random.randint(0, 480, size=self.shape, dtype='uint64'),
+                np.arange(size, dtype='uint64').reshape(self.shape),
+                np.arange(size, dtype='uint64').reshape(self.shape),
+                np.random.randint(0, 480, size=self.shape, dtype='uint64')]
+        for im_id in range(self.ims_per_well):
+            path = self.get_image_path(well_id, im_id)
+            with open_file(path, 'a') as f:
+                write_image(f, self.cell_seg_key, segs[im_id])
+            self.write_dummy_channels(path)
+        return 1, 'too many cells'
 
     # write a well that has too few control cells
     def few_control_well(self, well_id):
-        pass
+        # TODO implement this !
+        return self.normal_well(well_id)
 
     # write a well that has a low control cell ratio
     def low_control_fraction_well(self, well_id):
-        pass
+        # TODO implement this !
+        return self.normal_well(well_id)
 
     # write a well that has negative ratios
     def negative_ratio_well(self, well_id):
-        pass
+        # TODO implement this !
+        return self.normal_well(well_id)
 
     def all_outlier_image_well(self, well_id):
-        pass
+        segs = [np.ones(self.shape, dtype='uint64')] * self.ims_per_well
+        for im_id in range(self.ims_per_well):
+            path = self.get_image_path(well_id, im_id)
+            with open_file(path, 'a') as f:
+                write_image(f, self.cell_seg_key, segs[im_id])
+            self.write_dummy_channels(path)
+        return 1, 'all images are outliers'
 
     def setUp(self):
         os.makedirs(self.folder, exist_ok=True)
 
+        self.exp_results = {}
         for well_id in range(self.n_wells):
-            self.normal_well(well_id)
 
-        # # make the segmentations
-        # self.cell_seg_key = 'seg'
-        # self.segs = []
-        # shape = (32, 32)
+            # write all outlier images well as first well,
+            # to check for this corner case
+            if well_id == 0:
+                res = self.all_outlier_image_well(well_id)
+            # next write all the other outliers
+            elif well_id == 1:
+                res = self.few_cell_well(well_id)
+            elif well_id == 2:
+                res = self.many_cell_well(well_id)
+            elif well_id == 3:
+                res = self.few_control_well(well_id)
+            elif well_id == 4:
+                res = self.low_control_fraction_well(well_id)
+            elif well_id == 5:
+                res = self.negative_ratio_well(well_id)
+            # the other wells are non-outlies
+            else:
+                res = self.normal_well(well_id)
 
-        # # number 1 + 2 + 3: passes QC
-        # self.segs.append(np.random.randint(0, 100, size=shape, dtype='uint64'))
-        # self.segs.append(np.random.randint(0, 100, size=shape, dtype='uint64'))
-        # self.segs.append(np.random.randint(0, 100, size=shape, dtype='uint64'))
-        # # number 4: fails QC because of too few cells
-        # self.segs.append(np.ones(shape, dtype='uint64'))
-        # # number 5: fails QC because of too many cells
-        # self.segs.append(np.arange(self.segs[0].size, dtype='uint64').reshape(shape))
-
-        # self.exp_heuristic_results = {}
-        # self.exp_mixed_results = {}
-        # manual_outlier = []
-
-        # for ii, seg in enumerate(self.segs):
-        #     path = self.get_image_path(ii)
-        #     name = os.path.splitext(os.path.split(path)[1])[0]
-
-        #     if ii < 2:
-        #         res = (0, 'none')
-        #         res_mixed = (0, 'none', '0')
-        #         manual_outlier.append([name, 0])
-        #     elif ii == 2:
-        #         res = (0, 'none')
-        #         res_mixed = (1, 'none', '1')
-        #         manual_outlier.append([name, 1])
-        #     elif ii == 3:
-        #         res = (1, 'too few cells')
-        #         res_mixed = (1, 'too few cells', '0')
-        #         manual_outlier.append([name, 0])
-        #     elif ii == 4:
-        #         res = (1, 'too many cells')
-        #         res_mixed = (1, 'too many cells', '0')
-        #         manual_outlier.append([name, 0])
-
-        #     self.exp_heuristic_results[name] = res
-        #     self.exp_mixed_results[name] = res_mixed
-
-        #     with open_file(path, 'a') as f:
-        #         write_image(f, self.cell_seg_key, seg)
-
-        #     # make dummy images for the serum and marker channel
-        #     dummy = np.zeros(seg.shape, dtype='float32')
-        #     with open_file(path, 'a') as f:
-        #         write_image(f, 'serum', dummy)
-        #     with open_file(path, 'a') as f:
-        #         write_image(f, 'marker', dummy)
-
-        # tagged_path = os.path.join(self.folder, 'out_tagger_state.csv')
-        # manual_outlier = pd.DataFrame(manual_outlier, columns=['filename', 'label'])
-        # manual_outlier.to_csv(tagged_path, index=False)
+            well_name = self.get_well_name(well_id)
+            self.exp_results[well_name] = res
 
     def tearDown(self):
         try:
@@ -359,53 +373,52 @@ class TestWellLevelQC(unittest.TestCase):
         except OSError:
             pass
 
-    def run_wf(self, outlier_criteria, outlier_predicate=lambda im: -1):
+    def run_wf(self, outlier_criteria):
         from batchlib.analysis.cell_level_analysis import (InstanceFeatureExtraction,
                                                            FindInfectedCells)
-        from batchlib.analysis.cell_analysis_qc import WellLevelQC
+        from batchlib.analysis.cell_analysis_qc import ImageLevelQC, WellLevelQC
         from batchlib.workflow import run_workflow
 
         job_dict = {
             InstanceFeatureExtraction: {'build': {'cell_seg_key': self.cell_seg_key}},
             FindInfectedCells: {'build': {'cell_seg_key': self.cell_seg_key}},
+            ImageLevelQC: {'build': {'cell_seg_key': self.cell_seg_key}},
             WellLevelQC: {'build': {'cell_seg_key': self.cell_seg_key,
                                     'outlier_criteria': outlier_criteria}}
         }
         run_workflow('test', self.folder, job_dict)
 
     def test_qc(self):
-        outlier_criteria = {'min_number_cells': 10,
-                            'max_number_cells': 1000}
+        outlier_criteria = {'max_number_cells_per_image': 500,
+                            'min_number_cells_per_image': 10,
+                            'min_number_control_cells_per_image': 5,
+                            'min_fraction_of_control_cells': 0.05,
+                            'check_ratios': True}
         self.run_wf(outlier_criteria)
 
         path = os.path.join(self.folder, 'out_table.hdf5')
         self.assertTrue(os.path.exists(path))
-        qc_table_name = 'images/outliers'
+        qc_table_name = 'images/wells'
         with open_file(path, 'r') as f:
             col_names, table = read_table(f, qc_table_name)
 
-        n_images = len(self.segs)
         n_cols = 4
-        exp_shape = (n_images, n_cols)
+        exp_shape = (self.n_wells, n_cols)
 
         self.assertEqual(len(col_names), n_cols)
         self.assertEqual(table.shape, exp_shape)
 
-        im_name_col = col_names.index('image_name')
+        well_name_col = col_names.index('well_name')
         outlier_col = col_names.index('is_outlier')
         outlier_type_col = col_names.index('outlier_type')
-        results = {row[im_name_col]: (row[outlier_col], row[outlier_type_col])
+        results = {row[well_name_col]: (row[outlier_col], row[outlier_type_col])
                    for row in table}
 
-        keyword = 'heuristic: '
-        exp_results = self.exp_heuristic_results
-        for im_name, (res_outlier, res_type) in results.items():
-            self.assertIn(im_name, exp_results)
-            exp_outlier, exp_type = exp_results[im_name]
+        exp_results = self.exp_results
+        for well_name, (res_outlier, res_type) in results.items():
+            self.assertIn(well_name, exp_results)
+            exp_outlier, exp_type = exp_results[well_name]
             self.assertEqual(res_outlier, exp_outlier)
-
-            idx = res_type.find(keyword) + len(keyword)
-            res_type = res_type[idx:]
             self.assertEqual(res_type, exp_type)
 
 
