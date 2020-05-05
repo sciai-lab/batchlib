@@ -162,18 +162,23 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
                  channel_keys=('serum', 'marker'),
                  nuc_seg_key_to_ignore=None,
                  cell_seg_key='cell_segmentation',
+                 image_outlier_table='images/outliers',
                  identifier=None):
 
         self.channel_keys = tuple(channel_keys)
         self.nuc_seg_key_to_ignore = nuc_seg_key_to_ignore
         self.cell_seg_key = cell_seg_key
 
+        # only for the well- and plate-wide backgrounds
+        self.image_outlier_table = image_outlier_table
+
         # all inputs should be 2d
         input_ndim = [2] * (1 + len(channel_keys) + (1 if nuc_seg_key_to_ignore else 0))
 
         # tables are per default saved at tables/cell_segmentation/channel in the container
         output_group = cell_seg_key if identifier is None else cell_seg_key + '_' + identifier
-        self.output_table_keys = [output_group + '/' + channel for channel in channel_keys]
+        self.output_table_keys = [output_group + '/' + channel for channel in channel_keys] + \
+                                 ([self.image_outlier_table] if self.image_outlier_table is not None else [])
         super().__init__(input_key=list(self.channel_keys) + [self.cell_seg_key] +
                                        ([self.nuc_seg_key_to_ignore] if self.nuc_seg_key_to_ignore is not None else []),
                          input_ndim=input_ndim,
@@ -290,13 +295,57 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
 
         return {'median': medians, 'mad': mads}
 
+    # TODO the three functions below are copied from CellAnalysis.
+    #  Solve this better.. Maybe put them in a mixin class?
+    @staticmethod
+    def folder_to_table_path(folder, identifier):
+        # NOTE, we call this .hdf5 to avoid pattern matching, it's a bit hacky ...
+        table_file_name = os.path.split(folder)[1] + '_table.hdf5'
+        return os.path.join(folder, table_file_name)
+
+    @property
+    def table_out_path(self):
+        return self.folder_to_table_path(self.folder, self.identifier)
+
+    def load_image_outliers(self, input_files):
+        with open_file(self.table_out_path, 'r') as f:
+            if not self.has_table(f, self.image_outlier_table):
+                logger.warning(f"{self.name}: load_image_outliers: did not find an image outlier table")
+                return {}
+            keys, table = self.read_table(f, self.image_outlier_table)
+
+        im_name_id = keys.index('image_name')
+        outlier_id = keys.index('is_outlier')
+        outlier_type_id = keys.index('outlier_type')
+
+        image_names = set(table[:, im_name_id])
+        expected_names = set(os.path.splitext(os.path.split(in_file)[1])[0]
+                             for in_file in input_files)
+
+        # TODO check if this actually works now
+        print(image_names)
+        print(expected_names)
+        if image_names != expected_names:
+            msg = f"{self.name}: load_image_outliers: image names from table and expected image names do not agree"
+            logger.warning(msg)
+
+        outlier_dict = {table[ii, im_name_id]: (table[ii, outlier_id], table[ii, outlier_type_id])
+                        for ii in range(len(table))}
+        return outlier_dict
+
     def run(self, input_files, output_files, gpu_id=None):
         # first, get plate wide and per-well background statistics
         logger.info('computing background statistics')
         bg_dict = {file: self.get_bg_segment(file, device='cpu') for file in input_files}
         bg_per_image_stats = {file: self.get_bg_stats(bg_segments) for file, bg_segments in bg_dict.items()}
+
+        # ignore image outliers in per_well and per_plate backgrounds
+        outlier_dict = self.load_image_outliers(input_files)
         bg_per_well_dict = defaultdict(list)
         for file, bg_segment in bg_dict.items():
+            if outlier_dict[file][0] == 1:
+                print('skipping outlier')
+                continue
             bg_per_well_dict[image_name_to_well_name(os.path.basename(file))].append(bg_segment)
         bg_per_well_dict = {well: torch.cat(bg_segments, dim=1) for well, bg_segments in bg_per_well_dict.items()}
         bg_per_well_stats = {well: self.get_bg_stats(bg_pixels) for well, bg_pixels in bg_per_well_dict.items()}
