@@ -5,22 +5,22 @@ import numpy as np
 if __name__ == '__main__':
 
     class SubParamRanges:
-        ks_for_topk = [10, 30, 50, 100, 200]
-        quantiles = [0.9, 0.99]
-        ring_widths = []  #[10, 50]  #[20, 50]
+        ks_for_topk = [10, 30, 40, 45, 50, 55, 60, 100, 200]
+        quantiles = [0.8, 0.9, 0.95, 0.98, 0.99, 0.995]
+        ring_widths = [20]  #[10, 50]  #[20, 50]
 
     class SearchSpace:
         segmentation_key = ['cell_segmentation'] + [f'voronoi_ring_segmentation{r}' for r in SubParamRanges.ring_widths]
         ignore_nuclei = [True, False]
-        split_statistic = ['means'] + [f'top{k}' for k in SubParamRanges.ks_for_topk] + [f'quantile{q}' for q in
-                                                                                         SubParamRanges.quantiles]
-        infected_threshold = np.arange(0, 20, 0.1)  #np.arange(0, 4000, 50)
+        split_statistic = [f'top{k}' for k in SubParamRanges.ks_for_topk] + [f'quantile{q}' for q in
+                                                                             SubParamRanges.quantiles]
+        infected_threshold = np.arange(0, 20, 0.05)  #np.arange(0, 4000, 50)
         marker_denoise_radii = [0, 5, 10]  # TODO use those
 
     class config:  # TODO make an argument parser for this
         ann_dir = '/home_sdc/rremme_tmp/src/antibodies-nuclei/groundtruth'
         data_dir = '/home_sdc/rremme_tmp/DatasetsHCIHome/antibodies/covid-data-vibor/'
-        out_dir = '/home_sdc/rremme_tmp/Datasets/covid_antibodies/grid_search_adaptive_threshold'
+        out_dir = '/home_sdc/rremme_tmp/Datasets/covid_antibodies/grid_search_1'
         misc_folder = '/home_sdc/rremme_tmp/src/batchlib/misc'
 
         mask_key = 'mask'
@@ -29,7 +29,7 @@ if __name__ == '__main__':
         seg_key = 'cell_segmentation'
         gpu = 0
         batch_size = 1
-        n_cpus = 10
+        n_cpus = 20
 
     print(SearchSpace.__dict__)
 
