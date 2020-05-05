@@ -214,10 +214,10 @@ def find_infected_grid(config, SearchSpace):
                 'bg_cell_seg_key': 'cell_segmentation_cell_segmentation_False',  # weird because of identifier
                 'split_statistic': split_statistic,
                 'infected_threshold': infected_threshold,
-                'identifier': get_identifier(seg_key, ignore_nuclei, split_statistic, infected_threshold)
+                'identifier': get_identifier(seg_key, ignore_nuclei, split_statistic, infected_threshold),
                 # new method
                 # 'bg_correction_key': 'well_bg_median',
-                # 'infected_threshold_scale_key': 'well_bg_mad',
+                'infected_threshold_scale_key': 'image_bg_mad',
                 # 'infected_threshold': 7,
             }}))]
         return job_list[0]
@@ -295,7 +295,7 @@ def get_score_grid(config, SearchSpace, ann_files):
         ann_file,
     ):
         identifier = get_identifier(seg_key, ignore_nuclei, split_statistic, infected_threshold)
-        in_file = ann_to_in_file(ann_file)
+        in_file = ann_to_in_file(config, ann_file)
         out_file = in_to_out_file(config, in_file)
         assert os.path.isfile(out_file), f'Output file missing: {out_file}'
         with open_file(out_file, 'r') as f:
@@ -348,11 +348,11 @@ def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSp
 
     # if os.path.isdir(config.out_dir):
     #     shutil.rmtree(config.out_dir)
-
-    preprocess(config, ann_files, tiff_files)
-
-    compute_segmentations(config, SubParamRanges)
-
+    #
+    # preprocess(config, ann_files, tiff_files)
+    #
+    # compute_segmentations(config, SubParamRanges)
+    #
     extract_feature_grid(config, SubParamRanges, SearchSpace)
 
     save_gt_infected(config)

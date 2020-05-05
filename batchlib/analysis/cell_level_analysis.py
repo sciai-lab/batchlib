@@ -390,7 +390,7 @@ class FindInfectedCells(BatchJobOnContainer):
             scale = bg_feature_dict[self.infected_threshold_scale_key]
         else:
             scale = 1
-        infected_indicator = feature_dict[self.split_statistic] > scale * self.infected_threshold + offset[0] #FIXME!!!
+        infected_indicator = feature_dict[self.split_statistic] > scale[0] * self.infected_threshold + offset[0] #FIXME!!!
 
         try:
             bg_ind = feature_dict['label_id'].tolist().index(0)
