@@ -333,7 +333,7 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
 class FindInfectedCells(BatchJobOnContainer):
     """This job finds the infected and control cells to later compute the measures on"""
     def __init__(self,
-                 cell_seg_key='cell_segmentation',
+                 cell_seg_key='cell_segmentation', bg_cell_seg_key=None,
                  marker_key='marker',
                  infected_threshold=250, split_statistic='top50',
                  infected_threshold_scale_key=None,
@@ -343,7 +343,9 @@ class FindInfectedCells(BatchJobOnContainer):
                  **super_kwargs):
         self.marker_key = marker_key
         self.cell_seg_key = cell_seg_key
+        self.bg_cell_seg_key = bg_cell_seg_key if bg_cell_seg_key is not None else cell_seg_key
         self.feature_table_key = cell_seg_key + '/' + marker_key
+        self.bg_feature_table_key = bg_cell_seg_key + '/' + marker_key
 
         self.infected_threshold = infected_threshold
         self.infected_threshold_scale_key = infected_threshold_scale_key
@@ -360,9 +362,10 @@ class FindInfectedCells(BatchJobOnContainer):
                          identifier=identifier,
                          **super_kwargs)
 
-    def load_feature_dict(self, in_path):
+    def load_feature_dict(self, in_path, for_bg=False):
+        table_key = self.feature_table_key if not for_bg else self.bg_feature_table_key
         with open_file(in_path, 'r') as f:
-            keys, table = self.read_table(f, self.feature_table_key)
+            keys, table = self.read_table(f, table_key)
             feature_dict = {key: values for key, values in zip(keys, table.T)}
         return feature_dict
 
@@ -381,13 +384,13 @@ class FindInfectedCells(BatchJobOnContainer):
             offset = 0
         return offset
 
-    def get_infected_indicator(self, feature_dict):
-        offset = self.get_bg_correction(feature_dict)
+    def get_infected_indicator(self, feature_dict, bg_feature_dict):
+        offset = self.get_bg_correction(bg_feature_dict)
         if self.infected_threshold_scale_key is not None:
-            scale = feature_dict[self.infected_threshold_scale_key]
+            scale = bg_feature_dict[self.infected_threshold_scale_key]
         else:
             scale = 1
-        infected_indicator = feature_dict[self.split_statistic] > scale * self.infected_threshold + offset
+        infected_indicator = feature_dict[self.split_statistic] > scale * self.infected_threshold + offset[0] #FIXME!!!
 
         try:
             bg_ind = feature_dict['label_id'].tolist().index(0)
@@ -396,8 +399,8 @@ class FindInfectedCells(BatchJobOnContainer):
             pass  # no bg segment
         return infected_indicator
 
-    def get_infected_and_control_indicators(self, feature_dict):
-        infected_indicator = self.get_infected_indicator(feature_dict)
+    def get_infected_and_control_indicators(self, feature_dict, bg_feature_dict):
+        infected_indicator = self.get_infected_indicator(feature_dict, bg_feature_dict)
         # per default, everything that is not infected is control
         control_indicator = np.logical_not(infected_indicator)
         try:
@@ -409,7 +412,9 @@ class FindInfectedCells(BatchJobOnContainer):
 
     def compute_and_save_infected_and_control(self, in_file, out_file):
         feature_dict = self.load_feature_dict(in_file)
-        infected_indicator, control_indicator = self.get_infected_and_control_indicators(feature_dict)
+        bg_feature_dict = feature_dict if self.bg_feature_table_key == self.feature_table_key else \
+            self.load_feature_dict(in_file, for_bg=True)
+        infected_indicator, control_indicator = self.get_infected_and_control_indicators(feature_dict, bg_feature_dict)
         column_names = ['label_id', 'is_infected', 'is_control']
         table = [feature_dict['label_id'], infected_indicator, control_indicator]
         table = np.asarray(table, dtype=float).T

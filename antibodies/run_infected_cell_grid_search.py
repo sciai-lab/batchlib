@@ -5,17 +5,17 @@ import numpy as np
 if __name__ == '__main__':
 
     class SubParamRanges:
-        ks_for_topk = [10, 30, 50]
+        ks_for_topk = [10, 30, 50, 100, 200]
         quantiles = [0.9, 0.99, 0.999]
-        ring_widths = [] #[20, 50] # fix bg first, before this makes no sense
+        ring_widths = [10, 20, 30] #[20, 50] # fix bg first, before this makes no sense
 
     class SearchSpace:
         segmentation_key = ['cell_segmentation'] + [f'voronoi_ring_segmentation{r}' for r in SubParamRanges.ring_widths]
         ignore_nuclei = [True, False]
         split_statistic = ['means'] + [f'top{k}' for k in SubParamRanges.ks_for_topk] + [f'quantile{q}' for q in
                                                                                          SubParamRanges.quantiles]
-        infected_threshold = np.arange(0, 4000, 400)
-        marker_denoise_radii = [0, 5, 10]
+        infected_threshold = np.arange(0, 2000, 20)
+        marker_denoise_radii = [0, 5, 10]  # TODO use those
 
     class config:  # TODO make an argument parser for this
         ann_dir = '/home_sdc/rremme_tmp/src/antibodies-nuclei/groundtruth'

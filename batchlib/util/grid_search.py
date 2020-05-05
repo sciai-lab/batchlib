@@ -46,7 +46,7 @@ def grid_evaluate(func, *args, return_structured_array=True, **kwargs):
     :return:
         dict
     """
-    n_jobs = kwargs.pop('n_jobs', 4)
+    n_jobs = kwargs.pop('n_jobs', 0)
     shape = tuple([len(arg) for arg in args + tuple(kwargs.values())])
 
     args_and_kwargs = list(itertools.product(*(args + tuple(kwargs.values()))))

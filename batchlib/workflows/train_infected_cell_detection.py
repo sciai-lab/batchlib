@@ -196,12 +196,11 @@ def extract_feature_grid(config, SubParamRanges, SearchSpace):
         extract_feature_job_specification,
         seg_key=SearchSpace.segmentation_key,
         ignore_nuclei=SearchSpace.ignore_nuclei,
-        n_jobs=0)['result'].to_list()
+        n_jobs=0)['result'].reshape(-1).tolist()
 
     run_workflow('Feature Extraction Workflow',
                  config.out_dir,
-                 job_list,
-                 force_recompute=True)
+                 job_list)
 
 
 def find_infected_grid(config, SearchSpace):
@@ -211,7 +210,8 @@ def find_infected_grid(config, SearchSpace):
                 'marker_key': 'marker_corrected',
                 'cell_seg_key': seg_key + '_' + get_identifier(seg_key, ignore_nuclei),
                 # old method
-                'bg_correction_key': 'image_bg_median',  #FIXME this is now referring to the current segmentatin (e.g. voronoi rings). should always be cell segmentation..
+                'bg_correction_key': 'image_bg_median',  # FIXME this should be the plate-wise bg. copy from results!
+                'bg_cell_seg_key': 'cell_segmentation_cell_segmentation_False',  # weird because of identifier
                 'split_statistic': split_statistic,
                 'infected_threshold': infected_threshold,
                 'identifier': get_identifier(seg_key, ignore_nuclei, split_statistic, infected_threshold)
@@ -241,7 +241,6 @@ def find_infected_grid(config, SearchSpace):
     run_workflow(f'Infected Classification Workflow ',
                  config.out_dir,
                  job_list,
-                 force_recompute=True,
                  lock_folder=False)
 
 
@@ -284,60 +283,49 @@ def save_gt_infected(config):
     run_workflow(f'Infected Classification Workflow ',
                  config.out_dir,
                  job_list,
-                 force_recompute=True)
+                 force_recompute=False)
 
 
-# TODO use proper score function
-def dummy_score(in_file, infected_indicator):
-    return (np.mean(infected_indicator),
-            np.sum(infected_indicator),
-            len(infected_indicator) - np.sum(infected_indicator))
-
-
-def get_score_grid(config, SearchSpace, in_files, score_func):
+def get_score_grid(config, SearchSpace, in_files):
     def get_prediction_and_eval_score(
-        score_func,
         seg_key,
         ignore_nuclei,
         split_statistic,
-        infected_threshold
+        infected_threshold,
+        in_file,
     ):
         identifier = get_identifier(seg_key, ignore_nuclei, split_statistic, infected_threshold)
-        scores = []
-        for in_file in in_files:
-            out_file = in_to_out_file(config, in_file)
-            assert os.path.isfile(out_file), f'Output file missing: {out_file}'
-            with open_file(out_file, 'r') as f:
-                column_names, table = read_table(f, 'cell_classification/' + seg_key + '_' +
-                                                 get_identifier(seg_key, ignore_nuclei) +
-                                                 '/marker_corrected_' + identifier)
-                gt_column_names, gt_table = read_table(f, 'infected')
-            infected_indicator = table[:, column_names.index('is_infected')]
-            control_indicator = table[:, column_names.index('is_control')]
-            labels = table[:, column_names.index('label_id')].astype(np.int32)
-            infected_dict = dict(zip(labels, infected_indicator))
+        out_file = in_to_out_file(config, in_file)
+        assert os.path.isfile(out_file), f'Output file missing: {out_file}'
+        with open_file(out_file, 'r') as f:
+            column_names, table = read_table(f, 'cell_classification/' + seg_key + '_' +
+                                             get_identifier(seg_key, ignore_nuclei) +
+                                             '/marker_corrected_' + identifier)
+            gt_column_names, gt_table = read_table(f, 'infected')
+        infected_indicator = table[:, column_names.index('is_infected')]
+        #control_indicator = table[:, column_names.index('is_control')]
+        labels = table[:, column_names.index('label_id')].astype(np.int32)
+        infected_dict = dict(zip(labels, infected_indicator))
 
-            gt_infected_indicator = gt_table[:, gt_column_names.index('is_infected')]
-            gt_control_indicator = gt_table[:, gt_column_names.index('is_control')]
-            gt_labels = gt_table[:, gt_column_names.index('label_id')].astype(np.int32)
-            gt_infected_dict = dict(zip(gt_labels, gt_infected_indicator))
+        gt_infected_indicator = gt_table[:, gt_column_names.index('is_infected')]
+        #gt_control_indicator = gt_table[:, gt_column_names.index('is_control')]
+        gt_labels = gt_table[:, gt_column_names.index('label_id')].astype(np.int32)
+        gt_infected_dict = dict(zip(gt_labels, gt_infected_indicator))
 
-            #assert np.sum(labels != gt_labels) == 0, f'{len(labels), len(gt_labels)}'
-            # TODO: remove background label
-            accuracy = np.mean([infected_dict.get(i, 0) == gt_infected_dict.get(i, 0)
-                                for i in set(labels).union(gt_labels)])
-            #n_cells = np.sum(labels != 0)
-            scores.append(accuracy)
-        return np.mean(scores, axis=0)
+        accuracy = np.mean([infected_dict.get(i, 0) == gt_infected_dict.get(i, 0)
+                            for i in set(labels).union(gt_labels) if i != 0])
+        #n_cells = np.sum(labels != 0)
+        return accuracy
 
     print('computing scores')
     score_grid = grid_evaluate(
-        partial(get_prediction_and_eval_score, score_func=dummy_score),
+        get_prediction_and_eval_score,
         seg_key=SearchSpace.segmentation_key,
         ignore_nuclei=SearchSpace.ignore_nuclei,
         split_statistic=SearchSpace.split_statistic,
         infected_threshold=SearchSpace.infected_threshold,
-        n_jobs=0
+        in_file=in_files,
+        n_jobs=0,
     )
 
     return score_grid
@@ -352,24 +340,25 @@ def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSp
         SearchSpace.infected_threshold,
     ]]))
 
-    # if os.path.isdir(config.out_dir):
-    #     shutil.rmtree(config.out_dir)
 
     ann_files, tiff_files = get_ann_and_tiff_files(config)
     print(f'Found input tiff files:')
     [print(f) for f in tiff_files]
 
-    #preprocess(config, ann_files, tiff_files)
-    #
-    # compute_segmentations(config, SubParamRanges)
-    #
-    # extract_feature_grid(config, SubParamRanges, SearchSpace)
+    # if os.path.isdir(config.out_dir):
+    #     shutil.rmtree(config.out_dir)
+
+    preprocess(config, ann_files, tiff_files)
+
+    compute_segmentations(config, SubParamRanges)
+
+    extract_feature_grid(config, SubParamRanges, SearchSpace)
 
     save_gt_infected(config)
 
-    # find_infected_grid(config, SearchSpace)
+    find_infected_grid(config, SearchSpace)
 
-    score_grid = get_score_grid(config, SearchSpace, tiff_files, dummy_score)
+    score_grid = get_score_grid(config, SearchSpace, tiff_files)
     print(score_grid)
     print(score_grid['result'])
 
