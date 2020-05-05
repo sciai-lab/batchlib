@@ -141,6 +141,16 @@ def run_cell_analysis(config):
             'run': {}}))
         marker_ana_in_key = marker_ana_in_key + '_denoised'
 
+    # This is just for the bg computation
+    job_list.append((ImageLevelQC, {
+        'build': {
+            'cell_seg_key': config.seg_key,
+            'serum_key': serum_seg_in_key,  # We use the same serum key as for the segmentation. Is that reasonable?
+            'marker_key': marker_ana_in_key,
+            'outlier_predicate': outlier_predicate,
+            'identifier': None},
+    }))
+
     job_list.append((InstanceFeatureExtraction, {
         'build': {
             'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),

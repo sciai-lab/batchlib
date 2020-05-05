@@ -308,6 +308,10 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         return self.folder_to_table_path(self.folder, self.identifier)
 
     def load_image_outliers(self, input_files):
+        if not os.path.isfile(self.table_out_path):
+            logger.warning(f"{self.name}: load_image_outliers: "
+                           f"did not find the hdf5 file to load an outlier table from")
+            return {}
         with open_file(self.table_out_path, 'r') as f:
             if not self.has_table(f, self.image_outlier_table):
                 logger.warning(f"{self.name}: load_image_outliers: did not find an image outlier table")
@@ -322,9 +326,6 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         expected_names = set(os.path.splitext(os.path.split(in_file)[1])[0]
                              for in_file in input_files)
 
-        # TODO check if this actually works now
-        print(image_names)
-        print(expected_names)
         if image_names != expected_names:
             msg = f"{self.name}: load_image_outliers: image names from table and expected image names do not agree"
             logger.warning(msg)
@@ -343,10 +344,12 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         outlier_dict = self.load_image_outliers(input_files)
         bg_per_well_dict = defaultdict(list)
         for file, bg_segment in bg_dict.items():
-            if outlier_dict[file][0] == 1:
-                print('skipping outlier')
+            image_name = os.path.splitext(os.path.split(file)[1])[0]
+            if outlier_dict.get(image_name, (-1, None))[0] == 1:
+                logger.info(f'{self.name}: skipping outlier image in bg calculation')
                 continue
             bg_per_well_dict[image_name_to_well_name(os.path.basename(file))].append(bg_segment)
+        # FIXME what happens if whole well is ignored? It misses in output table!
         bg_per_well_dict = {well: torch.cat(bg_segments, dim=1) for well, bg_segments in bg_per_well_dict.items()}
         bg_per_well_stats = {well: self.get_bg_stats(bg_pixels) for well, bg_pixels in bg_per_well_dict.items()}
         bg_plate_stats = self.get_bg_stats(torch.cat(list(bg_per_well_dict.values()), dim=1))
