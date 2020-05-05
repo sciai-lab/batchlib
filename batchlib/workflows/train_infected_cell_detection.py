@@ -48,7 +48,7 @@ class CopyImg(BatchJobOnContainer):
 
 def get_ann_and_tiff_files(config):
     # return gt_annotation files and corresponding raw tiffs
-    ann_files = glob(os.path.join(config.ann_dir, 'infection/*/*.h5'))
+    ann_files = glob(os.path.join(config.ann_dir, 'infection/*/*infected_nuclei.h5'))
     tiff_files = list(map(partial(ann_to_in_file, config), ann_files))
     return ann_files, tiff_files
 
@@ -59,7 +59,7 @@ def ann_to_in_file(config, ann_file):
         plate = plate[:-4]
     filename = os.path.basename(ann_file).rstrip('.h5') + '.tiff'
     filename = filename.replace('_infected_nuclei', '')
-    filename = filename.replace('_infected', '')
+    #filename = filename.replace('_infected', '')
     in_file = os.path.join(config.data_dir, os.path.basename(plate), filename)
     return in_file
 
