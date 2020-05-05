@@ -804,22 +804,13 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
             n_outlier_images = n_total - len(in_files_for_current_well)
 
             well_is_outlier, outlier_type = well_outlier_dict.get(well_name, (-1, 'not checked'))
-            if well_is_outlier:
+            if well_is_outlier == 1:
                 logger.info(f'Well {well_name} was flagged as outlier.')
 
             if (well_is_outlier != 1) and (len(in_files_for_current_well) == 0):
                 logger.info(f'Well {well_name} consists entirely of outlier images and will be marked as outlier well.')
                 well_is_outlier = 1
                 outlier_type = 'all images are outliers'
-
-            # add row of nan's if this well is an outlier
-            if well_is_outlier == 1:
-                n_stats = len(column_names) - 5
-                # FIXME in the corner case where the first well we encounter is an outlier, this will fail!
-                # @Roman, what's the best way to fix this?
-                assert n_stats > 0, "Firs well was outlier"
-                table.append([well_name, n_outlier_images, np.nan, well_is_outlier, outlier_type] + [np.nan] * n_stats)
-                continue
 
             infected_cell_statistics, control_cell_statistics = self.load_per_cell_statistics(in_files_for_current_well)
 
@@ -830,7 +821,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
 
             # get the main score, which is the measure computed for `score_name`, but set to
             # nan if this image is an outlier
-            stat_dict['score'] = np.nan if stat_dict['score'] is None else stat_dict['score']
+            stat_dict['score'] = np.nan if (stat_dict['score'] is None or well_is_outlier == 1) else stat_dict['score']
 
             stat_names, stat_list = map(list, zip(*stat_dict.items()))
             if ii == 0:
@@ -839,7 +830,6 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
             # get number of ignored outlier cells
             n_outlier_cells = sum(sum(1 for v in self.load_cell_outliers(in_file).values() if v[0] == 1)
                                   for in_file in in_files_for_current_well)
-
             table.append([well_name, n_outlier_images, n_outlier_cells, well_is_outlier, outlier_type] + stat_list)
 
         table = np.array(table)

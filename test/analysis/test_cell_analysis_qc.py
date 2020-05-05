@@ -288,6 +288,9 @@ class TestWellLevelQC(unittest.TestCase):
     def negative_ratio_well(self, well_id):
         pass
 
+    def all_outlier_image_well(self, well_id):
+        pass
+
     def setUp(self):
         os.makedirs(self.folder, exist_ok=True)
 
