@@ -8,6 +8,7 @@
 #SBATCH --qos normal
 
 #SBATCH -C "gpu=2080Ti|gpu=1080Ti"
+#SBATCH --gres=gpu:1
 
 # do we want mail ?
 # #SBATCH --mail-user=constantin.pape@embl.de

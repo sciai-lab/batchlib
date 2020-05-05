@@ -108,7 +108,8 @@ def run_cell_analysis(config):
             'run': {
                 'gpu_id': config.gpu,
                 'batch_size': config.batch_size,
-                'threshold_channels': {0: 0.5}}}),
+                'threshold_channels': {0: 0.5},
+                'on_cluster': config.on_cluster}}),
         (StardistPrediction, {
             'build': {
                 'model_root': model_root,
@@ -118,7 +119,8 @@ def run_cell_analysis(config):
                 'scale_factors': config.scale_factors},
             'run': {
                 'gpu_id': config.gpu,
-                'n_jobs': config.n_cpus}}),
+                'n_jobs': config.n_cpus,
+                'on_cluster': config.on_cluster}}),
         (SeededWatershed, {
             'build': {
                 'pmap_key': config.bd_key,
@@ -305,9 +307,11 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--db_port", type=int, default=27017)
     parser.add("--db_name", type=str, default='covid')
 
-
     # default_scale_factors = None
     default_scale_factors = [1, 2, 4, 8, 16]
     parser.add("--scale_factors", default=default_scale_factors)
+
+    # do we run on cluster?
+    parser.add("--on_cluster", type=int, default=0)
 
     return parser
