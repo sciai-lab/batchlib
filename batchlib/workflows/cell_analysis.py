@@ -8,7 +8,7 @@ from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    DenoiseByGrayscaleOpening,
                                                    InstanceFeatureExtraction,
                                                    FindInfectedCells)
-from batchlib.analysis.cell_analysis_qc import CellLevelQC, ImageLevelQC
+from batchlib.analysis.cell_analysis_qc import CellLevelQC, ImageLevelQC, WellLevelQC
 from batchlib.mongo.result_writer import DbResultWriter
 from batchlib.outliers.outlier import get_outlier_predicate
 from batchlib.preprocessing import get_barrel_corrector, get_serum_keys, Preprocess
@@ -186,6 +186,13 @@ def run_cell_analysis(config):
                 'outlier_predicate': outlier_predicate,
                 'identifier': identifier}
         }))
+        job_list.append((WellLevelQC, {
+            'build': {
+                'cell_seg_key': config.seg_key,
+                'serum_key': serum_key,
+                'marker_key': marker_ana_in_key,
+                'identifier': identifier}
+        }))
         job_list.append((CellLevelAnalysis, {
             'build': {
                 'serum_key': serum_key,
@@ -301,7 +308,6 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--db_host", type=str, default='localhost')
     parser.add("--db_port", type=int, default=27017)
     parser.add("--db_name", type=str, default='covid')
-
 
     # default_scale_factors = None
     default_scale_factors = [1, 2, 4, 8, 16]

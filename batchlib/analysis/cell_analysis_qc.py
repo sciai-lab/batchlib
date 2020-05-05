@@ -3,7 +3,7 @@ import numpy as np
 from tqdm import tqdm
 
 from .cell_level_analysis import (CellLevelAnalysisBase, CellLevelAnalysisWithTableBase,
-                                  compute_ratios)
+                                  compute_ratios, load_cell_outlier_dict)
 from ..util.io import open_file, image_name_to_site_name
 
 # TODO all values are still preliminary and need to be validated on actual data
@@ -156,21 +156,6 @@ class ImageLevelQC(CellLevelAnalysisWithTableBase):
             is_outlier = 1
             outlier_type += 'too many cells;'
 
-        # min_control_cells = self.outlier_criteria['min_number_control_cells']
-        # if min_control_cells is not None and n_control < min_control_cells:
-        #     is_outlier = 1
-        #     outlier_type += 'too few control cells;'
-
-        # # check for negative ratios
-        # if self.outlier_criteria['check_ratios']:
-        #     ratios = compute_ratios(control_stats, infected_stats, serum_key=self.serum_key)
-        #     for name, val in ratios.items():
-        #         if not name.startswith('ratio'):
-        #             continue
-        #         if val < 0.:
-        #             is_outlier = 1
-        #             outlier_type += f'{name} is negative'
-
         if outlier_type == '':
             outlier_type = 'none'
         else:
@@ -223,7 +208,7 @@ class ImageLevelQC(CellLevelAnalysisWithTableBase):
 
 
 class WellLevelQC(CellLevelAnalysisWithTableBase):
-    """ Combining heuristic and manual quality control for wells
+    """ Heuristic quality control for wells
     """
 
     @staticmethod
@@ -239,7 +224,8 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
                  marker_key='marker',
                  serum_bg_key='plate_bg_median',
                  marker_bg_key='plate_bg_median',
-                 table_out_key='images/outliers',
+                 table_out_key='wells/outliers',
+                 cell_outlier_table_name='outliers',
                  outlier_criteria=DEFAULT_WELL_OUTLIER_CRITERIA,
                  **super_kwargs):
 
@@ -256,5 +242,101 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
                          marker_bg_key=marker_bg_key,
                          **super_kwargs)
 
+        output_group = cell_seg_key if self.identifier is None else cell_seg_key + '_' + self.identifier
+        self.cell_outlier_table = output_group + '/' + serum_key + '_' + cell_outlier_table_name
+
+    # we need to add this so that outlier cells are ignored when computing the ratios
+    def load_cell_outliers(self, input_file):
+        return load_cell_outlier_dict(input_file, self.cell_outlier_table, self.name)
+
+    def outlier_heuristics(self, in_files):
+        infected_stats, control_stats = self.load_per_cell_statistics(in_files)
+
+        n_images = len(in_files)
+        n_infected = len(infected_stats['labels'])
+        n_control = len(control_stats['labels'])
+        n_cells = n_infected + n_control
+
+        outlier_type = ''
+        is_outlier = 0
+
+        min_cells_per_im = self.outlier_criteria['min_number_cells_per_image']
+        if min_cells_per_im is not None and n_cells < min_cells_per_im * n_images:
+            is_outlier = 1
+            outlier_type += 'too few cells;'
+
+        max_cells_per_im = self.outlier_criteria['max_number_cells_per_image']
+        if max_cells_per_im is not None and n_cells < max_cells_per_im * n_images:
+            is_outlier = 1
+            outlier_type += 'too few cells;'
+
+        min_control_per_im = self.outlier_criteria['min_number_control_cells_per_image']
+        if min_control_per_im is not None and n_control < min_control_per_im * n_images:
+            is_outlier = 1
+            outlier_type += 'too few control cells;'
+
+        control_fraction = float(n_control) / n_cells
+        min_fraction = self.outlier_criteria['min_fraction_of_control_cells']
+        if min_fraction is not None and control_fraction < min_fraction:
+            is_outlier = 1
+            outlier_type += 'too small fraction of control cells;'
+
+        # check for negative ratios
+        if self.outlier_criteria['check_ratios']:
+            ratios = compute_ratios(control_stats, infected_stats, serum_key=self.serum_key)
+            for name, val in ratios.items():
+                if not name.startswith('ratio'):
+                    continue
+                if val < 0.:
+                    is_outlier = 1
+                    outlier_type += f'{name} is negative'
+
+        if outlier_type == '':
+            outlier_type = 'none'
+        else:
+            # strip the last ';'
+            outlier_type = outlier_type[:-1]
+        return is_outlier, outlier_type
+
+    def write_well_outlier_table(self, input_files):
+        column_names = ['well_name', 'site_name', 'is_outlier', 'outlier_type']
+        table = []
+
+        for in_file in tqdm(input_files, desc="Well level quality control"):
+            image_name = os.path.splitext(os.path.split(in_file)[1])[0]
+            site_name = image_name_to_site_name(image_name)
+
+            # check if this image was marked as outlier manually
+            manual_outlier = self.outlier_predicate(image_name)
+            if manual_outlier not in (-1, 0, 1):
+                raise ValueError(f"Invalid value for outlier {manual_outlier}")
+
+            # check if the image is an outlier according to the heuristics
+            qc_outlier, qc_outlier_type = self.outlier_heuristics(in_file)
+            if qc_outlier not in (-1, 0, 1):
+                raise ValueError(f"Invalid value for outlier {qc_outlier}")
+
+            # check the heuristic outlier status
+            outlier_type = f'manual: {manual_outlier}; heuristic: {qc_outlier_type}'
+            outlier = qc_outlier
+
+            # if we have a manual outlier or no heuristic check was done,
+            # we over-ride the heuristic result
+            if (manual_outlier == 1) or (qc_outlier == -1):
+                outlier = manual_outlier
+
+            table.append([image_name, site_name, outlier, outlier_type])
+
+        table = np.array(table)
+        n_cols = len(column_names)
+        assert n_cols == table.shape[1]
+
+        # set image name to non-visible for the plateViewer
+        visible = np.ones(n_cols, dtype='uint8')
+        visible[0] = False
+
+        with open_file(self.table_out_path, 'a') as f:
+            self.write_table(f, self.table_out_key, column_names, table, visible)
+
     def run(self, input_files, output_files):
-        pass
+        self.write_well_outlier_table(input_files)

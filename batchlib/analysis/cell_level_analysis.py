@@ -11,7 +11,8 @@ from tqdm.auto import tqdm
 from batchlib.util.logging import get_logger
 from ..base import BatchJobOnContainer
 from ..util.image import seg_to_edges
-from ..util.io import open_file, image_name_to_site_name, image_name_to_well_name, write_image_information
+from ..util.io import (open_file, image_name_to_site_name, image_name_to_well_name,
+                       has_table, read_table, write_image_information)
 
 logger = get_logger('Workflow.BatchJob.CellLevelAnalysis')
 
@@ -139,6 +140,21 @@ def compute_ratios(control_properties, infected_properties, serum_key='serum'):
     result['control_mean'] = control_global_properties[serum_key]['global_mean']
     result['control_median'] = control_global_properties[serum_key]['q0.5_of_cell_means']
     return result
+
+
+def load_cell_outlier_dict(input_file, table_name, class_name):
+    with open_file(input_file, 'r') as f:
+        if not has_table(f, table_name):
+            logger.warning(f"{class_name}: load_cell_outliers: did not find a cell outlier table")
+            return {}
+        keys, table = read_table(f, table_name)
+
+    label_id = keys.index('label_id')
+    outlier_id = keys.index('is_outlier')
+    outlier_type_id = keys.index('outlier_type')
+    outlier_dict = {table[ii, label_id]: (table[ii, outlier_id], table[ii, outlier_type_id])
+                    for ii in range(len(table))}
+    return outlier_dict
 
 
 class DenoiseChannel(BatchJobOnContainer):
@@ -574,6 +590,14 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
                     stat_dict[f'{bg_key}_{semantic_channel_name}'] = bg_stat
         return stat_dict
 
+    def group_images_by_well(self, input_files):
+        images_per_well = defaultdict(list)
+        for in_file in input_files:
+            image_name = os.path.splitext(os.path.split(in_file)[1])[0]
+            well_name = image_name_to_well_name(image_name)
+            images_per_well[well_name].append(in_file)
+        return images_per_well
+
 
 class CellLevelAnalysisWithTableBase(CellLevelAnalysisBase):
     """
@@ -630,12 +654,14 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
                  edge_key='cell_segmentation_edges',
                  cell_outlier_table_name='outliers',
                  image_outlier_table='images/outliers',
+                 well_outlier_table='wells/outliers',
                  **super_kwargs):
 
         self.score_name = score_name
         self.write_summary_images = write_summary_images
 
         self.image_outlier_table = image_outlier_table
+        self.well_outlier_table = well_outlier_table
 
         if self.write_summary_images:
             output_key = [infected_cell_mask_key,
@@ -676,7 +702,6 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         expected_names = set(os.path.splitext(os.path.split(in_file)[1])[0]
                              for in_file in input_files)
 
-        # TODO check if this actually works now
         if image_names != expected_names:
             msg = f"{self.name}: load_image_outliers: image names from table and expected image names do not agree"
             logger.warning(msg)
@@ -685,19 +710,30 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
                         for ii in range(len(table))}
         return outlier_dict
 
-    def load_cell_outliers(self, input_file):
-        with open_file(input_file, 'r') as f:
-            if not self.has_table(f, self.cell_outlier_table):
-                logger.warning(f"{self.name}: load_cell_outliers: did not find a cell outlier table")
+    def load_well_outliers(self, well_names):
+        with open_file(self.table_out_path, 'r') as f:
+            if not self.has_table(f, self.well_outlier_table):
+                logger.warning(f"{self.name}: load_well_outliers: did not find an well outlier table")
                 return {}
-            keys, table = self.read_table(f, self.cell_outlier_table)
+            keys, table = self.read_table(f, self.well_outlier_table)
 
-        label_id = keys.index('label_id')
+        well_name_id = keys.index('well_name')
         outlier_id = keys.index('is_outlier')
         outlier_type_id = keys.index('outlier_type')
-        outlier_dict = {table[ii, label_id]: (table[ii, outlier_id], table[ii, outlier_type_id])
+
+        well_names = set(table[:, well_name_id])
+        expected_names = set(well_names)
+
+        if well_names != expected_names:
+            msg = f"{self.name}: load_well_outliers: well names from table and expected well names do not agree"
+            logger.warning(msg)
+
+        outlier_dict = {table[ii, well_name_id]: (table[ii, outlier_id], table[ii, outlier_type_id])
                         for ii in range(len(table))}
         return outlier_dict
+
+    def load_cell_outliers(self, input_file):
+        return load_cell_outlier_dict(input_file, self.cell_outlier_table, self.name)
 
     def write_image_table(self, input_files):
 
@@ -747,15 +783,14 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         return table, column_names
 
     def write_well_table(self, input_files):
-        # group input files per well
-        input_files_per_well = defaultdict(list)
-        for in_file in input_files:
-            image_name = os.path.splitext(os.path.split(in_file)[1])[0]
-            well_name = image_name_to_well_name(image_name)
-            input_files_per_well[well_name].append(in_file)
 
+        # group input files per well
+        input_files_per_well = self.group_images_by_well(input_files)
+        well_names = list(input_files_per_well.keys())
+
+        well_outlier_dict = self.load_well_outliers(well_names)
         image_outlier_dict = self.load_image_outliers(input_files)
-        column_names = ['well_name', 'n_outlier_images', 'n_outlier_cells']
+        column_names = ['well_name', 'n_outlier_images', 'n_outlier_cells', 'is_outlier', 'outlier_type']
         table = []
 
         for ii, (well_name, in_files_for_current_well) in enumerate(input_files_per_well.items()):
@@ -767,11 +802,25 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
                                                                              image_names_for_current_well)
                                          if not image_outlier_dict.get(im_name, (-1, ''))[0] == 1]
             n_outlier_images = n_total - len(in_files_for_current_well)
-            if len(in_files_for_current_well) == 0:
-                # TODO: add row full of np.nan for wells of outliers
-                logger.info(f'Skipping well {well_name} as it consists entirely of outliers. '
-                            f'It will not be included in the per-well table.')
+
+            well_is_outlier, outlier_type = well_outlier_dict.get(well_name, (-1, 'not checked'))
+            if well_is_outlier:
+                logger.info(f'Well {well_name} was flagged as outlier.')
+
+            if (well_is_outlier != 1) and (len(in_files_for_current_well) == 0):
+                logger.info(f'Well {well_name} consists entirely of outlier images and will be marked as outlier well.')
+                well_is_outlier = 1
+                outlier_type = 'all images are outliers'
+
+            # add row of nan's if this well is an outlier
+            if well_is_outlier == 1:
+                n_stats = len(column_names) - 5
+                # FIXME in the corner case where the first well we encounter is an outlier, this will fail!
+                # @Roman, what's the best way to fix this?
+                assert n_stats > 0, "Firs well was outlier"
+                table.append([well_name, n_outlier_images, np.nan, well_is_outlier, outlier_type] + [np.nan] * n_stats)
                 continue
+
             infected_cell_statistics, control_cell_statistics = self.load_per_cell_statistics(in_files_for_current_well)
 
             # get all the statistics for this well and their names
@@ -791,7 +840,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
             n_outlier_cells = sum(sum(1 for v in self.load_cell_outliers(in_file).values() if v[0] == 1)
                                   for in_file in in_files_for_current_well)
 
-            table.append([well_name, n_outlier_images, n_outlier_cells] + stat_list)
+            table.append([well_name, n_outlier_images, n_outlier_cells, well_is_outlier, outlier_type] + stat_list)
 
         table = np.array(table)
         n_cols = len(column_names)
