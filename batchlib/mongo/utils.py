@@ -101,7 +101,6 @@ def _create_wells(plate_name, plate_dir):
                 # assume all wells are valid for now
                 "outlier": 0,
                 "outlier_type": "manual",
-                "manual_assessment": "unknown",
                 "images": _create_images(well_name, well_files, outlier_predicate)
             }
         )
