@@ -90,13 +90,42 @@ class TestCellLevelQC(unittest.TestCase):
 class TestImageLevelQC(unittest.TestCase):
     folder = './out'
 
-    # TODO write images that:
-    # - clear te qc
+    def get_image_path(self, image_id):
+        name_pattern = 'WellC01_PointC0%i_000%i_ChannelDAPI,WF_GFP,TRITC,WF_Cy5_Seq0216.h5'
+        return os.path.join(self.folder, name_pattern % (image_id + 1, image_id))
+
+    # TODO write images that: -> we need this for the cell level
     # - violate number of cell criteria
     # - violate number of control cell criteria
     # - violate the ratio criteria
     def setUp(self):
-        pass
+        os.makedirs(self.folder, exist_ok=True)
+
+        # make the segmentations
+        self.cell_seg_key = 'seg'
+        self.segs = []
+        shape = (32, 32)
+
+        # number 1: passes QC
+        self.segs.append(np.random.randint(0, 100, size=shape, dtype='uint64'))
+        # number 2: fails QC because of too few cells
+        self.segs.append(np.ones(shape, dtype='uint64'))
+        # number 3: fails QC because of too many cells
+        self.segs.append(np.arange(self.segs[0].size, dtype='uint64').reshape(shape))
+
+        for ii, seg in enumerate(self.segs):
+            path = self.get_image_path(ii)
+            print(seg.shape)
+
+            with open_file(path, 'a') as f:
+                write_image(f, self.cell_seg_key, seg)
+
+            # make dummy images for the serum and marker channel
+            dummy = np.zeros(seg.shape, dtype='float32')
+            with open_file(path, 'a') as f:
+                write_image(f, 'serum', dummy)
+            with open_file(path, 'a') as f:
+                write_image(f, 'marker', dummy)
 
     def tearDown(self):
         try:
@@ -119,8 +148,7 @@ class TestImageLevelQC(unittest.TestCase):
 
     def test_qc(self):
         outlier_criteria = {'min_number_cells': 10,
-                            'min_number_control_cells': 5,
-                            'check_ratios': True}
+                            'max_number_cells': 1000}
         self.run_wf(outlier_criteria)
         # TODO check the qc results
 

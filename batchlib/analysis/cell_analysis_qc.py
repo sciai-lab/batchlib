@@ -6,14 +6,20 @@ from .cell_level_analysis import (CellLevelAnalysisBase, CellLevelAnalysisWithTa
                                   compute_ratios)
 from ..util.io import open_file, image_name_to_site_name
 
+# TODO all values are still preliminary and need to be validated on actual data
 # default size threshold provided by Vibor
 DEFAULT_CELL_OUTLIER_CRITERIA = {'max_size_threshold': 10000,
                                  'min_size_threshold': 1000}
 
-# TODO determine the values for this
-DEFAULT_IMAGE_OUTLIER_CRITERIA = {'min_number_cells': None,
-                                  'min_number_control_cells': None,
-                                  'check_ratios': True}
+
+DEFAULT_IMAGE_OUTLIER_CRITERIA = {'max_number_cells': 1000,
+                                  'min_number_cells': 10}
+
+DEFAULT_WELL_OUTLIER_CRITERIA = {'max_number_cells_per_image': 1000,
+                                 'min_number_cells_per_image': 10,
+                                 'min_number_control_cells_per_image': 5,
+                                 'min_fraction_of_control_cells': 0.05,
+                                 'check_ratios': True}
 
 
 class CellLevelQC(CellLevelAnalysisBase):
@@ -133,35 +139,37 @@ class ImageLevelQC(CellLevelAnalysisWithTableBase):
                          **super_kwargs)
 
     def outlier_heuristics(self, in_file):
-        infected_stats, control_stats = self.load_per_cell_statistics(in_file,
-                                                                      split_infected_and_control=True)
+        cell_stats = self.load_per_cell_statistics(in_file, split_infected_and_control=False)
 
-        n_infected = len(infected_stats['labels'])
-        n_control = len(control_stats['labels'])
-        n_cells = n_infected + n_control
+        n_cells = len(cell_stats)
 
         outlier_type = ''
         is_outlier = 0
 
         min_n_cells = self.outlier_criteria['min_number_cells']
-        if min_n_cells is not None and n_cells < n_cells:
+        if min_n_cells is not None and n_cells < min_n_cells:
             is_outlier = 1
             outlier_type += 'too few cells;'
 
-        min_control_cells = self.outlier_criteria['min_number_control_cells']
-        if min_control_cells is not None and n_control < min_control_cells:
+        max_n_cells = self.outlier_criteria['max_number_cells']
+        if min_n_cells is not None and n_cells > max_n_cells:
             is_outlier = 1
-            outlier_type += 'too few control cells;'
+            outlier_type += 'too many cells;'
 
-        # check for negative ratios
-        if self.outlier_criteria['check_ratios']:
-            ratios = compute_ratios(control_stats, infected_stats, serum_key=self.serum_key)
-            for name, val in ratios.items():
-                if not name.startswith('ratio'):
-                    continue
-                if val < 0.:
-                    is_outlier = 1
-                    outlier_type += f'{name} is negative'
+        # min_control_cells = self.outlier_criteria['min_number_control_cells']
+        # if min_control_cells is not None and n_control < min_control_cells:
+        #     is_outlier = 1
+        #     outlier_type += 'too few control cells;'
+
+        # # check for negative ratios
+        # if self.outlier_criteria['check_ratios']:
+        #     ratios = compute_ratios(control_stats, infected_stats, serum_key=self.serum_key)
+        #     for name, val in ratios.items():
+        #         if not name.startswith('ratio'):
+        #             continue
+        #         if val < 0.:
+        #             is_outlier = 1
+        #             outlier_type += f'{name} is negative'
 
         if outlier_type == '':
             outlier_type = 'none'
@@ -218,10 +226,35 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
     """ Combining heuristic and manual quality control for wells
     """
 
+    @staticmethod
+    def validate_outlier_criteria(outlier_criteria):
+        keys = set(outlier_criteria.keys())
+        expected_keys = set(DEFAULT_WELL_OUTLIER_CRITERIA.keys())
+        if keys != expected_keys:
+            raise ValueError("Invalid well outlier criteria")
+
     def __init__(self,
                  cell_seg_key='cell_segmentation',
-                 table_out_key='wells/outlier'):
-        pass
+                 serum_key='serum',
+                 marker_key='marker',
+                 serum_bg_key='plate_bg_median',
+                 marker_bg_key='plate_bg_median',
+                 table_out_key='images/outliers',
+                 outlier_criteria=DEFAULT_WELL_OUTLIER_CRITERIA,
+                 **super_kwargs):
+
+        self.validate_outlier_criteria(outlier_criteria)
+        self.outlier_criteria = outlier_criteria
+
+        self.table_out_key = table_out_key
+        super().__init__(table_out_keys=[table_out_key],
+                         check_image_outputs=False,
+                         cell_seg_key=cell_seg_key,
+                         serum_key=serum_key,
+                         marker_key=marker_key,
+                         serum_bg_key=serum_bg_key,
+                         marker_bg_key=marker_bg_key,
+                         **super_kwargs)
 
     def run(self, input_files, output_files):
         pass
