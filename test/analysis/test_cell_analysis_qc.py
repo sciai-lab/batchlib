@@ -21,8 +21,8 @@ class TestCellLevelQC(unittest.TestCase):
         self.seg = np.array(self.seg, dtype='uint64')
         self.cell_seg_key = 'seg'
 
-        self.path = os.path.join(self.folder,
-                                 'WellC01_PointC01_0000_ChannelDAPI,WF_GFP,TRITC,WF_Cy5_Seq0216.h5')
+        im_name = 'WellC01_PointC01_0000_ChannelDAPI,WF_GFP,TRITC,WF_Cy5_Seq0216.h5'
+        self.path = os.path.join(self.folder, im_name)
         with open_file(self.path, 'a') as f:
             write_image(f, self.cell_seg_key, self.seg)
 
@@ -106,16 +106,28 @@ class TestImageLevelQC(unittest.TestCase):
         self.segs = []
         shape = (32, 32)
 
-        # number 1: passes QC
+        # number 1 + 2 + 3: passes QC
         self.segs.append(np.random.randint(0, 100, size=shape, dtype='uint64'))
-        # number 2: fails QC because of too few cells
+        self.segs.append(np.random.randint(0, 100, size=shape, dtype='uint64'))
+        self.segs.append(np.random.randint(0, 100, size=shape, dtype='uint64'))
+        # number 4: fails QC because of too few cells
         self.segs.append(np.ones(shape, dtype='uint64'))
-        # number 3: fails QC because of too many cells
+        # number 5: fails QC because of too many cells
         self.segs.append(np.arange(self.segs[0].size, dtype='uint64').reshape(shape))
 
+        self.exp_heuristic_results = {}
         for ii, seg in enumerate(self.segs):
             path = self.get_image_path(ii)
-            print(seg.shape)
+            name = os.path.splitext(os.path.split(path)[1])[0]
+
+            if ii < 3:
+                res = (0, 'none')
+            elif ii == 3:
+                res = (1, 'too few cells')
+            elif ii == 4:
+                res = (1, 'too many cells')
+
+            self.exp_heuristic_results[name] = res
 
             with open_file(path, 'a') as f:
                 write_image(f, self.cell_seg_key, seg)
@@ -134,7 +146,8 @@ class TestImageLevelQC(unittest.TestCase):
             pass
 
     def run_wf(self, outlier_criteria):
-        from batchlib.analysis.cell_level_analysis import InstanceFeatureExtraction, FindInfectedCells
+        from batchlib.analysis.cell_level_analysis import (InstanceFeatureExtraction,
+                                                           FindInfectedCells)
         from batchlib.analysis.cell_analysis_qc import ImageLevelQC
         from batchlib.workflow import run_workflow
 
@@ -150,7 +163,36 @@ class TestImageLevelQC(unittest.TestCase):
         outlier_criteria = {'min_number_cells': 10,
                             'max_number_cells': 1000}
         self.run_wf(outlier_criteria)
-        # TODO check the qc results
+
+        path = os.path.join(self.folder, 'out_table.hdf5')
+        self.assertTrue(os.path.exists(path))
+        qc_table_name = 'images/outliers'
+        with open_file(path, 'r') as f:
+            col_names, table = read_table(f, qc_table_name)
+
+        n_images = len(self.segs)
+        n_cols = 4
+        exp_shape = (n_images, n_cols)
+
+        self.assertEqual(len(col_names), n_cols)
+        self.assertEqual(table.shape, exp_shape)
+
+        im_name_col = col_names.index('image_name')
+        outlier_col = col_names.index('is_outlier')
+        outlier_type_col = col_names.index('outlier_type')
+        results = {row[im_name_col]: (row[outlier_col], row[outlier_type_col])
+                   for row in table}
+
+        keyword = 'heuristic: '
+        exp_results = self.exp_heuristic_results
+        for im_name, (res_outlier, res_type) in results.items():
+            self.assertIn(im_name, exp_results)
+            exp_outlier, exp_type = exp_results[im_name]
+            self.assertEqual(res_outlier, exp_outlier)
+
+            idx = res_type.find(keyword) + len(keyword)
+            res_type = res_type[idx:]
+            self.assertEqual(res_type, exp_type)
 
 
 if __name__ == '__main__':

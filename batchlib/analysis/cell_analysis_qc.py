@@ -141,7 +141,7 @@ class ImageLevelQC(CellLevelAnalysisWithTableBase):
     def outlier_heuristics(self, in_file):
         cell_stats = self.load_per_cell_statistics(in_file, split_infected_and_control=False)
 
-        n_cells = len(cell_stats)
+        n_cells = len(cell_stats['labels'])
 
         outlier_type = ''
         is_outlier = 0
