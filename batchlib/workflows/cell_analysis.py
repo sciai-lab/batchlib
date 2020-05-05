@@ -228,12 +228,12 @@ def run_cell_analysis(config):
     for identifier in table_identifiers:
         table_path = CellLevelAnalysis.folder_to_table_path(config.folder, identifier)
         all_plots(table_path, plot_folder,
-                  table_key=f'tables/{CellLevelAnalysis.image_table_key}',
+                  table_key=f'tables/images/{identifier}',
                   identifier=identifier + '_per-image',
                   stat_names=stat_names,
                   wedge_width=0.3)
         all_plots(table_path, plot_folder,
-                  table_key=f'tables/{CellLevelAnalysis.well_table_key}',
+                  table_key=f'tables/wells/{identifier}',
                   identifier=identifier + '_per-well',
                   stat_names=stat_names,
                   wedge_width=0)
