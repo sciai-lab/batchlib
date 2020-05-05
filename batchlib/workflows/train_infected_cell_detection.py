@@ -286,15 +286,16 @@ def save_gt_infected(config):
                  force_recompute=False)
 
 
-def get_score_grid(config, SearchSpace, in_files):
+def get_score_grid(config, SearchSpace, ann_files):
     def get_prediction_and_eval_score(
         seg_key,
         ignore_nuclei,
         split_statistic,
         infected_threshold,
-        in_file,
+        ann_file,
     ):
         identifier = get_identifier(seg_key, ignore_nuclei, split_statistic, infected_threshold)
+        in_file = ann_to_in_file(ann_file)
         out_file = in_to_out_file(config, in_file)
         assert os.path.isfile(out_file), f'Output file missing: {out_file}'
         with open_file(out_file, 'r') as f:
@@ -324,7 +325,7 @@ def get_score_grid(config, SearchSpace, in_files):
         ignore_nuclei=SearchSpace.ignore_nuclei,
         split_statistic=SearchSpace.split_statistic,
         infected_threshold=SearchSpace.infected_threshold,
-        in_file=in_files,
+        ann_file=ann_files,
         n_jobs=0,
     )
 
