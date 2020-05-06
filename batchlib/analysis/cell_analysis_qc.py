@@ -253,8 +253,8 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
         infected_stats, control_stats = self.load_per_cell_statistics(in_files)
 
         n_images = len(in_files)
-        n_infected = len(infected_stats['labels'])
-        n_control = len(control_stats['labels'])
+        n_infected = len(infected_stats[self.serum_key]['label_id'])
+        n_control = len(control_stats[self.serum_key]['label_id'])
         n_cells = n_infected + n_control
 
         outlier_type = ''
@@ -266,7 +266,7 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
             outlier_type += 'too few cells;'
 
         max_cells_per_im = self.outlier_criteria['max_number_cells_per_image']
-        if max_cells_per_im is not None and n_cells < max_cells_per_im * n_images:
+        if max_cells_per_im is not None and n_cells > max_cells_per_im * n_images:
             is_outlier = 1
             outlier_type += 'too many cells;'
 
@@ -301,30 +301,23 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
         return is_outlier, outlier_type
 
     def write_well_outlier_table(self, input_files):
-        column_names = ['well_name', 'site_name', 'is_outlier', 'outlier_type']
+        column_names = ['well_name', 'is_outlier', 'outlier_type']
+        input_files_per_well = self.group_images_by_well(input_files)
+
         table = []
-
-        for in_file in tqdm(input_files, desc="Well level quality control"):
-            image_name = os.path.splitext(os.path.split(in_file)[1])[0]
-            site_name = image_name_to_site_name(image_name)
-
-            # check if the image is an outlier according to the heuristics
-            outlier, outlier_type = self.outlier_heuristics(in_file)
+        for well_name, in_files_for_current_well in tqdm(input_files_per_well.items(),
+                                                         desc='Well level quality control'):
+            outlier, outlier_type = self.outlier_heuristics(in_files_for_current_well)
             if outlier not in (-1, 0, 1):
                 raise ValueError(f"Invalid value for outlier {outlier}")
-
-            table.append([image_name, site_name, outlier, outlier_type])
+            table.append([well_name, outlier, outlier_type])
 
         table = np.array(table)
         n_cols = len(column_names)
         assert n_cols == table.shape[1]
 
-        # set image name to non-visible for the plateViewer
-        visible = np.ones(n_cols, dtype='uint8')
-        visible[0] = False
-
         with open_file(self.table_out_path, 'a') as f:
-            self.write_table(f, self.table_out_key, column_names, table, visible)
+            self.write_table(f, self.table_out_key, column_names, table)
 
     def run(self, input_files, output_files):
         self.write_well_outlier_table(input_files)

@@ -776,11 +776,15 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         # group input files per well
         input_files_per_well = self.group_images_by_well(input_files)
         well_names = list(input_files_per_well.keys())
+        well_names.sort()
+        n_wells = len(well_names)
 
         well_outlier_dict = self.load_well_outliers(well_names)
         image_outlier_dict = self.load_image_outliers(input_files)
         column_names = ['well_name', 'n_outlier_images', 'n_outlier_cells', 'is_outlier', 'outlier_type']
+
         table = []
+        empty_wells = []
 
         for ii, (well_name, in_files_for_current_well) in enumerate(tqdm(input_files_per_well.items(),
                                                                          desc='generating well table')):
@@ -791,16 +795,22 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
             in_files_for_current_well = [in_file for in_file, im_name in zip(in_files_for_current_well,
                                                                              image_names_for_current_well)
                                          if not image_outlier_dict.get(im_name, (-1, ''))[0] == 1]
+
+            if len(in_files_for_current_well) == 0:
+                logger.info(f'Well {well_name} consists entirely of outlier images and will be marked as outlier well.')
+                # if we have no input images, we cannot run 'load_per_cell_statistics'
+                # -> need to skip computation for this well
+                # we also might not have the correct 'column_names' yet, because we may only got empty wells so far.
+                # -> we just append the well name, mark this well as empty and fix the issue later
+                table.append([well_name])
+                empty_wells.append(well_name)
+                continue
+
             n_outlier_images = n_total - len(in_files_for_current_well)
 
             well_is_outlier, outlier_type = well_outlier_dict.get(well_name, (-1, 'not checked'))
             if well_is_outlier == 1:
                 logger.info(f'Well {well_name} was flagged as outlier.')
-
-            if (well_is_outlier != 1) and (len(in_files_for_current_well) == 0):
-                logger.info(f'Well {well_name} consists entirely of outlier images and will be marked as outlier well.')
-                well_is_outlier = 1
-                outlier_type = 'all images are outliers'
 
             infected_cell_statistics, control_cell_statistics = self.load_per_cell_statistics(in_files_for_current_well)
 
@@ -821,6 +831,21 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
             n_outlier_cells = sum(sum(1 for v in self.load_cell_outliers(in_file).values() if v[0] == 1)
                                   for in_file in in_files_for_current_well)
             table.append([well_name, n_outlier_images, n_outlier_cells, well_is_outlier, outlier_type] + stat_list)
+
+        # check if we have to insert to the table for empty wells
+        if len(empty_wells) > 0:
+            if len(empty_wells) == n_wells:
+                logger.warning(f"{self.name}: all wells are empty (all images are outliers)")
+                # make dummy table
+                table = [[well_name, np.nan, np.nan, 'all images are outliers', 1] for well_name in well_names]
+            else:
+                n_cols = len(column_names)
+                if not all(len(row) in (1, n_cols) for row in table):
+                    raise RuntimeError("Invalid number of columns in well table")
+                outlier_row = [np.nan, np.nan, 'all images are outliers', 1]
+                outlier_row += [np.nan] * (n_cols - len(outlier_row) - 1)
+                assert len(outlier_row) == n_cols - 1
+                table = [row if len(row) == n_cols else row + outlier_row for row in table]
 
         table = np.array(table)
         n_cols = len(column_names)

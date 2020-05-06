@@ -92,8 +92,8 @@ class TestImageLevelQC(unittest.TestCase):
     folder = './out'
 
     def get_image_path(self, image_id):
-        name_pattern = 'WellC01_PointC0%i_000%i_ChannelDAPI,WF_GFP,TRITC,WF_Cy5_Seq0216.h5'
-        return os.path.join(self.folder, name_pattern % (image_id + 1, image_id))
+        name_pattern = 'WellC01_PointC01_000%i_ChannelDAPI,WF_GFP,TRITC,WF_Cy5_Seq0216.h5'
+        return os.path.join(self.folder, name_pattern % image_id)
 
     def setUp(self):
         os.makedirs(self.folder, exist_ok=True)
@@ -264,10 +264,10 @@ class TestWellLevelQC(unittest.TestCase):
 
     def get_image_path(self, well_id, image_id):
         name_pattern = 'WellC0%i_PointC0%i_000%i_ChannelDAPI,WF_GFP,TRITC,WF_Cy5_Seq0216.h5'
-        return os.path.join(self.folder, name_pattern % (well_id, image_id + 1, image_id))
+        return os.path.join(self.folder, name_pattern % (well_id, well_id, image_id))
 
     def get_well_name(self, well_id):
-        return 'WellC0%i' % well_id
+        return 'C0%i' % well_id
 
     def write_dummy_channels(self, path):
         dummy = np.zeros(self.shape, dtype='float32')
@@ -337,35 +337,44 @@ class TestWellLevelQC(unittest.TestCase):
             with open_file(path, 'a') as f:
                 write_image(f, self.cell_seg_key, segs[im_id])
             self.write_dummy_channels(path)
-        return 1, 'all images are outliers'
+        return 1, 'too few cells'
 
     def setUp(self):
         os.makedirs(self.folder, exist_ok=True)
 
         self.exp_results = {}
+        self.exp_results_simple = {}
         for well_id in range(self.n_wells):
 
             # write all outlier images well as first well,
             # to check for this corner case
             if well_id == 0:
                 res = self.all_outlier_image_well(well_id)
+                res_simple = res
             # next write all the other outliers
             elif well_id == 1:
                 res = self.few_cell_well(well_id)
+                res_simple = res
             elif well_id == 2:
                 res = self.many_cell_well(well_id)
+                res_simple = res
             elif well_id == 3:
                 res = self.few_control_well(well_id)
+                res_simple = (0, 'none')
             elif well_id == 4:
                 res = self.low_control_fraction_well(well_id)
+                res_simple = (0, 'none')
             elif well_id == 5:
                 res = self.negative_ratio_well(well_id)
+                res_simple = (0, 'none')
             # the other wells are non-outlies
             else:
                 res = self.normal_well(well_id)
+                res_simple = res
 
             well_name = self.get_well_name(well_id)
             self.exp_results[well_name] = res
+            self.exp_results_simple[well_name] = res_simple
 
     def tearDown(self):
         try:
@@ -373,10 +382,11 @@ class TestWellLevelQC(unittest.TestCase):
         except OSError:
             pass
 
-    def run_wf(self, outlier_criteria):
+    def run_wf(self, outlier_criteria, run_analysis=False):
         from batchlib.analysis.cell_level_analysis import (InstanceFeatureExtraction,
                                                            FindInfectedCells)
         from batchlib.analysis.cell_analysis_qc import ImageLevelQC, WellLevelQC
+        from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
         from batchlib.workflow import run_workflow
 
         job_dict = {
@@ -386,23 +396,20 @@ class TestWellLevelQC(unittest.TestCase):
             WellLevelQC: {'build': {'cell_seg_key': self.cell_seg_key,
                                     'outlier_criteria': outlier_criteria}}
         }
+        if run_analysis:
+            job_dict[CellLevelAnalysis] = {'build': {'cell_seg_key': self.cell_seg_key}}
         run_workflow('test', self.folder, job_dict)
 
-    def test_qc(self):
-        outlier_criteria = {'max_number_cells_per_image': 500,
-                            'min_number_cells_per_image': 10,
-                            'min_number_control_cells_per_image': 5,
-                            'min_fraction_of_control_cells': 0.05,
-                            'check_ratios': True}
-        self.run_wf(outlier_criteria)
+    def _run_test(self, outlier_criteria, exp_results, run_analysis=False):
+        self.run_wf(outlier_criteria, run_analysis=run_analysis)
 
         path = os.path.join(self.folder, 'out_table.hdf5')
         self.assertTrue(os.path.exists(path))
-        qc_table_name = 'images/wells'
+        qc_table_name = 'wells/outliers'
         with open_file(path, 'r') as f:
             col_names, table = read_table(f, qc_table_name)
 
-        n_cols = 4
+        n_cols = 3
         exp_shape = (self.n_wells, n_cols)
 
         self.assertEqual(len(col_names), n_cols)
@@ -414,12 +421,38 @@ class TestWellLevelQC(unittest.TestCase):
         results = {row[well_name_col]: (row[outlier_col], row[outlier_type_col])
                    for row in table}
 
-        exp_results = self.exp_results
+        exp_results = self.exp_results_simple
         for well_name, (res_outlier, res_type) in results.items():
             self.assertIn(well_name, exp_results)
             exp_outlier, exp_type = exp_results[well_name]
             self.assertEqual(res_outlier, exp_outlier)
             self.assertEqual(res_type, exp_type)
+
+    def test_qc_simple(self):
+        outlier_criteria = {'max_number_cells_per_image': 500,
+                            'min_number_cells_per_image': 10,
+                            'min_number_control_cells_per_image': None,
+                            'min_fraction_of_control_cells': None,
+                            'check_ratios': None}
+        self._run_test(outlier_criteria, self.exp_results_simple)
+
+    def test_qc_integration(self):
+        outlier_criteria = {'max_number_cells_per_image': 500,
+                            'min_number_cells_per_image': 10,
+                            'min_number_control_cells_per_image': None,
+                            'min_fraction_of_control_cells': None,
+                            'check_ratios': None}
+        self._run_test(outlier_criteria, self.exp_results_simple, run_analysis=True)
+
+    # TODO we need to generate infected and control cells for this to work
+    @unittest.skip
+    def test_qc(self):
+        outlier_criteria = {'max_number_cells_per_image': 500,
+                            'min_number_cells_per_image': 10,
+                            'min_number_control_cells_per_image': 5,
+                            'min_fraction_of_control_cells': 0.05,
+                            'check_ratios': True}
+        self._run_test(outlier_criteria, self.exp_results)
 
 
 if __name__ == '__main__':
