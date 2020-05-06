@@ -208,9 +208,9 @@ def run_cell_analysis(config):
             'run': {'force_recompute': False}}))
 
     # TODO
-    job_list.append((MergeAnalysisTables), {
+    job_list.append((MergeAnalysisTables, {
         'build': {'input_table_keys': []}
-    })
+    }))
 
     # TODO figure out what this should do now that we merge the tables
     # make sure that db job is executed when all result tables hdf5 are ready (outside of the loop)

@@ -193,7 +193,8 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         super().__init__(input_key=list(self.channel_keys) + [self.cell_seg_key] +
                                        ([self.nuc_seg_key_to_ignore] if self.nuc_seg_key_to_ignore is not None else []),
                          input_ndim=input_ndim,
-                         output_key=['tables/' + key for key in self.output_table_keys],
+                         output_key=self.output_table_keys,
+                         output_format=['table'] * len(self.output_table_keys),
                          identifier=identifier)
 
     def load_sample(self, path, device):
@@ -354,8 +355,10 @@ class FindInfectedCells(BatchJobOnContainer):
         # infected are per default saved at tables/cell_classification/cell_segmentation/marker_key in the container
         self.output_table_key = 'cell_classification/' + self.feature_table_key + \
                                 ('' if identifier is None else '_' + identifier)
-        super().__init__(input_key='tables/' + self.feature_table_key,
-                         output_key='tables/' + self.output_table_key,
+        super().__init__(input_key=self.feature_table_key,
+                         input_format='table',
+                         output_key=self.output_table_key,
+                         output_format='table',
                          identifier=identifier,
                          **super_kwargs)
 
@@ -438,31 +441,11 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
         self.marker_key = cell_seg_key + '/' + marker_key
         self.classification_key = 'cell_classification/' + cell_seg_key + '/' + marker_key
 
-        super().__init__(input_key=[f'tables/{key}'
-                                    for key in (self.serum_key, self.marker_key, self.classification_key)],
+        input_key = [self.serum_key, self.marker_key, self.classification_key]
+        super().__init__(input_key=input_key,
+                         input_format=len(input_key)*['table'],
                          output_key=output_key,
                          **super_kwargs)
-
-    # in the long run we should merge this into BatchJobOnContainer somehow
-    def validate_input(self, path):
-        if not os.path.exists(path):
-            logger.warning(f'{self.name}: validate_input failed: {path} does not exist')
-            return False
-
-        exp_keys = self._input_exp_key
-        if exp_keys is None:
-            return True
-        with open_file(path, 'r') as f:
-            for key in exp_keys:
-                if key not in f:
-                    logger.warning(f'{self.name}: validate_input failed: could not find {key} in {path}')
-                    return False
-                g = f[key]
-                if ('cells' not in g) or ('columns' not in g):
-                    msg = f"{self.name}: validate_input failed: could not find 'cells' or 'columns' in {path}:{key}"
-                    logger.warning(msg)
-                    return False
-        return True
 
     @staticmethod
     def folder_to_table_path(folder, identifier):
