@@ -201,15 +201,17 @@ def run_cell_analysis(config):
                 'serum_key': serum_key,
                 'marker_key': marker_ana_in_key,
                 'cell_seg_key': config.seg_key,
-                # 'outlier_predicate': outlier_predicate,
                 'write_summary_images': True,
                 'scale_factors': config.scale_factors,
                 'identifier': identifier},
             'run': {'force_recompute': False}}))
 
     # TODO
+    # - we need to filter out the mean-with-nuclei and sum-without-nuclei results
+    # - choose the correct reference table !
     job_list.append((MergeAnalysisTables, {
-        'build': {'input_table_keys': []}
+        'build': {'input_table_names': table_identifiers,
+                  'reference_table_name': table_identifiers[0]}
     }))
 
     # TODO figure out what this should do now that we merge the tables
