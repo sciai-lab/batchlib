@@ -9,6 +9,7 @@ from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    InstanceFeatureExtraction,
                                                    FindInfectedCells)
 from batchlib.analysis.cell_analysis_qc import CellLevelQC, ImageLevelQC, WellLevelQC
+from batchlib.analysis.merge_tables import MergeAnalysisTables
 from batchlib.mongo.result_writer import DbResultWriter
 from batchlib.outliers.outlier import get_outlier_predicate
 from batchlib.preprocessing import get_barrel_corrector, get_serum_keys, Preprocess
@@ -206,6 +207,12 @@ def run_cell_analysis(config):
                 'identifier': identifier},
             'run': {'force_recompute': False}}))
 
+    # TODO
+    job_list.append((MergeAnalysisTables), {
+        'build': {'input_table_keys': []}
+    })
+
+    # TODO figure out what this should do now that we merge the tables
     # make sure that db job is executed when all result tables hdf5 are ready (outside of the loop)
     job_list.append((DbResultWriter, {
         'build': {

@@ -144,11 +144,11 @@ def load_cell_outlier_dict(input_file, table_name, class_name):
 
 
 class DenoiseChannel(BatchJobOnContainer):
-    def __init__(self, key_to_denoise, output_key=None, output_ext='.h5'):
-        super(DenoiseChannel, self).__init__(
-            output_ext=output_ext,
+    def __init__(self, key_to_denoise, output_key=None, **super_kwargs):
+        super().__init__(
             input_key=key_to_denoise,
-            output_key=output_key if output_key is not None else key_to_denoise + '_denoised'
+            output_key=output_key if output_key is not None else key_to_denoise + '_denoised',
+            **super_kwargs
         )
 
     def denoise(self, img):
@@ -635,7 +635,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
                  infected_cell_mask_key='infected_cell_mask',
                  serum_per_cell_mean_key='serum_per_cell_mean',
                  edge_key='cell_segmentation_edges',
-                 cell_outlier_table_name='outliers',  # FIXME where should this be used?
+                 cell_outlier_table_name='outliers',
                  image_outlier_table='images/outliers',
                  well_outlier_table='wells/outliers',
                  identifier=None,
