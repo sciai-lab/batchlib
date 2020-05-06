@@ -311,20 +311,69 @@ def get_prediction_and_eval_score(
                                          '/marker_corrected')
     with open_file(out_file, 'r') as f:
         gt_column_names, gt_table = read_table(f, 'infected')
-    infected_indicator = table[:, column_names.index('is_infected')]
-    #control_indicator = table[:, column_names.index('is_control')]
-    labels = table[:, column_names.index('label_id')].astype(np.int32)
-    infected_dict = dict(zip(labels, infected_indicator))
+    pred_infected_indicator = table[:, column_names.index('is_infected')]
+    pred_labels = table[:, column_names.index('label_id')].astype(np.int32)
+    pred_infected_dict = dict(zip(pred_labels, pred_infected_indicator))
 
     gt_infected_indicator = gt_table[:, gt_column_names.index('is_infected')]
     #gt_control_indicator = gt_table[:, gt_column_names.index('is_control')]
     gt_labels = gt_table[:, gt_column_names.index('label_id')].astype(np.int32)
+
+    labels = np.array(list(set(pred_labels).intersection(set(gt_labels)).difference({0})), dtype=np.int32)
+
     gt_infected_dict = dict(zip(gt_labels, gt_infected_indicator))
 
-    accuracy = np.mean([infected_dict.get(i, 0) == gt_infected_dict.get(i, 0)
-                        for i in set(labels).union(gt_labels) if i != 0])
+    pred_infected_indicator = np.array([pred_infected_dict.get(i, 1) for i in labels])
+    gt_infected_indicator = np.array([gt_infected_dict.get(i, 1) for i in labels])
+    true_positives = np.sum(np.logical_and(
+        pred_infected_indicator == gt_infected_indicator,
+        pred_infected_indicator == 1
+    ))
+    false_positives = np.sum(np.logical_and(
+        pred_infected_indicator != gt_infected_indicator,
+        pred_infected_indicator == 1
+    ))
+    true_negatives = np.sum(np.logical_and(
+        pred_infected_indicator == gt_infected_indicator,
+        pred_infected_indicator == 0
+    ))
+    false_negatives = np.sum(np.logical_and(
+        pred_infected_indicator != gt_infected_indicator,
+        pred_infected_indicator == 0
+    ))
+    assert true_positives + true_negatives + false_positives + false_negatives == len(labels)
+    try:
+        precision = true_positives / (true_positives + false_positives)
+    except ZeroDivisionError:
+        precision = np.nan
+
+    try:
+        recall = true_positives / (true_positives + false_negatives)
+    except ZeroDivisionError:
+        recall = np.nan
+
+    try:
+        f_score = 2 * precision * recall / (precision + recall)
+    except ZeroDivisionError:
+        f_score = np.nan
+
+    try:
+        accuracy = (true_positives + true_negatives) / len(labels)
+    except ZeroDivisionError:
+        accuracy = np.nan
+
+    #accuracy = np.mean([infected_dict.get(i, 0) == gt_infected_dict.get(i, 0)
+    #                    for i in set(labels).union(gt_labels) if i != 0])
     #n_cells = np.sum(labels != 0)
-    return accuracy
+
+    # TODO: return all of them in an easy-to-parse manner
+    result = dict(
+        f_score=f_score,
+        precision=precision,
+        recall=recall,
+        accuracy=accuracy
+    )
+    return result['f_score']
 
 
 def get_score_grid(config, SearchSpace, ann_files):
@@ -353,23 +402,21 @@ def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSp
 
 
     ann_files, tiff_files = get_ann_and_tiff_files(config)
-    print(f'Found input tiff files:')
-    [print(f) for f in tiff_files]
-
-    # if os.path.isdir(config.out_dir):
-    #     shutil.rmtree(config.out_dir)
-
-    preprocess(config, ann_files, tiff_files)
-
-    compute_segmentations(config, SubParamRanges)
-
-    extract_feature_grid(config, SubParamRanges, SearchSpace)
-
-    save_gt_infected(config)
-
-    find_infected_grid(config, SearchSpace)
+    # print(f'Found input tiff files:')
+    # [print(f) for f in tiff_files]
+    #
+    # # if os.path.isdir(config.out_dir):
+    # #     shutil.rmtree(config.out_dir)
+    #
+    # preprocess(config, ann_files, tiff_files)
+    #
+    # compute_segmentations(config, SubParamRanges)
+    #
+    # extract_feature_grid(config, SubParamRanges, SearchSpace)
+    #
+    # save_gt_infected(config)
+    #
+    # find_infected_grid(config, SearchSpace)
 
     score_grid = get_score_grid(config, SearchSpace, tiff_files)
-    print(score_grid['result'].max())
-
     np.save(os.path.join(config.out_dir, 'score_grid.npy'), score_grid)
