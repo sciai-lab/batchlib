@@ -17,6 +17,7 @@ dependencies:
     - tqdm
     - vigra
     - pymongo
+    - xlrd
     - pip:
         - tensorflow==1.15
         - stardist
