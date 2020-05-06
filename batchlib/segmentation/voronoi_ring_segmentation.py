@@ -49,6 +49,7 @@ class ErodeSegmentation(BatchJobOnContainer):
     """
     def __init__(self, radius, bg_label=0, **super_kwargs):
         super().__init__(input_ndim=2, output_ndim=2, **super_kwargs)
+        assert isinstance(radius, int), f'Raidus {radius} should be int, got {type(radius)}'
         self.radius = radius
         if bg_label != 0:
             raise NotImplementedError
@@ -56,8 +57,11 @@ class ErodeSegmentation(BatchJobOnContainer):
     def process_image(self, in_path, out_path):
         with open_file(in_path, 'r') as f:
             seg = self.read_image(f, self.input_key)
-        boundaries_and_bg = seg_to_edges(seg)
-        seg[morph.dilation(boundaries_and_bg, morph.disk(self.radius))] = 0
+        if self.radius > 0:
+            ignore_mask = seg_to_edges(seg)
+            if self.radius > 1:
+                ignore_mask = morph.dilation(ignore_mask, morph.disk(self.radius - 1))
+            seg[ignore_mask] = 0
         with open_file(out_path, 'a') as f:
             self.write_image(f, self.output_key, seg)
 
