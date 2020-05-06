@@ -541,7 +541,7 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
 
         # this only accounts for cells that were either classified as infected or control
         stat_dict['n_cells'] = stat_dict['n_infected'] + stat_dict['n_control']
-        stat_dict['fraction_infected'] = stat_dict['n_infected'] / stat_dict['n_cells']
+        stat_dict['fraction_infected'] = nan_on_exception(lambda: stat_dict['n_infected'] / stat_dict['n_cells'])()
 
         stat_dict['cell_size_median_infected'] = np.median(infected_cell_statistics[self.serum_key]['sizes'])
         stat_dict['cell_size_mean_infected'] = np.mean(infected_cell_statistics[self.serum_key]['sizes'])
