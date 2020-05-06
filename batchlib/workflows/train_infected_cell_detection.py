@@ -229,7 +229,8 @@ def find_infected(config, seg_key, ignore_nuclei, split_statistic, infected_thre
                  job_list,
                  config.out_dir,
                  force_recompute=True,
-                 lock_folder=False)
+                 lock_folder=False,
+                 enable_logging=False)
 
 
 def find_infected_grid(config, SearchSpace):
