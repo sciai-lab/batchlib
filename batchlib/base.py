@@ -341,6 +341,8 @@ class BatchJobOnContainer(BatchJob, ABC):
                 raise ValueError(f"Incompatible format {format} for non-present key")
             return ['custom']
 
+        # just making sure that key is tuple or list (this should always be the case, because
+        # it's initialized like this in the constructor)
         assert isinstance(key, (tuple, list))
         n_objects = len(key)
         # if we have key(s) -> assume image
@@ -420,15 +422,16 @@ class BatchJobOnContainer(BatchJob, ABC):
     def _check_table(f, name, log_on_fail):
         actual_name = f'tables/{name}'
         if actual_name not in f:
-            logger.warning(f'BatchJobOnContainer: check failed: could not find table {name} in {f.filename}')
+            log_on_fail(f'BatchJobOnContainer: check failed: could not find table {name} in {f.filename}')
             return False
         g = f[actual_name]
         if not is_group(g):
             log_on_fail(f'BatchJobOnContainer: check failed: {actual_name} is not a group')
             return False
         if ('cells' not in g) or ('columns' not in g):
-            msg = f"BatchJobOnContainer: check failed: could not find 'cells' or 'columns' in {f.fileactual_name}:{actual_name}"
-            logger.warning(msg)
+            cls = BatchJobOnContainer
+            msg = f"{cls}: check failed: could not find 'cells' or 'columns' in {f.fileactual_name}:{actual_name}"
+            log_on_fail(msg)
             return False
         return True
 
@@ -470,10 +473,12 @@ class BatchJobOnContainer(BatchJob, ABC):
         return True
 
     def check_output(self, path, log_on_fail=logger.debug):
-        return self._check_impl(path, self.output_format, self._output_exp_key, self._output_exp_ndim, log_on_fail)
+        return self._check_impl(path, self.output_format, self._output_exp_key,
+                                self._output_exp_ndim, log_on_fail)
 
     def validate_input(self, path):
-        return self._check_impl(path, self.input_format, self._input_exp_key, self._input_exp_ndim, logger.warning)
+        return self._check_impl(path, self.input_format,
+                                self._input_exp_key, self._input_exp_ndim, logger.warning)
 
     def get_invalid_outputs(self, outputs):
         return [path for path in outputs if not self.validate_output(path,
