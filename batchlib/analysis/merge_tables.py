@@ -88,7 +88,7 @@ class MergeAnalysisTables(BatchJobOnContainer):
                 else:
                     if len(table) != len(this_table):
                         raise RuntimeError(f"Invalid number of rows {len(table)}, {len(this_table)}")
-                    table = [row.tolist() + this_row.tolist() for row, this_row in zip(table, this_table)]
+                    table = [row + this_row.tolist() for row, this_row in zip(table, this_table)]
                     column_names.extend(column_names)
 
         table = np.array(table)
