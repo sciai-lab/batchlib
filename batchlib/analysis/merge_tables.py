@@ -26,6 +26,7 @@ class MergeAnalysisTables(BatchJobOnContainer):
     def __init__(self, input_table_names, reference_table_name,
                  common_name_patterns=DEFAULT_COMMON_NAME_PATTERNS,
                  reference_name_patterns=DEFAULT_REFERENCE_NAME_PATTERNS,
+                 analysis_parameters=None,
                  **super_kwargs):
 
         if reference_table_name not in input_table_names:
@@ -40,14 +41,21 @@ class MergeAnalysisTables(BatchJobOnContainer):
         in_table_keys = ['images/' + in_key for in_key in input_table_names]
         in_table_keys += ['wells/' + in_key for in_key in input_table_names]
 
+        out_keys = [self.image_table_name, self.well_table_name]
+        out_format = ['table', 'table']
+        if analysis_parameters is not None:
+            self.analysis_parameters = analysis_parameters
+            self.parameter_table_name = 'parameters'
+            out_keys.append(self.parameter_table_name)
+            out_format.append('table')
+
         # we store the global tables with .hdf5 ending to keep them separate from image files
         in_pattern = '*.hdf5'
         super().__init__(input_pattern=in_pattern,
                          input_key=in_table_keys,
                          input_format=['table'] * len(in_table_keys),
-                         output_key=[self.image_table_name,
-                                     self.well_table_name],
-                         output_format=['table', 'table'],
+                         output_key=out_keys,
+                         output_format=out_format,
                          **super_kwargs)
 
     def _get_column_mask(self, column_names, is_reference_table, keep_names):
@@ -131,6 +139,12 @@ class MergeAnalysisTables(BatchJobOnContainer):
     def merge_well_tables(self, in_file, out_file):
         self._merge_tables(in_file, out_file, 'wells', self.well_table_name)
 
+    def write_parameter_table(self, out_file):
+        col_names = list(self.analysis_parameters.keys())
+        table = np.array(list(self.analysis_parameters.values()))[:, None]
+        with open_file(out_file, 'a') as f:
+            self.write_table(f, self.parameter_table_name, col_names, table)
+
     def run(self, input_files, output_files):
         if len(input_files) != 1 or len(output_files) != 1:
             raise ValueError(f"{self.name}: expect only a single table file, not {len(input_files)}")
@@ -138,3 +152,5 @@ class MergeAnalysisTables(BatchJobOnContainer):
         in_file, out_file = input_files[0], output_files[0]
         self.merge_image_tables(in_file, out_file)
         self.merge_well_tables(in_file, out_file)
+        if self.analysis_parameters is not None:
+            self.write_parameter_table(out_file)

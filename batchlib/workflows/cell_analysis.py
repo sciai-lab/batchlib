@@ -8,7 +8,10 @@ from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    DenoiseByGrayscaleOpening,
                                                    InstanceFeatureExtraction,
                                                    FindInfectedCells)
-from batchlib.analysis.cell_analysis_qc import CellLevelQC, ImageLevelQC, WellLevelQC
+from batchlib.analysis.cell_analysis_qc import (CellLevelQC, ImageLevelQC, WellLevelQC,
+                                                DEFAULT_CELL_OUTLIER_CRITERIA,
+                                                DEFAULT_IMAGE_OUTLIER_CRITERIA,
+                                                DEFAULT_WELL_OUTLIER_CRITERIA)
 from batchlib.analysis.merge_tables import MergeAnalysisTables
 from batchlib.mongo.result_writer import DbResultWriter
 from batchlib.outliers.outlier import get_outlier_predicate
@@ -21,6 +24,18 @@ from batchlib.util import get_logger
 from batchlib.util.plate_visualizations import all_plots
 
 logger = get_logger('Workflow.CellAnalysis')
+
+
+# TODO more parameter?
+def get_analysis_parameter(config):
+    # collect all relevant analysis paramter, so that we can
+    # write them to a table and keep track of this
+    params = {'marker_denoise_radius': config.marker_denoise_radius,
+              'dont_ignore_nuclei': config.dont_ignore_nuclei}
+    params.update({'qc_cells_' + k: v for k, v in DEFAULT_CELL_OUTLIER_CRITERIA})
+    params.update({'qc_images_' + k: v for k, v in DEFAULT_IMAGE_OUTLIER_CRITERIA})
+    params.update({'qc_wells_' + k: v for k, v in DEFAULT_WELL_OUTLIER_CRITERIA})
+    return params
 
 
 def get_input_keys(config, serum_in_keys):
@@ -209,9 +224,11 @@ def run_cell_analysis(config):
     # TODO
     # - we need to filter out the mean-with-nuclei and sum-without-nuclei results
     # - choose the correct reference table !
+    analysis_parameters = get_analysis_parameter(config)
     job_list.append((MergeAnalysisTables, {
         'build': {'input_table_names': table_identifiers,
-                  'reference_table_name': table_identifiers[0]}
+                  'reference_table_name': table_identifiers[0],
+                  'analysis_parameters': analysis_parameters}
     }))
 
     # make sure that db job is executed when all result tables hdf5 are ready (outside of the loop)
@@ -299,14 +316,13 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--nuc_key", default='nucleus_segmentation', type=str)
     parser.add("--seg_key", default='cell_segmentation', type=str)
 
-    # TODO I am not sure if changing away from the defaults works for this
+    # TODO do we still need this?
     # whether to run the segmentation / analysis on the corrected or on the corrected data
     parser.add("--segmentation_on_corrected", default=True)
     parser.add("--analysis_on_corrected", default=True)
 
-    # marker denoising
+    # marker denoising and ignore nuclei
     parser.add("--marker_denoise_radius", default=0, type=int)
-
     parser.add("--dont_ignore_nuclei", action='store_true')
 
     # runtime options
