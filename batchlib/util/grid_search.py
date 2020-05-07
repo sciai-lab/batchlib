@@ -1,18 +1,25 @@
 import numpy as np
-from multiprocessing.pool import ThreadPool as Pool
+from multiprocessing.pool import ThreadPool, Pool
 import itertools
 from functools import partial
 from tqdm.auto import tqdm
 
 
-def worker_wrapper(worker, pbar, arg):
+def worker_wrapper(worker, arg, pbar=None):
     args, kwargs = arg
     if pbar is not None:
         pbar.update(1)
     return worker(*args, **kwargs)
 
 
-def execute_parallel(func, args_list=None, kwargs_list=None, n_jobs=0):
+def order_saving_worker_wrapper(worker, arg, pbar=None):
+    i, (args, kwargs) = arg
+    if pbar is not None:
+        pbar.update(1)
+    return i, worker(*args, **kwargs)
+
+
+def execute_parallel(func, args_list=None, kwargs_list=None, n_jobs=0, use_threading=False):
     assert args_list is not None or kwargs_list is not None
     if args_list is None:
         assert kwargs_list is not None, 'either args_list or kwargs_list must not be None'
@@ -21,13 +28,19 @@ def execute_parallel(func, args_list=None, kwargs_list=None, n_jobs=0):
         assert args_list is not None, 'either args_list or kwargs_list must not be None'
         kwargs_list = [{}] * len(args_list)
 
-    if n_jobs > 0:
+    if n_jobs > 0 and use_threading:
         pbar = tqdm(total=len(args_list))
-        with Pool(n_jobs) as p:
-            results = list(p.imap(partial(worker_wrapper, func, pbar), zip(args_list, kwargs_list)))
+        with ThreadPool(n_jobs) as p:
+            results = list(p.imap(partial(worker_wrapper, func, pbar=pbar), zip(args_list, kwargs_list)))
         pbar.close()
+    elif n_jobs > 0 and not use_threading:  # use multiprocessing
+        with Pool(n_jobs) as p:
+            unordered_results = list(tqdm(p.imap_unordered(partial(order_saving_worker_wrapper, func),
+                                                           enumerate(zip(args_list, kwargs_list))),
+                                          total=len(args_list)))
+            results = list(map(lambda x: x[1], sorted(unordered_results)))
     else:
-        results = [func(args, kwargs) for args, kwargs in zip(args_list, kwargs_list)]
+        results = [func(*args, **kwargs) for args, kwargs in zip(args_list, kwargs_list)]
     return results
 
 
