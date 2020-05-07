@@ -97,16 +97,9 @@ class DbResultWriter(BatchJobOnContainer):
 
         plate_name = os.path.split(self.folder)[1]
 
-        result_tables = []
-        for input_file in input_files:
-            analysis_name = _get_analysis_name(input_file)
-            analysis_tables = _get_analysis_tables(input_file)
-            result_tables.append(
-                {
-                    "analysis_name": analysis_name,
-                    "tables": analysis_tables
-                }
-            )
+        assert len(input_files) == 1, f"Expected a single table hdf5 file, but {len(input_files)} were given"
+        input_file = input_files[0]
+        result_tables = _get_analysis_tables(input_file)
 
         # this is a bit hacky: parsing the workflow name and execution duration from the log file in the work_dir,
         # but I don't see a better way to do it atm
@@ -120,7 +113,8 @@ class DbResultWriter(BatchJobOnContainer):
             "result_tables": result_tables
         }
 
-        # we've reached this point, so there is either no result document for a given (batchlib_versin, workflow_name, plate_name)
+        # we've reached this point, so there is either no result document for a given
+        # (batchlib_versin, workflow_name, plate_name)
         # or there is one and we want to replace it (i.e. force_recompute=True)
         _filter = {
             "workflow_name": result_object["workflow_name"],

@@ -214,7 +214,6 @@ def run_cell_analysis(config):
                   'reference_table_name': table_identifiers[0]}
     }))
 
-    # TODO figure out what this should do now that we merge the tables
     # make sure that db job is executed when all result tables hdf5 are ready (outside of the loop)
     job_list.append((DbResultWriter, {
         'build': {
