@@ -93,7 +93,7 @@ def well_plot(data_dict, infected_list=None,
         # central circle is showing the median
         central_circle = Circle(center, radius - wedge_width)
         median = np.median(values)
-        if math.isnan(median):
+        if not math.isnan(median):
             patches.append(central_circle)
             patch_values.append(median)
         else:
@@ -107,7 +107,7 @@ def well_plot(data_dict, infected_list=None,
                           (360 / n_samples * (i + angular_gap)),
                           360 / n_samples * (i + 1 - angular_gap),
                           width=wedge_width)
-            if math.isnan(value):
+            if not math.isnan(value):
                 patches.append(wedge)
                 patch_values.append(value)
             else:
