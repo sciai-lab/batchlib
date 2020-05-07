@@ -85,10 +85,18 @@ def image_name_to_site_name(image_name):
     return site_name
 
 
+def in_file_to_image_name(in_file):
+    name = os.path.split(in_file)[1]
+    name = os.path.splitext(name)[0]
+    return name
+
+
+def in_file_to_plate_name(in_file):
+    return os.path.basename(os.path.dirname(in_file))
+
+
 def get_image_and_site_names(folder, pattern):
-    im_names = glob(os.path.join(folder, pattern))
-    im_names = [os.path.split(name)[1] for name in im_names]
-    im_names = [os.path.splitext(name)[0] for name in im_names]
+    im_names = [in_file_to_image_name(name) for name in glob(os.path.join(folder, pattern))]
     site_names = [image_name_to_site_name(name) for name in im_names]
     return im_names, site_names
 

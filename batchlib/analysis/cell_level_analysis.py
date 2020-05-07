@@ -12,6 +12,7 @@ from batchlib.util.logging import get_logger
 from ..base import BatchJobOnContainer
 from ..util.image import seg_to_edges
 from ..util.io import (open_file, image_name_to_site_name, image_name_to_well_name,
+                       in_file_to_image_name, in_file_to_plate_name,
                        has_table, read_table, write_image_information)
 
 logger = get_logger('Workflow.BatchJob.CellLevelAnalysis')
@@ -174,6 +175,9 @@ class DenoiseByGrayscaleOpening(DenoiseChannel):
 
 
 def _load_image_outliers(name, table_out_path, image_outlier_table, input_files):
+    if image_outlier_table is None:
+        logger.warning(f"{name}: load_image_outliers: "
+                       f"No image_outlier_table specified")
     if not os.path.isfile(table_out_path):
         logger.warning(f"{name}: load_image_outliers: "
                        f"did not find the hdf5 file to load an outlier table from")
@@ -189,8 +193,7 @@ def _load_image_outliers(name, table_out_path, image_outlier_table, input_files)
     outlier_type_id = keys.index('outlier_type')
 
     image_names = set(table[:, im_name_id])
-    expected_names = set(os.path.splitext(os.path.split(in_file)[1])[0]
-                         for in_file in input_files)
+    expected_names = set(in_file_to_image_name(in_file) for in_file in input_files)
 
     if image_names != expected_names:
         msg = f"{name}: load_image_outliers: image names from table and expected image names do not agree"
@@ -221,8 +224,7 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
 
         # tables are per default saved at tables/cell_segmentation/channel in the container
         output_group = cell_seg_key if identifier is None else cell_seg_key + '_' + identifier
-        self.output_table_keys = [output_group + '/' + channel for channel in channel_keys] + \
-                                 ([self.image_outlier_table] if self.image_outlier_table is not None else [])
+        self.output_table_keys = [output_group + '/' + channel for channel in channel_keys]
         super().__init__(input_key=list(self.channel_keys) + [self.cell_seg_key] +
                                        ([self.nuc_seg_key_to_ignore] if self.nuc_seg_key_to_ignore is not None else []),
                          input_ndim=input_ndim,
@@ -490,19 +492,26 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
     """
     def __init__(self,
                  cell_seg_key, serum_key, marker_key,
-                 serum_bg_key, marker_bg_key,
-                 output_key=None, **super_kwargs):
+                 serum_bg_key=None, marker_bg_key=None,
+                 output_key=None,
+                 validate_cell_classification=True,
+                 **super_kwargs):
 
         self.cell_seg_key = cell_seg_key
         self.serum_bg_key = serum_bg_key
         self.marker_bg_key = marker_bg_key
 
         # TODO allow for serum and marker data to come from different segmentations
+        #  Idea: pass these things directly (with cell_seg_key and '/').
+        #  Allows for more options + job_dict is more readable
         self.serum_key = cell_seg_key + '/' + serum_key
         self.marker_key = cell_seg_key + '/' + marker_key
         self.classification_key = 'cell_classification/' + cell_seg_key + '/' + marker_key
 
-        input_key = [self.serum_key, self.marker_key, self.classification_key]
+        if validate_cell_classification:
+            input_key = [self.serum_key, self.marker_key, self.classification_key]
+        else:
+            input_key = [self.serum_key, self.marker_key]
         super().__init__(input_key=input_key,
                          input_format=len(input_key)*['table'],
                          output_key=output_key,
@@ -663,6 +672,112 @@ class CellLevelAnalysisWithTableBase(CellLevelAnalysisBase):
                                                            ignore_failed_outputs)
         else:
             return have_table
+
+
+def add_site_name_to_image_table(column_names, table):
+    assert column_names[0] == 'image_name'
+    column_names = list(column_names)
+    column_names.insert(1, 'site_name')
+    table = np.array(table).tolist()
+    for row in table:
+        row.insert(1, image_name_to_site_name(row[0]))
+    return column_names, np.array(table)
+
+
+class ExtractBackground(CellLevelAnalysisWithTableBase):
+    def __init__(self,
+                 cell_seg_key, serum_key, marker_key,  # TODO: get rid of this in CellLevelAnalysisWithTableBase
+                 actual_channels_to_use,
+                 image_outlier_table='images/outliers',
+                 identifier=None,
+                 **super_kwargs):
+
+        self.channel_keys = actual_channels_to_use
+        self.image_outlier_table = image_outlier_table
+
+        group_name = 'backgrounds' if identifier is None else f'backgrounds_{identifier}'
+        self.image_table_key = 'images/' + group_name
+        self.well_table_key = 'wells/' + group_name
+        self.plate_table_key = 'plate/' + group_name
+
+        super(ExtractBackground, self).__init__(
+            cell_seg_key=cell_seg_key, serum_key=serum_key, marker_key=marker_key,
+            table_out_keys=[self.image_table_key, self.well_table_key, self.plate_table_key],
+            validate_cell_classification=False,
+            identifier=identifier
+        )
+
+    def get_bg_segment(self, path, device):
+        with open_file(path, 'r') as f:
+            channels = [self.read_image(f, key) for key in self.channel_keys]
+            cell_seg = self.read_image(f, self.cell_seg_key)
+
+        channels = [torch.FloatTensor(channel.astype(np.float32)).to(device) for channel in channels]
+        cell_seg = torch.LongTensor(cell_seg.astype(np.int32)).to(device)
+
+        return torch.stack(channels)[:, cell_seg == 0]
+
+    def get_bg_stats(self, bg_values):
+        if bg_values is None:
+            return {'median': [np.nan] * len(self.channel_keys),
+                    'mad': [np.nan] * len(self.channel_keys)}
+        # bg_vales should have shape n_channels, n_pixels
+        bg_values = bg_values.cpu().numpy().astype(np.float32)
+        medians = np.median(bg_values, axis=1)
+        mads = np.median(np.abs(bg_values - medians[:, None]), axis=1)
+
+        return {'median': medians, 'mad': mads}
+    
+    def stat_dict_to_table(self, stat_dict, first_column_name):
+        column_names = [first_column_name] + [f'{channel}_{stat}'
+                                              for channel in self.channel_keys
+                                              for stat in list(next(iter(stat_dict.values())))]
+        table = [list(stat_dict.keys())] + [[d[stat][i] for d in stat_dict.values()]
+                                            for i, _ in enumerate(self.channel_keys)
+                                            for stat in list(next(iter(stat_dict.values())))]
+        table = np.array(table).T
+        if first_column_name == 'image_name':
+            # image tables need an extra 'site_name' column
+            column_names, table = add_site_name_to_image_table(column_names, table)
+        n_cols = len(column_names)
+        assert n_cols == table.shape[1]
+        return column_names, table
+
+    def write_stat_dict_to_talbe(self, stat_dict, first_column_name, table_key):
+        column_names, table = self.stat_dict_to_table(stat_dict, first_column_name)
+        with open_file(self.table_out_path, 'a') as f:
+            self.write_table(f, table_key, column_names, table)
+
+    def run(self, input_files, out_files):
+        # first, get plate wide and per-well background statistics
+        logger.info('computing background statistics')
+        bg_dict = {file: self.get_bg_segment(file, device='cpu') for file in input_files}
+        bg_per_image_stats = {in_file_to_image_name(file): self.get_bg_stats(bg_segments)
+                              for file, bg_segments in bg_dict.items()}
+
+        # ignore image outliers in per_well and per_plate backgrounds
+        outlier_dict = _load_image_outliers(self.name, self.table_out_path, self.image_outlier_table, input_files)
+        bg_per_well_dict = defaultdict(list)
+        wells = set()
+        for file, bg_segment in bg_dict.items():
+            well = image_name_to_well_name(os.path.basename(file))
+            wells.add(well)
+            image_name = os.path.splitext(os.path.split(file)[1])[0]
+            if outlier_dict.get(image_name, (-1, None))[0] == 1:
+                logger.info(f'{self.name}: skipping outlier image in bg calculation')
+                continue
+            bg_per_well_dict[well].append(bg_segment)
+        bg_per_well_dict = {well: torch.cat(bg_segments, dim=1) for well, bg_segments in bg_per_well_dict.items()}
+        bg_per_well_stats = {well: self.get_bg_stats(bg_per_well_dict.get(well, None)) for well in wells}
+
+        bg_plate_stats = self.get_bg_stats(torch.cat(list(bg_per_well_dict.values()), dim=1)
+                                           if len(bg_per_well_dict) > 0 else None)
+
+        # save the results in tables
+        self.write_stat_dict_to_talbe(bg_per_image_stats, 'image_name', self.image_table_key)
+        self.write_stat_dict_to_talbe(bg_per_well_stats, 'well_name', self.well_table_key)
+        plate_name = in_file_to_plate_name(input_files[0])
+        self.write_stat_dict_to_talbe({plate_name: bg_plate_stats}, 'plate_name', self.plate_table_key)
 
 
 class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
