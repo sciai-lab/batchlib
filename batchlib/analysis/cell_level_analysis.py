@@ -199,7 +199,7 @@ def _load_image_outliers(name, table_out_path, image_outlier_table, input_files)
     outlier_dict = {table[ii, im_name_id]: (table[ii, outlier_id], table[ii, outlier_type_id])
                     for ii in range(len(table))}
     return outlier_dict
-    
+
 
 class InstanceFeatureExtraction(BatchJobOnContainer):
     def __init__(self,
@@ -356,7 +356,6 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         return self.folder_to_table_path(self.folder, self.identifier)
 
 
-
     def run(self, input_files, output_files, gpu_id=None):
         # first, get plate wide and per-well background statistics
         logger.info('computing background statistics')
@@ -364,7 +363,7 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         bg_per_image_stats = {file: self.get_bg_stats(bg_segments) for file, bg_segments in bg_dict.items()}
 
         # ignore image outliers in per_well and per_plate backgrounds
-        outlier_dict = self.load_image_outliers(input_files)
+        outlier_dict = _load_image_outliers(self.name, self.table_out_path, self.image_outlier_table, input_files)
         bg_per_well_dict = defaultdict(list)
         wells = set()
         for file, bg_segment in bg_dict.items():
@@ -722,27 +721,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         self.cell_outlier_table = output_group + '/' + serum_key + '_' + cell_outlier_table_name
 
     def load_image_outliers(self, input_files):
-        with open_file(self.table_out_path, 'r') as f:
-            if not self.has_table(f, self.image_outlier_table):
-                logger.warning(f"{self.name}: load_image_outliers: did not find an image outlier table")
-                return {}
-            keys, table = self.read_table(f, self.image_outlier_table)
-
-        im_name_id = keys.index('image_name')
-        outlier_id = keys.index('is_outlier')
-        outlier_type_id = keys.index('outlier_type')
-
-        image_names = set(table[:, im_name_id])
-        expected_names = set(os.path.splitext(os.path.split(in_file)[1])[0]
-                             for in_file in input_files)
-
-        if image_names != expected_names:
-            msg = f"{self.name}: load_image_outliers: image names from table and expected image names do not agree"
-            logger.warning(msg)
-
-        outlier_dict = {table[ii, im_name_id]: (table[ii, outlier_id], table[ii, outlier_type_id])
-                        for ii in range(len(table))}
-        return outlier_dict
+        return _load_image_outliers(self.name, self.table_out_path, self.image_outlier_table, input_files)
 
     def load_well_outliers(self, well_names):
         with open_file(self.table_out_path, 'r') as f:
