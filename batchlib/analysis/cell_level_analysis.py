@@ -173,6 +173,34 @@ class DenoiseByGrayscaleOpening(DenoiseChannel):
         return skimage.morphology.opening(img, selem=self.structuring_element)
 
 
+def _load_image_outliers(name, table_out_path, image_outlier_table, input_files):
+    if not os.path.isfile(table_out_path):
+        logger.warning(f"{name}: load_image_outliers: "
+                       f"did not find the hdf5 file to load an outlier table from")
+        return {}
+    with open_file(table_out_path, 'r') as f:
+        if not has_table(f, image_outlier_table):
+            logger.warning(f"{name}: load_image_outliers: did not find an image outlier table")
+            return {}
+        keys, table = read_table(f, image_outlier_table)
+
+    im_name_id = keys.index('image_name')
+    outlier_id = keys.index('is_outlier')
+    outlier_type_id = keys.index('outlier_type')
+
+    image_names = set(table[:, im_name_id])
+    expected_names = set(os.path.splitext(os.path.split(in_file)[1])[0]
+                         for in_file in input_files)
+
+    if image_names != expected_names:
+        msg = f"{name}: load_image_outliers: image names from table and expected image names do not agree"
+        logger.warning(msg)
+
+    outlier_dict = {table[ii, im_name_id]: (table[ii, outlier_id], table[ii, outlier_type_id])
+                    for ii in range(len(table))}
+    return outlier_dict
+    
+
 class InstanceFeatureExtraction(BatchJobOnContainer):
     def __init__(self,
                  channel_keys=('serum', 'marker'),
@@ -326,32 +354,7 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
     def table_out_path(self):
         return self.folder_to_table_path(self.folder, self.identifier)
 
-    def load_image_outliers(self, input_files):
-        if not os.path.isfile(self.table_out_path):
-            logger.warning(f"{self.name}: load_image_outliers: "
-                           f"did not find the hdf5 file to load an outlier table from")
-            return {}
-        with open_file(self.table_out_path, 'r') as f:
-            if not self.has_table(f, self.image_outlier_table):
-                logger.warning(f"{self.name}: load_image_outliers: did not find an image outlier table")
-                return {}
-            keys, table = self.read_table(f, self.image_outlier_table)
 
-        im_name_id = keys.index('image_name')
-        outlier_id = keys.index('is_outlier')
-        outlier_type_id = keys.index('outlier_type')
-
-        image_names = set(table[:, im_name_id])
-        expected_names = set(os.path.splitext(os.path.split(in_file)[1])[0]
-                             for in_file in input_files)
-
-        if image_names != expected_names:
-            msg = f"{self.name}: load_image_outliers: image names from table and expected image names do not agree"
-            logger.warning(msg)
-
-        outlier_dict = {table[ii, im_name_id]: (table[ii, outlier_id], table[ii, outlier_type_id])
-                        for ii in range(len(table))}
-        return outlier_dict
 
     def run(self, input_files, output_files, gpu_id=None):
         # first, get plate wide and per-well background statistics
