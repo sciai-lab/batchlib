@@ -356,21 +356,23 @@ def get_prediction_and_eval_score(
 
     pred_infected_indicator = np.array([pred_infected_dict.get(i, 1) for i in labels])
     gt_infected_indicator = np.array([gt_infected_dict.get(i, 1) for i in labels])
+
+    # "positives" are detections of control cells (as they are fewer)
     true_positives = np.sum(np.logical_and(
         pred_infected_indicator == gt_infected_indicator,
-        pred_infected_indicator == 1
+        pred_infected_indicator == 0
     ))
     false_positives = np.sum(np.logical_and(
         pred_infected_indicator != gt_infected_indicator,
-        pred_infected_indicator == 1
+        pred_infected_indicator == 0
     ))
     true_negatives = np.sum(np.logical_and(
         pred_infected_indicator == gt_infected_indicator,
-        pred_infected_indicator == 0
+        pred_infected_indicator == 1
     ))
     false_negatives = np.sum(np.logical_and(
         pred_infected_indicator != gt_infected_indicator,
-        pred_infected_indicator == 0
+        pred_infected_indicator == 1
     ))
     assert true_positives + true_negatives + false_positives + false_negatives == len(labels)
     try:
@@ -399,7 +401,7 @@ def get_prediction_and_eval_score(
 
     # TODO: return all of them in an easy-to-parse manner
     result = dict(
-        f_score=f_score,
+        f_score=f_score if not np.isnan(f_score) else 0,
         precision=precision,
         recall=recall,
         accuracy=accuracy
