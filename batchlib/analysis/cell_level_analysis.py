@@ -209,15 +209,11 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
                  channel_keys=('serum', 'marker'),
                  nuc_seg_key_to_ignore=None,
                  cell_seg_key='cell_segmentation',
-                 image_outlier_table='images/outliers',
                  identifier=None):
 
         self.channel_keys = tuple(channel_keys)
         self.nuc_seg_key_to_ignore = nuc_seg_key_to_ignore
         self.cell_seg_key = cell_seg_key
-
-        # only for the well- and plate-wide backgrounds
-        self.image_outlier_table = image_outlier_table
 
         # all inputs should be 2d
         input_ndim = [2] * (1 + len(channel_keys) + (1 if nuc_seg_key_to_ignore else 0))
@@ -298,8 +294,7 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         return torch.stack(channels)[:, cell_seg == ignore_label]
 
     # this is what should be run for each h5 file
-    def save_all_stats(self, in_file, out_file,
-                       bg_per_image_stats, bg_per_well_stats, bg_plate_stats, device):
+    def save_all_stats(self, in_file, out_file, device):
         sample = self.load_sample(in_file, device=device)
         per_cell_statistics = self.eval_cells(*sample)
 
@@ -307,24 +302,6 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         for i, (channel, output_key) in enumerate(zip(self.channel_keys, self.output_table_keys)):
             columns = ['label_id']
             table = [list(labels)]
-
-            # add background stats to all cells (in case we want a different bg for each cell at some point)
-            n_cells = len(table[0])
-            # per-plate bg stats
-            for key, values in bg_plate_stats.items():
-                columns.append(f'plate_bg_{key}')
-                table.append([values[i]] * n_cells)
-            # per-well bg stats
-            well = image_name_to_well_name(os.path.basename(in_file))
-            for key, values in bg_per_well_stats[well].items():
-                columns.append(f'well_bg_{key}')
-                table.append([values[i]] * n_cells)
-            # per-image bg stats
-            for key, values in bg_per_image_stats[in_file].items():
-                columns.append(f'image_bg_{key}')
-                table.append([values[i]] * n_cells)
-
-            # actual per-cell stats
             for key, values in per_cell_statistics[channel].items():
                 columns.append(key)
                 table.append([v if v is not None else np.nan for v in values])
@@ -359,28 +336,6 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
 
 
     def run(self, input_files, output_files, gpu_id=None):
-        # first, get plate wide and per-well background statistics
-        logger.info('computing background statistics')
-        bg_dict = {file: self.get_bg_segment(file, device='cpu') for file in input_files}
-        bg_per_image_stats = {file: self.get_bg_stats(bg_segments) for file, bg_segments in bg_dict.items()}
-
-        # ignore image outliers in per_well and per_plate backgrounds
-        outlier_dict = _load_image_outliers(self.name, self.table_out_path, self.image_outlier_table, input_files)
-        bg_per_well_dict = defaultdict(list)
-        wells = set()
-        for file, bg_segment in bg_dict.items():
-            well = image_name_to_well_name(os.path.basename(file))
-            wells.add(well)
-            image_name = os.path.splitext(os.path.split(file)[1])[0]
-            if outlier_dict.get(image_name, (-1, None))[0] == 1:
-                logger.info(f'{self.name}: skipping outlier image in bg calculation')
-                continue
-            bg_per_well_dict[well].append(bg_segment)
-        bg_per_well_dict = {well: torch.cat(bg_segments, dim=1) for well, bg_segments in bg_per_well_dict.items()}
-        bg_per_well_stats = {well: self.get_bg_stats(bg_per_well_dict.get(well, None)) for well in wells}
-
-        bg_plate_stats = self.get_bg_stats(torch.cat(list(bg_per_well_dict.values()), dim=1)
-                                           if len(bg_per_well_dict) > 0 else None)
         with torch.no_grad():
             if gpu_id is not None:
                 os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
@@ -390,7 +345,7 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
             _save_all_stats = partial(self.save_all_stats, device=device)
             for input_file, output_file in tqdm(list(zip(input_files, output_files)),
                                                 desc='extracting cell-level features'):
-                _save_all_stats(input_file, output_file, bg_per_image_stats, bg_per_well_stats, bg_plate_stats)
+                _save_all_stats(input_file, output_file)
 
 
 class FindInfectedCells(BatchJobOnContainer):
