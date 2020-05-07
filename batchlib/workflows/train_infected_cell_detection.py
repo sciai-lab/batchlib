@@ -12,13 +12,17 @@ from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.voronoi_ring_segmentation import VoronoiRingSegmentation
 from batchlib.segmentation.unet import UNet2D
 from batchlib import run_workflow
-from batchlib.analysis.cell_level_analysis import InstanceFeatureExtraction, FindInfectedCells
+from batchlib.analysis.cell_level_analysis import InstanceFeatureExtraction, FindInfectedCells, \
+    DenoiseByGrayscaleOpening
 
 from tqdm.auto import tqdm
 from glob import glob
 import shutil
 
 from ..util.grid_search import grid_evaluate
+
+
+run_workflow = partial(run_workflow, lock_folder=False, enable_logging=False)
 
 
 class DummyJob(BatchJobOnContainer):
@@ -176,38 +180,54 @@ def get_identifier(*args):
     return '_'.join(map(str, args))
 
 
+def _marker_key(denoise_radius):
+    return 'marker_corrected' if denoise_radius == 0 else f'marker_corrected_denoised{denoise_radius}'
+
+
 def extract_feature_grid(config, SubParamRanges, SearchSpace):
-    # TODO: add denoise radius argument
-    def extract_feature_job_specification(seg_key, ignore_nuclei):
+    def extract_feature_job_specification(seg_key, ignore_nuclei, denoise_radius=0):
         print('\n', seg_key, ignore_nuclei)
-        job_list = [((InstanceFeatureExtraction, {
+        if denoise_radius > 0:
+            job_list = [(DenoiseByGrayscaleOpening, {
+                'build': {
+                    'key_to_denoise': 'marker_corrected',
+                    'output_key': _marker_key(denoise_radius),
+                    'radius': denoise_radius},
+                }
+            )]
+        else:
+            job_list = []
+        job_list.append((InstanceFeatureExtraction, {
             'build': {
-                'channel_keys': ['marker_corrected'],
+                'channel_keys': [_marker_key(denoise_radius)],
                 'nuc_seg_key_to_ignore': config.nuc_key if ignore_nuclei else None,
                 'cell_seg_key': seg_key,
                 'identifier': get_identifier(seg_key, ignore_nuclei),
                 'topk': SubParamRanges.ks_for_topk,
                 'quantiles': SubParamRanges.quantiles,
             },
-            'run': {'gpu_id': config.gpu}}))]
-        return job_list[0]
+            'run': {'gpu_id': config.gpu}}))
+        run_workflow('Feature Extraction Workflow',
+                     config.out_dir,
+                     job_list)
 
-    job_list = grid_evaluate(
+    grid_evaluate(
         extract_feature_job_specification,
         seg_key=SearchSpace.segmentation_key,
         ignore_nuclei=SearchSpace.ignore_nuclei,
-        n_jobs=0)['result'].reshape(-1).tolist()
+        denoise_radius=SearchSpace.marker_denoise_radii,
+        n_jobs=0)  #['result'].reshape(-1).tolist()
 
-    run_workflow('Feature Extraction Workflow',
-                 config.out_dir,
-                 job_list)
+    # run_workflow('Feature Extraction Workflow',
+    #              config.out_dir,
+    #              job_list)
 
 
-def find_infected(config, seg_key, ignore_nuclei, split_statistic, infected_threshold):
-    identifier = get_identifier(seg_key, ignore_nuclei, split_statistic, infected_threshold)
+def find_infected(config, seg_key, ignore_nuclei, split_statistic, infected_threshold, denoise_radius=0):
+    identifier = get_identifier(seg_key, ignore_nuclei, denoise_radius, split_statistic, infected_threshold)
     job_list = [((FindInfectedCells, {
         'build': {
-            'marker_key': 'marker_corrected',
+            'marker_key': _marker_key(denoise_radius),
             'cell_seg_key': seg_key + '_' + get_identifier(seg_key, ignore_nuclei),
             # old method
             'bg_correction_key': 'image_bg_median',  # FIXME this should be the plate-wise bg. copy from results!
@@ -228,19 +248,20 @@ def find_infected(config, seg_key, ignore_nuclei, split_statistic, infected_thre
                  os.path.join(config.out_dir, identifier),
                  job_list,
                  config.out_dir,
-                 force_recompute=True,
-                 lock_folder=False,
-                 enable_logging=False)
+                 force_recompute=True,)
 
 
 def find_infected_grid(config, SearchSpace):
     # TODO what about well wise / plate wise bgs? get them from somewhere!
-    job_grid = grid_evaluate(partial(find_infected, config),
-                  seg_key=SearchSpace.segmentation_key,
-                  ignore_nuclei=SearchSpace.ignore_nuclei,
-                  split_statistic=SearchSpace.split_statistic,
-                  infected_threshold=SearchSpace.infected_threshold,
-                  n_jobs=config.n_cpus)
+    grid_evaluate(
+        partial(find_infected, config),
+        seg_key=SearchSpace.segmentation_key,
+        ignore_nuclei=SearchSpace.ignore_nuclei,
+        denoise_radius=SearchSpace.marker_denoise_radii,
+        split_statistic=SearchSpace.split_statistic,
+        infected_threshold=SearchSpace.infected_threshold,
+        n_jobs=config.n_cpus
+    )
     # job_list = job_grid['result'].reshape(-1).tolist()
     # print(len(job_list))
     # print(job_list[0])
@@ -295,11 +316,12 @@ def get_prediction_and_eval_score(
     config,
     seg_key,
     ignore_nuclei,
+    denoise_radius,
     split_statistic,
     infected_threshold,
     ann_file,
 ):
-    identifier = get_identifier(seg_key, ignore_nuclei, split_statistic, infected_threshold)
+    identifier = get_identifier(seg_key, ignore_nuclei, denoise_radius, split_statistic, infected_threshold)
     in_file = ann_to_in_file(config, ann_file)
     out_file = in_to_out_file(config, in_file)
     out_file_in_subdir = os.path.join(os.path.dirname(out_file), identifier, os.path.basename(out_file))
@@ -308,7 +330,7 @@ def get_prediction_and_eval_score(
     with open_file(out_file_in_subdir, 'r') as f:
         column_names, table = read_table(f, 'cell_classification/' + seg_key + '_' +
                                          get_identifier(seg_key, ignore_nuclei) +
-                                         '/marker_corrected')
+                                         '/' + _marker_key(denoise_radius))
     with open_file(out_file, 'r') as f:
         gt_column_names, gt_table = read_table(f, 'infected')
     pred_infected_indicator = table[:, column_names.index('is_infected')]
@@ -382,6 +404,7 @@ def get_score_grid(config, SearchSpace, ann_files):
         partial(get_prediction_and_eval_score, config),
         seg_key=SearchSpace.segmentation_key,
         ignore_nuclei=SearchSpace.ignore_nuclei,
+        denoise_radius=SearchSpace.marker_denoise_radii,
         split_statistic=SearchSpace.split_statistic,
         infected_threshold=SearchSpace.infected_threshold,
         ann_file=ann_files,
@@ -402,21 +425,21 @@ def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSp
 
 
     ann_files, tiff_files = get_ann_and_tiff_files(config)
-    # print(f'Found input tiff files:')
-    # [print(f) for f in tiff_files]
-    #
-    # # if os.path.isdir(config.out_dir):
-    # #     shutil.rmtree(config.out_dir)
-    #
-    # preprocess(config, ann_files, tiff_files)
-    #
-    # compute_segmentations(config, SubParamRanges)
-    #
-    # extract_feature_grid(config, SubParamRanges, SearchSpace)
-    #
-    # save_gt_infected(config)
-    #
-    # find_infected_grid(config, SearchSpace)
+    print(f'Found input tiff files:')
+    [print(f) for f in tiff_files]
+
+    if os.path.isdir(config.out_dir):
+        shutil.rmtree(config.out_dir)
+
+    preprocess(config, ann_files, tiff_files)
+
+    compute_segmentations(config, SubParamRanges)
+
+    extract_feature_grid(config, SubParamRanges, SearchSpace)
+
+    save_gt_infected(config)
+
+    find_infected_grid(config, SearchSpace)
 
     score_grid = get_score_grid(config, SearchSpace, tiff_files)
     np.save(os.path.join(config.out_dir, 'score_grid.npy'), score_grid)
