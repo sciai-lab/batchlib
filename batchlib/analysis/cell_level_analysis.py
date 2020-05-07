@@ -820,12 +820,12 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
             if len(empty_wells) == n_wells:
                 logger.warning(f"{self.name}: all wells are empty (all images are outliers)")
                 # make dummy table
-                table = [[well_name, np.nan, np.nan, 'all images are outliers', 1] for well_name in well_names]
+                table = [[well_name, np.nan, np.nan, 1, 'all images are outliers'] for well_name in well_names]
             else:
                 n_cols = len(column_names)
                 if not all(len(row) in (1, n_cols) for row in table):
                     raise RuntimeError("Invalid number of columns in well table")
-                outlier_row = [np.nan, np.nan, 'all images are outliers', 1]
+                outlier_row = [np.nan, np.nan, 1, 'all images are outliers']
                 outlier_row += [np.nan] * (n_cols - len(outlier_row) - 1)
                 assert len(outlier_row) == n_cols - 1
                 table = [row if len(row) == n_cols else row + outlier_row for row in table]
