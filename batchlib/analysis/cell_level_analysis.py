@@ -190,7 +190,7 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         input_ndim = [2] * (1 + len(channel_keys) + (1 if nuc_seg_key_to_ignore else 0))
 
         # tables are per default saved at tables/cell_segmentation/channel in the container
-        output_group = cell_seg_key if identifier is None else cell_seg_key + '_' + identifier
+        output_group = cell_seg_key if identifier is None else (cell_seg_key + '_' + identifier)
         self.output_table_keys = [output_group + '/' + channel for channel in channel_keys]
         super().__init__(input_key=list(self.channel_keys) + [self.cell_seg_key] +
                                        ([self.nuc_seg_key_to_ignore] if self.nuc_seg_key_to_ignore is not None else []),
