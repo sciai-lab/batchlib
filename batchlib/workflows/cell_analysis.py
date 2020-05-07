@@ -26,15 +26,15 @@ from batchlib.util.plate_visualizations import all_plots
 logger = get_logger('Workflow.CellAnalysis')
 
 
-# TODO more parameter?
+# TODO add more parameter?
 def get_analysis_parameter(config):
     # collect all relevant analysis paramter, so that we can
     # write them to a table and keep track of this
     params = {'marker_denoise_radius': config.marker_denoise_radius,
               'dont_ignore_nuclei': config.dont_ignore_nuclei}
-    params.update({'qc_cells_' + k: v for k, v in DEFAULT_CELL_OUTLIER_CRITERIA})
-    params.update({'qc_images_' + k: v for k, v in DEFAULT_IMAGE_OUTLIER_CRITERIA})
-    params.update({'qc_wells_' + k: v for k, v in DEFAULT_WELL_OUTLIER_CRITERIA})
+    params.update({'qc_cells_' + k: v for k, v in DEFAULT_CELL_OUTLIER_CRITERIA.items()})
+    params.update({'qc_images_' + k: v for k, v in DEFAULT_IMAGE_OUTLIER_CRITERIA.items()})
+    params.update({'qc_wells_' + k: v for k, v in DEFAULT_WELL_OUTLIER_CRITERIA.items()})
     return params
 
 

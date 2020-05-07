@@ -1,3 +1,4 @@
+import os
 from copy import deepcopy
 import numpy as np
 
@@ -45,7 +46,7 @@ class MergeAnalysisTables(BatchJobOnContainer):
         out_format = ['table', 'table']
         if analysis_parameters is not None:
             self.analysis_parameters = analysis_parameters
-            self.parameter_table_name = 'parameters'
+            self.parameter_table_name = 'plate/analysis_parameter'
             out_keys.append(self.parameter_table_name)
             out_format.append('table')
 
@@ -140,8 +141,10 @@ class MergeAnalysisTables(BatchJobOnContainer):
         self._merge_tables(in_file, out_file, 'wells', self.well_table_name)
 
     def write_parameter_table(self, out_file):
-        col_names = list(self.analysis_parameters.keys())
-        table = np.array(list(self.analysis_parameters.values()))[:, None]
+        col_names = ['plate_name'] + list(self.analysis_parameters.keys())
+
+        plate_name = os.path.split(out_file)[1]
+        table = np.array([plate_name] + list(self.analysis_parameters.values()))[:, None]
         with open_file(out_file, 'a') as f:
             self.write_table(f, self.parameter_table_name, col_names, table)
 
