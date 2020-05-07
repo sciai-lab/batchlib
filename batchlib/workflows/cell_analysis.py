@@ -9,6 +9,7 @@ from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    InstanceFeatureExtraction,
                                                    FindInfectedCells)
 from batchlib.analysis.cell_analysis_qc import CellLevelQC, ImageLevelQC, WellLevelQC
+from batchlib.analysis.merge_tables import MergeAnalysisTables
 from batchlib.mongo.result_writer import DbResultWriter
 from batchlib.outliers.outlier import get_outlier_predicate
 from batchlib.preprocessing import get_barrel_corrector, get_serum_keys, Preprocess
@@ -210,11 +211,18 @@ def run_cell_analysis(config):
                 'serum_key': serum_key,
                 'marker_key': marker_ana_in_key,
                 'cell_seg_key': config.seg_key,
-                # 'outlier_predicate': outlier_predicate,
                 'write_summary_images': True,
                 'scale_factors': config.scale_factors,
                 'identifier': identifier},
             'run': {'force_recompute': False}}))
+
+    # TODO
+    # - we need to filter out the mean-with-nuclei and sum-without-nuclei results
+    # - choose the correct reference table !
+    job_list.append((MergeAnalysisTables, {
+        'build': {'input_table_names': table_identifiers,
+                  'reference_table_name': table_identifiers[0]}
+    }))
 
     # make sure that db job is executed when all result tables hdf5 are ready (outside of the loop)
     job_list.append((DbResultWriter, {

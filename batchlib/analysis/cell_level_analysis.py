@@ -144,11 +144,11 @@ def load_cell_outlier_dict(input_file, table_name, class_name):
 
 
 class DenoiseChannel(BatchJobOnContainer):
-    def __init__(self, key_to_denoise, output_key=None, output_ext='.h5'):
-        super(DenoiseChannel, self).__init__(
-            output_ext=output_ext,
+    def __init__(self, key_to_denoise, output_key=None, **super_kwargs):
+        super().__init__(
             input_key=key_to_denoise,
-            output_key=output_key if output_key is not None else key_to_denoise + '_denoised'
+            output_key=output_key if output_key is not None else key_to_denoise + '_denoised',
+            **super_kwargs
         )
 
     def denoise(self, img):
@@ -226,7 +226,8 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         super().__init__(input_key=list(self.channel_keys) + [self.cell_seg_key] +
                                        ([self.nuc_seg_key_to_ignore] if self.nuc_seg_key_to_ignore is not None else []),
                          input_ndim=input_ndim,
-                         output_key=['tables/' + key for key in self.output_table_keys],
+                         output_key=self.output_table_keys,
+                         output_format=['table'] * len(self.output_table_keys),
                          identifier=identifier)
 
     def load_sample(self, path, device):
@@ -416,8 +417,10 @@ class FindInfectedCells(BatchJobOnContainer):
         # infected are per default saved at tables/cell_classification/cell_segmentation/marker_key in the container
         self.output_table_key = 'cell_classification/' + self.feature_table_key + \
                                 ('' if identifier is None else '_' + identifier)
-        super().__init__(input_key='tables/' + self.feature_table_key,
-                         output_key='tables/' + self.output_table_key,
+        super().__init__(input_key=self.feature_table_key,
+                         input_format='table',
+                         output_key=self.output_table_key,
+                         output_format='table',
                          identifier=identifier,
                          **super_kwargs)
 
@@ -500,31 +503,11 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
         self.marker_key = cell_seg_key + '/' + marker_key
         self.classification_key = 'cell_classification/' + cell_seg_key + '/' + marker_key
 
-        super().__init__(input_key=[f'tables/{key}'
-                                    for key in (self.serum_key, self.marker_key, self.classification_key)],
+        input_key = [self.serum_key, self.marker_key, self.classification_key]
+        super().__init__(input_key=input_key,
+                         input_format=len(input_key)*['table'],
                          output_key=output_key,
                          **super_kwargs)
-
-    # in the long run we should merge this into BatchJobOnContainer somehow
-    def validate_input(self, path):
-        if not os.path.exists(path):
-            logger.warning(f'{self.name}: validate_input failed: {path} does not exist')
-            return False
-
-        exp_keys = self._input_exp_key
-        if exp_keys is None:
-            return True
-        with open_file(path, 'r') as f:
-            for key in exp_keys:
-                if key not in f:
-                    logger.warning(f'{self.name}: validate_input failed: could not find {key} in {path}')
-                    return False
-                g = f[key]
-                if ('cells' not in g) or ('columns' not in g):
-                    msg = f"{self.name}: validate_input failed: could not find 'cells' or 'columns' in {path}:{key}"
-                    logger.warning(msg)
-                    return False
-        return True
 
     @staticmethod
     def folder_to_table_path(folder, identifier):
@@ -620,7 +603,7 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
 
         # this only accounts for cells that were either classified as infected or control
         stat_dict['n_cells'] = stat_dict['n_infected'] + stat_dict['n_control']
-        stat_dict['fraction_infected'] = stat_dict['n_infected'] / stat_dict['n_cells']
+        stat_dict['fraction_infected'] = nan_on_exception(lambda: stat_dict['n_infected'] / stat_dict['n_cells'])()
 
         stat_dict['cell_size_median_infected'] = np.median(infected_cell_statistics[self.serum_key]['sizes'])
         stat_dict['cell_size_mean_infected'] = np.mean(infected_cell_statistics[self.serum_key]['sizes'])
@@ -697,7 +680,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
                  infected_cell_mask_key='infected_cell_mask',
                  serum_per_cell_mean_key='serum_per_cell_mean',
                  edge_key='cell_segmentation_edges',
-                 cell_outlier_table_name='outliers',  # FIXME where should this be used?
+                 cell_outlier_table_name='outliers',
                  image_outlier_table='images/outliers',
                  well_outlier_table='wells/outliers',
                  identifier=None,
@@ -899,12 +882,12 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
             if len(empty_wells) == n_wells:
                 logger.warning(f"{self.name}: all wells are empty (all images are outliers)")
                 # make dummy table
-                table = [[well_name, np.nan, np.nan, 'all images are outliers', 1] for well_name in well_names]
+                table = [[well_name, np.nan, np.nan, 1, 'all images are outliers'] for well_name in well_names]
             else:
                 n_cols = len(column_names)
                 if not all(len(row) in (1, n_cols) for row in table):
                     raise RuntimeError("Invalid number of columns in well table")
-                outlier_row = [np.nan, np.nan, 'all images are outliers', 1]
+                outlier_row = [np.nan, np.nan, 1, 'all images are outliers']
                 outlier_row += [np.nan] * (n_cols - len(outlier_row) - 1)
                 assert len(outlier_row) == n_cols - 1
                 table = [row if len(row) == n_cols else row + outlier_row for row in table]

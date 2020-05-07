@@ -53,7 +53,8 @@ class CellLevelQC(CellLevelAnalysisBase):
                          marker_key=marker_key,
                          serum_bg_key=serum_bg_key,
                          marker_bg_key=marker_bg_key,
-                         output_key='tables/' + self.table_out_key,
+                         output_key=self.table_out_key,
+                         output_format='table',
                          identifier=identifier,
                          **super_kwargs)
 
