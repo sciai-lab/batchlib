@@ -100,7 +100,7 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
 
         for job_id, (job_class, kwarg_dict) in tqdm(list(
                 enumerate(job_dict.items() if isinstance(job_dict, dict) else job_dict)),
-                desc=f"Running jobs of workflow '{name}'"):
+                desc=f"Running jobs of workflow '{name}'", disable=not enable_logging):
             build_kwargs = kwarg_dict.get('build', {})
             run_kwargs = kwarg_dict.get('run', {})
 
