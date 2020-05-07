@@ -73,7 +73,7 @@ class MergeAnalysisTables(BatchJobOnContainer):
             return prefix + '_' + name
 
     def _get_seg_prefix(self, table_name):
-        return table_name.replace('serum', '')
+        return table_name.replace('serum_', '')
 
     def _merge_tables(self, in_file, out_file, prefix, out_name, hide_im_name_column=False):
 
