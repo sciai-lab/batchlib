@@ -248,6 +248,9 @@ def find_infected(config, seg_key, ignore_nuclei, split_statistic, infected_thre
             # 'bg_correction_key': 'well_bg_median',
             'infected_threshold_scale_key': 'image_bg_mad',
             # 'infected_threshold': 7,
+            },
+        'run': {
+            'enable_tqdm': False,
         }}))]
 
 
@@ -427,20 +430,19 @@ def get_score_grid(config, SearchSpace, ann_files):
 
 def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSpace):
 
-    print('number of points on grid:', np.product([len(v) for v in [
+    n_grid_points = np.product([len(v) for v in [
         SearchSpace.segmentation_key,
         SearchSpace.ignore_nuclei,
         SearchSpace.split_statistic,
         SearchSpace.infected_threshold,
-    ]]))
-
+        SearchSpace.marker_denoise_radii,
+    ]])
+    print('number of points on grid:', n_grid_points)
+    assert n_grid_points < 60000
 
     ann_files, tiff_files = get_ann_and_tiff_files(config)
     print(f'Found input tiff files:')
     [print(f) for f in tiff_files]
-
-    if os.path.isdir(config.out_dir):
-        shutil.rmtree(config.out_dir)
 
     preprocess(config, ann_files, tiff_files)
 
