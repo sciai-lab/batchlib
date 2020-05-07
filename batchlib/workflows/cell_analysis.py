@@ -8,7 +8,7 @@ from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    DenoiseByGrayscaleOpening,
                                                    InstanceFeatureExtraction,
                                                    FindInfectedCells)
-from batchlib.analysis.cell_analysis_qc import CellLevelQC, ImageLevelQC
+from batchlib.analysis.cell_analysis_qc import CellLevelQC, ImageLevelQC, WellLevelQC
 from batchlib.mongo.result_writer import DbResultWriter
 from batchlib.outliers.outlier import get_outlier_predicate
 from batchlib.preprocessing import get_barrel_corrector, get_serum_keys, Preprocess
@@ -196,6 +196,13 @@ def run_cell_analysis(config):
                 'serum_key': serum_key,
                 'marker_key': marker_ana_in_key,
                 'outlier_predicate': outlier_predicate,
+                'identifier': identifier}
+        }))
+        job_list.append((WellLevelQC, {
+            'build': {
+                'cell_seg_key': config.seg_key,
+                'serum_key': serum_key,
+                'marker_key': marker_ana_in_key,
                 'identifier': identifier}
         }))
         job_list.append((CellLevelAnalysis, {
