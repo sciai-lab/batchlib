@@ -26,7 +26,7 @@ def execute_parallel(func, args_list=None, kwargs_list=None, n_jobs=0):
     else:
         assert False, 'either args_list or kwargs_list must not be None'
     if n_jobs > 0:
-        results = [p.get() for p in tqdm(results, desc='getting results')]
+        results = [p.get() for p in results]
     return results
 
 
