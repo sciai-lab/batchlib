@@ -163,7 +163,7 @@ def compute_segmentations(config, SubParamRanges):
     for r in SubParamRanges.segmentation_erode_radii:
         job_list.append((ErodeSegmentation, {
             'build': {
-                'input_key': config.nuc_key,
+                'input_key': config.seg_key,
                 'output_key': f'eroded_cell_segmentation{r}',
                 'radius': r,
             }
