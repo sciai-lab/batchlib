@@ -19,5 +19,6 @@ dependencies:
     - vigra
     - pymongo
     - xlrd
+    - slackclient
     - pip:
         - stardist

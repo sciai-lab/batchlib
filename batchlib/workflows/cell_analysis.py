@@ -20,6 +20,7 @@ from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
+from batchlib.slack import SlackSummaryWriter
 from batchlib.util import get_logger
 from batchlib.util.plate_visualizations import all_plots
 
@@ -271,6 +272,10 @@ def run_cell_analysis(config):
                   wedge_width=0)
 
     t0 = time.time() - t0
+
+    summary_writer = SlackSummaryWriter(config.slack_token)
+    summary_writer(config.input_folder, config.folder, runtime=t0)
+
     logger.info(f"Run {name} in {t0}s")
     return name, t0
 
@@ -337,6 +342,9 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--db_host", type=str, default='localhost')
     parser.add("--db_port", type=int, default=27017)
     parser.add("--db_name", type=str, default='covid')
+
+    # slack client
+    parser.add("--slack_token", type=str, default=None)
 
     # default_scale_factors = None
     default_scale_factors = [1, 2, 4, 8, 16]
