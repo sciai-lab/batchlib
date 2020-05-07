@@ -421,8 +421,9 @@ class FindInfectedCells(BatchJobOnContainer):
         with open_file(out_file, 'a') as f:
             self.write_table(f, self.output_table_key, column_names, table)
 
-    def run(self, input_files, output_files):
-        for input_file, output_file in tqdm(list(zip(input_files, output_files)), desc='finding infected cells'):
+    def run(self, input_files, output_files, enable_tqdm=True):
+        for input_file, output_file in tqdm(list(zip(input_files, output_files)),
+                                            desc='finding infected cells', disable=not enable_tqdm):
             self.compute_and_save_infected_and_control(input_file, output_file)
 
 
