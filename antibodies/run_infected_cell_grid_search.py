@@ -15,26 +15,30 @@ if __name__ == '__main__':
         split_statistic = [f'top{k}' for k in SubParamRanges.ks_for_topk] + [f'quantile{q}' for q in
                                                                              SubParamRanges.quantiles]
         infected_threshold = np.arange(0, 20, 0.05)  #np.arange(0, 4000, 50)
-        #marker_denoise_radii = [0, 5, 10]  # TODO use those
+        marker_denoise_radii = [0, 5, 10]  # TODO use those
 
     # For debugging
     class SubParamRanges:
         ks_for_topk = [50]
         quantiles = [0.9]
-        ring_widths = [5]
+        ring_widths = []
+        segmentation_erode_radii = [1, 3, 5]
 
     class SearchSpace:
-        segmentation_key = ['cell_segmentation'] + [f'voronoi_ring_segmentation{r}' for r in SubParamRanges.ring_widths]
+        segmentation_key = ['cell_segmentation'] + \
+                           [f'eroded_cell_segmentation{r}' for r in SubParamRanges.segmentation_erode_radii] + \
+                           [f'voronoi_ring_segmentation{r}' for r in SubParamRanges.ring_widths]
+
         ignore_nuclei = [True, False]
         split_statistic = [f'top{k}' for k in SubParamRanges.ks_for_topk] + [f'quantile{q}' for q in
                                                                              SubParamRanges.quantiles]
-        infected_threshold = np.arange(0, 20, 1)  #np.arange(0, 4000, 50)
-        #marker_denoise_radii = [0, 5, 10]  # TODO use those
+        infected_threshold = np.arange(0, 20, 0.5)  #np.arange(0, 4000, 50)
+        marker_denoise_radii = [0, 5, 10]
 
     class config:  # TODO make an argument parser for this
         ann_dir = '/home_sdc/rremme_tmp/src/antibodies-nuclei/groundtruth'
         data_dir = '/home_sdc/rremme_tmp/DatasetsHCIHome/antibodies/covid-data-vibor/'
-        out_dir = '/home_sdc/rremme_tmp/DatasetsHCIHome/antibodies/grid_search/debug'
+        out_dir = '/home_sdc/rremme_tmp/DatasetsHCIHome/antibodies/grid_search/debug_2'
         misc_folder = '/home_sdc/rremme_tmp/src/batchlib/misc'
 
         mask_key = 'mask'

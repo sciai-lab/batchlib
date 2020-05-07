@@ -9,7 +9,7 @@ from batchlib.preprocessing import get_barrel_corrector, get_serum_keys, Preproc
 from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
-from batchlib.segmentation.voronoi_ring_segmentation import VoronoiRingSegmentation
+from batchlib.segmentation.voronoi_ring_segmentation import VoronoiRingSegmentation, ErodeSegmentation
 from batchlib.segmentation.unet import UNet2D
 from batchlib import run_workflow
 from batchlib.analysis.cell_level_analysis import InstanceFeatureExtraction, FindInfectedCells, \
@@ -159,6 +159,15 @@ def compute_segmentations(config, SubParamRanges):
                 'dilate_seeds': 3,
                 'n_jobs': config.n_cpus}})
     ]
+
+    for r in SubParamRanges.segmentation_erode_radii:
+        job_list.append((ErodeSegmentation, {
+            'build': {
+                'input_key': config.nuc_key,
+                'output_key': f'eroded_cell_segmentation{r}',
+                'radius': r,
+            }
+        }))
 
     for r in SubParamRanges.ring_widths:
         job_list.append((VoronoiRingSegmentation, {
