@@ -199,8 +199,10 @@ class BatchJob(ABC):
             input_folder_ = folder if input_folder is None else input_folder
             logger.info(f'{self.name}: input folder is {input_folder_}')
 
-            # monkey patch the folder, so that we can get this in the run and input / output validation methods
+            # monkey patch the folder and input_folder,
+            # so that we can get this in the run and input / output validation methods
             self.folder = folder
+            self.input_folder = input_folder if input_folder is not None else self.folder
 
             # validate and get the input files to be processed
             input_files = self.get_inputs(folder, input_folder_, status,
