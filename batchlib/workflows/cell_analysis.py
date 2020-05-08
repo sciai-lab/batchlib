@@ -33,7 +33,9 @@ def get_analysis_parameter(config):
     # collect all relevant analysis paramter, so that we can
     # write them to a table and keep track of this
     params = {'marker_denoise_radius': config.marker_denoise_radius,
-              'dont_ignore_nuclei': config.dont_ignore_nuclei}
+              'dont_ignore_nuclei': config.dont_ignore_nuclei,
+              'infected_detection_threshold': config.infected_threshold,
+              'scale_infected_detection_with_mad': config.infected_scale_with_mad}
     params.update({'qc_cells_' + k: v for k, v in DEFAULT_CELL_OUTLIER_CRITERIA.items()})
     params.update({'qc_images_' + k: v for k, v in DEFAULT_IMAGE_OUTLIER_CRITERIA.items()})
     params.update({'qc_wells_' + k: v for k, v in DEFAULT_WELL_OUTLIER_CRITERIA.items()})
@@ -193,18 +195,13 @@ def run_cell_analysis(config):
     #         'cell_seg_key': config.seg_key},
     #     'run': {'gpu_id': config.gpu}}))
 
-    # TODO these parameters should also go into the analysis parameters!
     job_list.append((FindInfectedCells, {
         'build': {
             'marker_key': marker_ana_in_key,
             'cell_seg_key': config.seg_key,
-            # # old method
-            # 'bg_correction_key': 'means',
-            # 'per_cell_bg_correction': False,
-            # new method
             'bg_correction_key': 'plate/backgrounds',
-            'scale_with_mad': True,
-            'infected_threshold': 6,
+            'scale_with_mad': config.infected_scale_with_mad,  # default: True
+            'infected_threshold': config.infected_threshold  # default: 6
         }}))
 
     table_identifiers = serum_ana_in_keys
@@ -356,6 +353,9 @@ def cell_analysis_parser(config_folder, default_config_name):
     # marker denoising and ignore nuclei
     parser.add("--marker_denoise_radius", default=0, type=int)
     parser.add("--dont_ignore_nuclei", action='store_true')
+
+    parser.add("--infected_scale_with_mad", default=True)
+    parser.add("--infected_threshold", type=int, default=6)
 
     # runtime options
     parser.add("--batch_size", default=4)
