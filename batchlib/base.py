@@ -1,5 +1,6 @@
 import os
 import json
+import time
 
 from abc import ABC
 from glob import glob
@@ -55,7 +56,7 @@ class BatchJob(ABC):
         is_none = identifier is None
         is_str = isinstance(identifier, str)
         if not (is_none or is_str):
-            raise ValueError("Expect identifier to  be None or string, not %s" % type(identifier))
+            raise ValueError(f"Expect identifier to  be None or string, not {identifier}")
         self.identifier = identifier
 
     @property
@@ -218,8 +219,11 @@ class BatchJob(ABC):
             logger.info(f'{self.name}: call run method with {len(input_files)} inputs.')
             logger.debug(f'{self.name}: with the following inputs:\n {input_files}')
             logger.debug(f'{self.name}: and the following outputs:\n {output_files}')
+
             # run the actual computation
+            t0 = time.time()
             self.run(input_files, output_files, **kwargs)
+            logger.info(f"{self.name}: runtime: {time.time() - t0} s")
 
             # validate if all outputs were computed properly
             self.validate_outputs(output_files, folder, status, ignore_failed_outputs)
