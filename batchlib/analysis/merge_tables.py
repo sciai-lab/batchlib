@@ -137,7 +137,7 @@ class MergeAnalysisTables(BatchJobOnContainer):
             bg_values = bg_table[:, bg_col_ids]
 
             table = [row + bg_vals.tolist() for row, bg_vals in zip(table, bg_values)]
-            column_names.extend([self._format_col_name(name, '', True) for name in bg_col_names])
+            column_names.extend(bg_col_names)
 
         table = np.array(table)
         assert table.shape[1] == len(column_names), f"{table.shape[1]}, {len(column_names)}"
