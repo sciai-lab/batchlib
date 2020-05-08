@@ -1,5 +1,6 @@
 import os
 import time
+from numbers import Number
 
 import configargparse
 
@@ -75,6 +76,15 @@ def get_input_keys(config, serum_in_keys):
     return nuc_seg_in_key, serum_seg_in_key, marker_ana_in_key, serum_ana_in_keys
 
 
+def validate_bg_dict(bg_dict):
+    excepted_vals = ('images/background',
+                     'wells/background',
+                     'plate/background')
+    for key, val in bg_dict.items():
+        if not isinstance(val, Number) and val not in excepted_vals:
+            raise ValueError("Invalid background value {val} for {key}")
+
+
 def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
     keys = serum_ana_in_keys + [marker_ana_in_key]
     fixed_background_dict = config.fixed_background
@@ -98,6 +108,7 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
             raise ValueError(f"Could not find fixed background value for channel {key}")
         parsed_fixed_background_dict[key] = value
 
+    validate_bg_dict(parsed_fixed_background_dict)
     logger.info(f"Use fixed backgrounds: {parsed_fixed_background_dict}")
     return parsed_fixed_background_dict, True
 
