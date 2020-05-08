@@ -28,8 +28,8 @@ from batchlib.util.plate_visualizations import all_plots
 logger = get_logger('Workflow.CellAnalysis')
 
 
-# add more parameter?
-def get_analysis_parameter(config):
+# TODO add backgrounds
+def get_analysis_parameter(config, use_fixed_background):
     # collect all relevant analysis paramter, so that we can
     # write them to a table and keep track of this
     params = {'marker_denoise_radius': config.marker_denoise_radius,
@@ -39,6 +39,14 @@ def get_analysis_parameter(config):
     params.update({'qc_cells_' + k: v for k, v in DEFAULT_CELL_OUTLIER_CRITERIA.items()})
     params.update({'qc_images_' + k: v for k, v in DEFAULT_IMAGE_OUTLIER_CRITERIA.items()})
     params.update({'qc_wells_' + k: v for k, v in DEFAULT_WELL_OUTLIER_CRITERIA.items()})
+
+    params['fixed_background'] = use_fixed_background
+    if use_fixed_background:
+        params.update({'background_' + name: value for name, value in config.fixed_background.items()})
+    else:
+        # TODO we need to parse the same information as above from the table for the non-fixed background case
+        pass
+
     return params
 
 
@@ -67,6 +75,27 @@ def get_input_keys(config, serum_in_keys):
         marker_ana_in_key = marker_in_key
 
     return nuc_seg_in_key, serum_seg_in_key, marker_ana_in_key, serum_ana_in_keys
+
+
+def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
+    keys = serum_ana_in_keys + [marker_ana_in_key]
+    fixed_background_dict = config.fixed_background_dict
+    if fixed_background_dict is None:
+        return {key: 'plate/backgrounds' for key in keys}, False
+
+    # TODO I don't want to enforce having the _corrected everywhere, so we do this weird little dance for now
+    # in the long term, I would like to eliminate running the option of using the non-corrected completely,
+    # then we can get rid of this
+    parsed_fixed_background_dict = {}
+    for key in keys:
+        value = fixed_background_dict.get(key, None)
+        if value is None:
+            alt_key = key.replace('_corrceted', '')
+            value = fixed_background_dict.get(alt_key, None)
+        if value is None:
+            raise ValueError(f"Could not find fixed background value for channel {key}")
+        parsed_fixed_background_dict[key] = value
+    return parsed_fixed_background_dict, True
 
 
 def run_cell_analysis(config):
@@ -204,6 +233,14 @@ def run_cell_analysis(config):
             'infected_threshold': config.infected_threshold  # default: 6
         }}))
 
+    # for the background substraction, we can either use a fixed value,
+    # or compute it from the data. In the first case, we pass the value
+    # as 'serum_bg_key' / 'marker_bg_key'. In the second case, we pass a key
+    # to the table holding these values.
+    background_parameters, is_fixed = parse_background_parameters(config,
+                                                                  marker_ana_in_key,
+                                                                  serum_ana_in_keys)
+
     table_identifiers = serum_ana_in_keys
     for serum_key, identifier in zip(serum_ana_in_keys, table_identifiers):
         job_list.append((CellLevelQC, {
@@ -211,8 +248,8 @@ def run_cell_analysis(config):
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
                 'marker_key': marker_ana_in_key,
-                'serum_bg_key': 'plate/backgrounds',  # here we can also put a float for constant bg subtraction
-                'marker_bg_key': 'plate/backgrounds',
+                'serum_bg_key': background_parameters[serum_key],
+                'marker_bg_key': background_parameters[marker_ana_in_key],
                 'identifier': identifier}
         }))
         job_list.append((ImageLevelQC, {
@@ -220,8 +257,8 @@ def run_cell_analysis(config):
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
                 'marker_key': marker_ana_in_key,
-                'serum_bg_key': 'plate/backgrounds',  # here we can also put a float for constant bg subtraction
-                'marker_bg_key': 'plate/backgrounds',
+                'serum_bg_key': background_parameters[serum_key],
+                'marker_bg_key': background_parameters[marker_ana_in_key],
                 'outlier_predicate': outlier_predicate,
                 'identifier': identifier}
         }))
@@ -230,8 +267,8 @@ def run_cell_analysis(config):
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
                 'marker_key': marker_ana_in_key,
-                'serum_bg_key': 'plate/backgrounds',  # here we can also put a float for constant bg subtraction
-                'marker_bg_key': 'plate/backgrounds',
+                'serum_bg_key': background_parameters[serum_key],
+                'marker_bg_key': background_parameters[marker_ana_in_key],
                 'identifier': identifier}
         }))
         job_list.append((CellLevelAnalysis, {
@@ -239,8 +276,8 @@ def run_cell_analysis(config):
                 'serum_key': serum_key,
                 'marker_key': marker_ana_in_key,
                 'cell_seg_key': config.seg_key,
-                'serum_bg_key': 'plate/backgrounds',  # here we can also put a float for constant bg subtraction
-                'marker_bg_key': 'plate/backgrounds',
+                'serum_bg_key': background_parameters[serum_key],
+                'marker_bg_key': background_parameters[marker_ana_in_key],
                 'write_summary_images': False,
                 'scale_factors': config.scale_factors,
                 'identifier': identifier},
@@ -249,7 +286,7 @@ def run_cell_analysis(config):
     # TODO
     # - we need to filter out the mean-with-nuclei and sum-without-nuclei results
     # - choose the correct reference table !
-    analysis_parameters = get_analysis_parameter(config)
+    analysis_parameters = get_analysis_parameter(config, is_fixed)
     job_list.append((MergeAnalysisTables, {
         'build': {'input_table_names': table_identifiers,
                   'reference_table_name': table_identifiers[0],
@@ -345,6 +382,11 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--nuc_key", default='nucleus_segmentation', type=str)
     parser.add("--seg_key", default='cell_segmentation', type=str)
 
+    #
+    # analysis parameter:
+    # these parameters change how the analysis results are computed!
+    #
+
     # TODO do we still need this?
     # whether to run the segmentation / analysis on the corrected or on the corrected data
     parser.add("--segmentation_on_corrected", default=True)
@@ -354,8 +396,18 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--marker_denoise_radius", default=0, type=int)
     parser.add("--dont_ignore_nuclei", action='store_true')
 
+    # parameter for the infected cell detection
     parser.add("--infected_scale_with_mad", default=True)
     parser.add("--infected_threshold", type=int, default=6)
+
+    # optional fixed background value(s).
+    # if None, will be computed from the data
+    # otherwise, needs to be a dict with background values for the input channels
+    parser.add("--fixed_background", default=None)
+
+    #
+    # more options
+    #
 
     # runtime options
     parser.add("--batch_size", default=4)
