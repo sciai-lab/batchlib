@@ -28,7 +28,7 @@ from batchlib.util.plate_visualizations import all_plots
 logger = get_logger('Workflow.CellAnalysis')
 
 
-# TODO add more parameter?
+# add more parameter?
 def get_analysis_parameter(config):
     # collect all relevant analysis paramter, so that we can
     # write them to a table and keep track of this

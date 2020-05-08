@@ -9,20 +9,23 @@ from slack.errors import SlackApiError
 from ..base import BatchJobOnContainer
 from ..util import get_logger, open_file
 
-# TODO only copy the relevant plots, need to discuss with Roman
-DEFAULT_PLOT_PATTERNS = ('ratio_of_q0.5')
+# TODO double check with Roman
+DEFAULT_PLOT_PATTERNS = ('*ratio_of_q0.5_of_means*per-well.png',
+                         '*robust_z_score_means*per-well.png')
+
 # DEFAULT_SLACK_CHANNEL = '#latest-results'
 DEFAULT_SLACK_CHANNEL = '#random'
 
 logger = get_logger('Workflow.BatchJob.SlackSummaryWriter')
 
 
-# TODO also write the relevant analysis parameter to the summary
 class SlackSummaryWriter(BatchJobOnContainer):
     def __init__(self, slack_token=None, slack_channel=DEFAULT_SLACK_CHANNEL,
                  plot_patterns=DEFAULT_PLOT_PATTERNS, **super_kwargs):
 
         self.summary_table_key = 'wells/default'
+        self.parameter_table_key = 'plate/analysis_parameter'
+
         self.slack_token = slack_token
         self.slack_channel = slack_channel
         self.plot_patterns = plot_patterns
@@ -31,8 +34,9 @@ class SlackSummaryWriter(BatchJobOnContainer):
 
         in_pattern = '*.hdf5'
         super().__init__(input_pattern=in_pattern,
-                         input_key=[self.summary_table_key],
-                         input_format=['table'],
+                         input_key=[self.summary_table_key,
+                                    self.parameter_table_key],
+                         input_format=['table', 'table'],
                          **super_kwargs)
 
     @property
@@ -49,12 +53,11 @@ class SlackSummaryWriter(BatchJobOnContainer):
     def validate_output(self, path, **kwargs):
         return self.check_output(path)
 
-    # TODO replace 'q0.5' with 'median'
     def copy_plots(self, plot_folder, out_folder):
-        plots = glob(os.path.join(plot_folder, '*.png'))
-        for plot in plots:
-            plot_name = os.path.split(plot)[1]
-            if any(pattern in plot_name for pattern in self.plot_patterns):
+        for pattern in self.plot_patterns:
+            plots = glob(os.path.join(plot_folder, pattern))
+            for plot in plots:
+                plot_name = os.path.split(plot)[1].replace('q0.5', 'median')
                 plot_out = os.path.join(out_folder, plot_name)
                 shutil.copyfile(plot, plot_out)
 
@@ -64,6 +67,9 @@ class SlackSummaryWriter(BatchJobOnContainer):
         table = pd.DataFrame(table, columns=columns)
         table.to_csv(out_path, index=False)
 
+    # TODO need to put more info in the message:
+    # - what's the background value ?
+    # - is it computed or was it pre-set ?
     def compile_message(self, out_folder, plate_name, runtime):
         msg_path = os.path.join(self.out_folder, 'message.txt')
         with open(msg_path, 'w') as f:
@@ -77,8 +83,7 @@ class SlackSummaryWriter(BatchJobOnContainer):
     # TODO
     # - need to format the message nicer using block kit, see
     #   https://slack.dev/python-slackclient/basic_usage.html
-    # - need to post less plots -> see 'DEFAULT_PLOT_PATTERNS'
-    # - need to post the actual message and also include background and maybe some other info
+    # - need to post the actual message
     # - check if we can get to format .csv properly or try posting as excel
     def post_slack(self, out_folder):
         msg_sent_path = os.path.join(self.out_folder, 'message_sent.txt')
