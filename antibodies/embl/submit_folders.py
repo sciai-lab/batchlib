@@ -1,13 +1,7 @@
-import os
+import argparse
 import json
-import sys
-from glob import glob
+import os
 from subprocess import check_output
-
-ROOT_IN = '/g/kreshuk/data/covid/covid-data-vibor'
-ROOT_OUT = '/g/kreshuk/data/covid/data-processed'
-
-EXCLUDE_NAMES = ['tiny_test', 'deprecated', 'channel_mapping.json']
 
 
 def submit_folders(folder_list):
@@ -22,36 +16,13 @@ def submit_folders(folder_list):
         print(output, "for input folder", folder)
 
 
-# TODO better argument parsing
-def parse_args():
-    in_file = sys.argv[1]
-    with open(in_file) as f:
-        folder_list = json.load(f)
-    submit_folders(folder_list)
-
-
-# TODO check that the processed folders actually passed all steps
-def get_not_processed_folders():
-    all_folders = glob(os.path.join(ROOT_IN, '*'))
-    all_names = [os.path.split(folder)[1] for folder in all_folders]
-    all_names = set(name for name in all_names if name not in EXCLUDE_NAMES)
-
-    processed_folders = set(glob(os.path.join(ROOT_OUT, '*')))
-    processed_names = set(os.path.split(folder)[1] for folder in processed_folders)
-
-    not_processed = list(all_names - processed_names)
-
-    not_processed_folders = [os.path.join(ROOT_IN, name) for name in not_processed]
-    print("Folders that still need to be processed:")
-    print("\n".join(not_processed_folders))
-    print()
-
-    return not_processed_folders
-
-
 if __name__ == '__main__':
-    # not_processed_list = get_not_processed_folders()
-    with open('./left_to_process.json') as f:
-        not_processed_list = json.load(f)
+    parser = argparse.ArgumentParser(description="Submit list of folders to be processed to slurm")
+    parser.add_argument('input_file', type=str, help="json file with list of folders to be processed")
+    args = parser.parse_args()
+    in_file = args.in_file
 
-    submit_folders(not_processed_list)
+    with open(in_file, 'r') as f:
+        folder_list = json.load(f)
+
+    submit_folders(folder_list)
