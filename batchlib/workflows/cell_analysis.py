@@ -274,7 +274,7 @@ def run_cell_analysis(config):
     t0 = time.time() - t0
 
     summary_writer = SlackSummaryWriter(config.slack_token)
-    summary_writer(config.input_folder, config.folder, runtime=t0)
+    summary_writer(config.folder, config.folder, runtime=t0)
 
     logger.info(f"Run {name} in {t0}s")
     return name, t0
