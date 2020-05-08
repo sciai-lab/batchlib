@@ -177,6 +177,7 @@ def run_cell_analysis(config):
     #         'cell_seg_key': config.seg_key},
     #     'run': {'gpu_id': config.gpu}}))
 
+    # TODO these parameters should also go into the analysis parameters!
     job_list.append((FindInfectedCells, {
         'build': {
             'marker_key': marker_ana_in_key,
@@ -228,7 +229,7 @@ def run_cell_analysis(config):
                 'cell_seg_key': config.seg_key,
                 'serum_bg_key': 'plate/backgrounds',  # here we can also put a float for constant bg subtraction
                 'marker_bg_key': 'plate/backgrounds',
-                'write_summary_images': True,
+                'write_summary_images': False,
                 'scale_factors': config.scale_factors,
                 'identifier': identifier},
             'run': {'force_recompute': False}}))

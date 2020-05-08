@@ -159,3 +159,12 @@ Schema of a single document:
 }
 ```
 
+- `cohort-descriptions` - cohort types together with their short descriptions
+
+Schema of a single document:
+```json
+{
+  "patient_type": "STRING",
+  "description": "STRING"
+}
+```

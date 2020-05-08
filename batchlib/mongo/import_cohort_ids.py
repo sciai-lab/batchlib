@@ -32,7 +32,8 @@ def import_cohort_ids(db):
             for well_name, cohort_id in plate_row:
                 matching_well = list(filter(lambda w: w["name"] == well_name, wells))
                 if len(matching_well) != 1:
-                    logger.info(f"Well {well_name} not found in DB")
+                    if cohort_id != 'unknown':
+                        logger.warning(f"Well {well_name} with cohort id {cohort_id} not found in DB")
                     continue
 
                 matching_well = matching_well[0]
@@ -42,6 +43,24 @@ def import_cohort_ids(db):
 
         # replace plate with cohort info update
         assay_metadata.replace_one({"name": plate_name}, plate_doc)
+
+
+def import_cohort_descriptions(db):
+    cohort_descriptions = [
+        {"patient_type": "A",
+         "description": "from 2015-16, people who had a common cold Corona infection at least 3 months before, 65 samples"},
+        {"patient_type": "B", "description": "from 2018, healthy controls ca. 110 samples"},
+        {"patient_type": "C",
+         "description": "from patients in the hospital, all Sars-CoV positive and symptomatic at different stages post symptom onset; currently roughly 150 analyzed, sampling ongoing"},
+        {"patient_type": "K",
+         "description": "childrens study Heidelberg, roughly 1100 samples, sampling ongoing (goal 3300)"},
+        {"patient_type": "M",
+         "description": "from 2020, not tested for RNA or negative, roughly 150 samples, sampling ongoing"},
+        {"patient_type": "P", "description": "recovered from Sars-CoV infection, roughly 150 samples, sampling ongoing"},
+        {"patient_type": "X", "description": "from before 2018, patients with mycoplasma infection"}
+    ]
+
+    db["cohort-descriptions"].insert_many(cohort_descriptions)
 
 
 if __name__ == '__main__':
@@ -62,10 +81,13 @@ if __name__ == '__main__':
 
     mongodb_uri = f'mongodb://{username}:{password}@{args.host}:{args.port}/?authSource={args.db}'
 
-    logger.info(f'Connecting to MongoDB instance: {args.host}:{args.port}, user: {args.user}, authSource: {args.db}')
+    logger.info(
+        f'Connecting to MongoDB instance: {args.host}:{args.port}, user: {args.user}, authSource: {args.db}')
 
     client = MongoClient(mongodb_uri)
 
     logger.info(f'Getting database: {args.db}')
 
     import_cohort_ids(client[args.db])
+
+    import_cohort_descriptions(client[args.db])

@@ -73,7 +73,7 @@ class DbResultWriter(BatchJobOnContainer):
             logger.warning(f'Connection failure: {e}. Skipping DbResultWriter job.')
             self.db = None
 
-    def check_output(self, path):
+    def check_output(self, path, **kwargs):
         if self.db is None:
             return True
         # check if result document already exist for a given (batchlib_version, workflow_name, plate_name)
@@ -87,7 +87,7 @@ class DbResultWriter(BatchJobOnContainer):
         # return False if no entry in the DB
         return result is not None
 
-    def validate_output(self, path):
+    def validate_output(self, path, **kwargs):
         # the output is stored in the DB and it's assumed to be valid
         return True
 
