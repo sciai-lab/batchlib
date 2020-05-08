@@ -13,7 +13,8 @@ from ..base import BatchJobOnContainer
 from ..util.image import seg_to_edges
 from ..util.io import (open_file, image_name_to_site_name, image_name_to_well_name,
                        in_file_to_image_name, in_file_to_plate_name,
-                       has_table, read_table, write_image_information)
+                       has_table, read_table, write_image_information,
+                       to_image_table, add_site_name_to_image_table)
 
 logger = get_logger('Workflow.BatchJob.CellLevelAnalysis')
 
@@ -289,10 +290,6 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
 
         return cell_properties
 
-    def get_bg_segment(self, in_file, ignore_label=0, device='cpu'):
-        channels, cell_seg = self.load_sample(in_file, device=device)
-        return torch.stack(channels)[:, cell_seg == ignore_label]
-
     # this is what should be run for each h5 file
     def save_all_stats(self, in_file, out_file, device):
         sample = self.load_sample(in_file, device=device)
@@ -310,30 +307,6 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
             table = np.asarray(table, dtype=float).T
             with open_file(out_file, 'a') as f:
                 self.write_table(f, output_key, columns, table)
-
-    def get_bg_stats(self, bg_values):
-        if bg_values is None:
-            return {'median': [np.nan] * len(self.channel_keys),
-                    'mad': [np.nan] * len(self.channel_keys)}
-        # bg_vales should have shape n_channels, n_pixels
-        bg_values = bg_values.cpu().numpy().astype(np.float32)
-        medians = np.median(bg_values, axis=1)
-        mads = np.median(np.abs(bg_values - medians[:, None]), axis=1)
-
-        return {'median': medians, 'mad': mads}
-
-    # TODO the three functions below are copied from CellAnalysis.
-    #  Solve this better.. Maybe put them in a mixin class?
-    @staticmethod
-    def folder_to_table_path(folder, identifier):
-        # NOTE, we call this .hdf5 to avoid pattern matching, it's a bit hacky ...
-        table_file_name = os.path.split(folder)[1] + '_table.hdf5'
-        return os.path.join(folder, table_file_name)
-
-    @property
-    def table_out_path(self):
-        return self.folder_to_table_path(self.folder, self.identifier)
-
 
     def run(self, input_files, output_files, gpu_id=None):
         with torch.no_grad():
@@ -353,10 +326,9 @@ class FindInfectedCells(BatchJobOnContainer):
     def __init__(self,
                  cell_seg_key='cell_segmentation',
                  marker_key='marker',
-                 infected_threshold=250, split_statistic='top50',
-                 infected_threshold_scale_key=None,
-                 bg_correction_key=None,
-                 per_cell_bg_correction=True,
+                 infected_threshold=6.2, split_statistic='top50',
+                 scale_with_mad=True,
+                 bg_correction_key='plate/backgrounds',  # can also be float
                  identifier=None,
                  **super_kwargs):
         self.marker_key = marker_key
@@ -364,11 +336,10 @@ class FindInfectedCells(BatchJobOnContainer):
         self.feature_table_key = cell_seg_key + '/' + marker_key
 
         self.infected_threshold = infected_threshold
-        self.infected_threshold_scale_key = infected_threshold_scale_key
+        self.scale_with_mad = scale_with_mad
         self.split_statistic = split_statistic
 
         self.bg_correction_key = bg_correction_key
-        self.per_cell_bg_correction = per_cell_bg_correction
 
         # infected are per default saved at tables/cell_classification/cell_segmentation/marker_key in the container
         self.output_table_key = 'cell_classification/' + self.feature_table_key + \
@@ -386,29 +357,36 @@ class FindInfectedCells(BatchJobOnContainer):
             feature_dict = {key: values for key, values in zip(keys, table.T)}
         return feature_dict
 
-    def get_bg_correction(self, feature_dict, bg_correction_key=None):
-        bg_correction_key = self.bg_correction_key if bg_correction_key is None else bg_correction_key
-        if bg_correction_key:
-            if self.per_cell_bg_correction:
-                offset = feature_dict[bg_correction_key]
-            else:
-                try:
-                    bg_ind = feature_dict['label_id'].tolist().index(0)
-                    offset = feature_dict[bg_correction_key][bg_ind]
-                except ValueError:
-                    offset = np.nan
-        else:
-            offset = 0
-        return offset
+    @staticmethod
+    def folder_to_table_path(folder, identifier):
+        # NOTE, we call this .hdf5 to avoid pattern matching, it's a bit hacky ...
+        table_file_name = os.path.split(folder)[1] + '_table.hdf5'
+        return os.path.join(folder, table_file_name)
 
-    def get_infected_indicator(self, feature_dict):
-        offset = self.get_bg_correction(feature_dict)
-        if self.infected_threshold_scale_key is not None:
-            scale = feature_dict[self.infected_threshold_scale_key]
+    @property
+    def table_out_path(self):
+        return self.folder_to_table_path(self.folder, self.identifier)
+
+    def get_bg_correction_dict(self, in_files, column_name=None):
+        # returns dict mapping image to bg value
+        if column_name is None:
+            column_name = self.marker_key + '_median'
+        if isinstance(self.bg_correction_key, (int, float)):
+            column_names, table = ['plate_name', column_name], np.array([['dummy_plate', self.bg_correction_key]])
         else:
-            scale = 1
+            with open_file(self.table_out_path, 'r') as f:
+                column_names, table = read_table(f, self.bg_correction_key)
+        column_names, table = to_image_table((column_names, table), list(map(in_file_to_image_name, in_files)))
+        assert column_name in column_names, \
+            f'Did not find column {column_name} in background table columns {column_names}'
+        return dict(zip(table[:, column_names.index('image_name')],
+                        table[:, column_names.index(column_name)].astype(np.float32)))
+
+    def get_infected_indicator(self, feature_dict, offset=None, scale=None):
+        offset = 0 if offset is None else offset
+        scale = 1 if scale is None else scale
+        print(offset, scale)
         infected_indicator = feature_dict[self.split_statistic] > scale * self.infected_threshold + offset
-
         try:
             bg_ind = feature_dict['label_id'].tolist().index(0)
             infected_indicator[bg_ind] = False  # the background should never be classified as infected
@@ -416,8 +394,8 @@ class FindInfectedCells(BatchJobOnContainer):
             pass  # no bg segment
         return infected_indicator
 
-    def get_infected_and_control_indicators(self, feature_dict):
-        infected_indicator = self.get_infected_indicator(feature_dict)
+    def get_infected_and_control_indicators(self, feature_dict, offset=None, scale=None):
+        infected_indicator = self.get_infected_indicator(feature_dict, offset, scale)
         # per default, everything that is not infected is control
         control_indicator = np.logical_not(infected_indicator)
         try:
@@ -427,9 +405,9 @@ class FindInfectedCells(BatchJobOnContainer):
             pass  # no bg segment
         return infected_indicator, control_indicator
 
-    def compute_and_save_infected_and_control(self, in_file, out_file):
+    def compute_and_save_infected_and_control(self, in_file, out_file, offset=None, scale=None):
         feature_dict = self.load_feature_dict(in_file)
-        infected_indicator, control_indicator = self.get_infected_and_control_indicators(feature_dict)
+        infected_indicator, control_indicator = self.get_infected_and_control_indicators(feature_dict, offset, scale)
         column_names = ['label_id', 'is_infected', 'is_control']
         table = [feature_dict['label_id'], infected_indicator, control_indicator]
         table = np.asarray(table, dtype=float).T
@@ -437,8 +415,15 @@ class FindInfectedCells(BatchJobOnContainer):
             self.write_table(f, self.output_table_key, column_names, table)
 
     def run(self, input_files, output_files):
+        offset_dict = self.get_bg_correction_dict(input_files, column_name=f'{self.marker_key}_median')
+        if self.scale_with_mad:
+            scale_dict = self.get_bg_correction_dict(input_files, column_name=f'{self.marker_key}_mad')
+        else:
+            scale_dict = {}
         for input_file, output_file in tqdm(list(zip(input_files, output_files)), desc='finding infected cells'):
-            self.compute_and_save_infected_and_control(input_file, output_file)
+            self.compute_and_save_infected_and_control(input_file, output_file,
+                                                       offset=offset_dict[in_file_to_image_name(input_file)],
+                                                       scale=scale_dict.get(in_file_to_image_name(input_file)))
 
 
 class CellLevelAnalysisBase(BatchJobOnContainer):
@@ -629,16 +614,6 @@ class CellLevelAnalysisWithTableBase(CellLevelAnalysisBase):
             return have_table
 
 
-def add_site_name_to_image_table(column_names, table):
-    assert column_names[0] == 'image_name'
-    column_names = list(column_names)
-    column_names.insert(1, 'site_name')
-    table = np.array(table).tolist()
-    for row in table:
-        row.insert(1, image_name_to_site_name(row[0]))
-    return column_names, np.array(table)
-
-
 class ExtractBackground(CellLevelAnalysisWithTableBase):
     def __init__(self,
                  cell_seg_key, serum_key, marker_key,  # TODO: get rid of this in CellLevelAnalysisWithTableBase
@@ -682,7 +657,7 @@ class ExtractBackground(CellLevelAnalysisWithTableBase):
         mads = np.median(np.abs(bg_values - medians[:, None]), axis=1)
 
         return {'median': medians, 'mad': mads}
-    
+
     def stat_dict_to_table(self, stat_dict, first_column_name):
         column_names = [first_column_name] + [f'{channel}_{stat}'
                                               for channel in self.channel_keys
@@ -742,7 +717,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
                  cell_seg_key='cell_segmentation',
                  serum_key='serum',
                  marker_key='marker',
-                 serum_bg_key='plate_bg_median',
+                 serum_bg_key='plate_bg_median',  # FIXME use new background in global table
                  marker_bg_key='plate_bg_median',
                  score_name='serum_ratio_of_q0.5_of_means',
                  write_summary_images=False,

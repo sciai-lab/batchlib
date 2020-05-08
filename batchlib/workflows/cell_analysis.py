@@ -7,10 +7,11 @@ from batchlib import run_workflow
 from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    DenoiseByGrayscaleOpening,
                                                    InstanceFeatureExtraction,
-                                                   FindInfectedCells)
+                                                   FindInfectedCells,
+                                                   ExtractBackground)
 from batchlib.analysis.cell_analysis_qc import CellLevelQC, ImageLevelQC, WellLevelQC
 from batchlib.analysis.merge_tables import MergeAnalysisTables
-from batchlib.mongo.result_writer import DbResultWriter
+#from batchlib.mongo.result_writer import DbResultWriter
 from batchlib.outliers.outlier import get_outlier_predicate
 from batchlib.preprocessing import get_barrel_corrector, get_serum_keys, Preprocess
 from batchlib.segmentation import SeededWatershed
@@ -142,16 +143,6 @@ def run_cell_analysis(config):
             'run': {}}))
         marker_ana_in_key = marker_ana_in_key + '_denoised'
 
-    # This is just for the bg computation
-    job_list.append((ImageLevelQC, {
-        'build': {
-            'cell_seg_key': config.seg_key,
-            'serum_key': serum_seg_in_key,  # We use the same serum key as for the segmentation. Is that reasonable?
-            'marker_key': marker_ana_in_key,
-            'outlier_predicate': outlier_predicate,
-            'identifier': None},
-    }))
-
     job_list.append((InstanceFeatureExtraction, {
         'build': {
             'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
@@ -159,6 +150,23 @@ def run_cell_analysis(config):
             'cell_seg_key': config.seg_key},
         'run': {'gpu_id': config.gpu}}))
 
+    job_list.append((ImageLevelQC, {
+        'build': {
+            'cell_seg_key': config.seg_key,
+            'serum_key': serum_seg_in_key,
+            'marker_key': marker_ana_in_key,
+            'outlier_predicate': outlier_predicate,
+            'identifier': None}
+    }))
+
+    job_list.append((ExtractBackground, {
+        'build': {
+            'marker_key': marker_ana_in_key,  # is ignored
+            'serum_key': serum_seg_in_key,    # is ignored
+            'cell_seg_key': config.seg_key,
+            'actual_channels_to_use': (*serum_ana_in_keys, marker_ana_in_key),  # is actually used
+        }
+    }))
     # # Also compute features with nuclei if they should be used later
     # job_list.append((InstanceFeatureExtraction, {
     #     'build': {
@@ -176,11 +184,11 @@ def run_cell_analysis(config):
             # 'bg_correction_key': 'means',
             # 'per_cell_bg_correction': False,
             # new method
-            'bg_correction_key': 'well_bg_median',
-            'infected_threshold_scale_key': 'well_bg_mad',
-            'infected_threshold': 7,
+            'bg_correction_key': 'wells/backgrounds',
+            'scale_with_mad': True,
+            'infected_threshold': 6,
         },
-        'run': {'force_recompute': None}}))
+        'run': {'force_recompute': True}}))
 
     table_identifiers = serum_ana_in_keys
     for serum_key, identifier in zip(serum_ana_in_keys, table_identifiers):
@@ -225,14 +233,14 @@ def run_cell_analysis(config):
     }))
 
     # make sure that db job is executed when all result tables hdf5 are ready (outside of the loop)
-    job_list.append((DbResultWriter, {
-        'build': {
-            "username": config.db_username,
-            "password": config.db_password,
-            "host": config.db_host,
-            "port": config.db_port,
-            "db_name": config.db_name
-        }}))
+    # job_list.append((DbResultWriter, {
+    #     'build': {
+    #         "username": config.db_username,
+    #         "password": config.db_password,
+    #         "host": config.db_host,
+    #         "port": config.db_port,
+    #         "db_name": config.db_name
+    #     }}))
 
     t0 = time.time()
 
