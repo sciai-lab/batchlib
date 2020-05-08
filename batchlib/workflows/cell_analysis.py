@@ -44,8 +44,7 @@ def get_analysis_parameter(config, use_fixed_background):
     if use_fixed_background:
         params.update({'background_' + name: value for name, value in config.fixed_background.items()})
     else:
-        # TODO we need to parse the same information as above from the table for the non-fixed background case
-        pass
+        params.update({'background_type': config.background_type})
 
     return params
 
@@ -79,9 +78,12 @@ def get_input_keys(config, serum_in_keys):
 
 def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
     keys = serum_ana_in_keys + [marker_ana_in_key]
-    fixed_background_dict = config.fixed_background_dict
+    fixed_background_dict = config.fixed_background
     if fixed_background_dict is None:
-        return {key: 'plate/backgrounds' for key in keys}, False
+        background_type = config.background_type
+        if background_type not in ('images', 'wells', 'plate'):
+            raise ValueError(f"Expected background type to be one of (images, wells, plates), got {background_type}")
+        return {key: f'{background_type}/backgrounds' for key in keys}, False
 
     # TODO I don't want to enforce having the _corrected everywhere, so we do this weird little dance for now
     # in the long term, I would like to eliminate running the option of using the non-corrected completely,
@@ -90,7 +92,7 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
     for key in keys:
         value = fixed_background_dict.get(key, None)
         if value is None:
-            alt_key = key.replace('_corrceted', '')
+            alt_key = key.replace('_corrected', '')
             value = fixed_background_dict.get(alt_key, None)
         if value is None:
             raise ValueError(f"Could not find fixed background value for channel {key}")
@@ -101,6 +103,7 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
 def run_cell_analysis(config):
     """
     """
+    assert (config.dont_ignore_nuclei is False), "We need to run computation WITH nucleus exclusion"
 
     name = 'CellAnalysisWorkflow'
 
@@ -230,7 +233,7 @@ def run_cell_analysis(config):
             'cell_seg_key': config.seg_key,
             'bg_correction_key': 'plate/backgrounds',
             'scale_with_mad': config.infected_scale_with_mad,  # default: True
-            'infected_threshold': config.infected_threshold  # default: 6
+            'infected_threshold': config.infected_threshold  # default: 6.2
         }}))
 
     # for the background substraction, we can either use a fixed value,
@@ -284,8 +287,10 @@ def run_cell_analysis(config):
             'run': {'force_recompute': False}}))
 
     # TODO
-    # - we need to filter out the mean-with-nuclei and sum-without-nuclei results
-    # - choose the correct reference table !
+    # - we need to filter out the mean-with-nuclei and sum-without-nuclei results (not implemented yet)
+    # - choose the correct reference table!
+    # - report the different background values and the
+    # - then from the analysis parameter object, we know which one was used
     analysis_parameters = get_analysis_parameter(config, is_fixed)
     job_list.append((MergeAnalysisTables, {
         'build': {'input_table_names': table_identifiers,
@@ -387,7 +392,7 @@ def cell_analysis_parser(config_folder, default_config_name):
     # these parameters change how the analysis results are computed!
     #
 
-    # TODO do we still need this?
+    # TODO get rid of these two parameters!
     # whether to run the segmentation / analysis on the corrected or on the corrected data
     parser.add("--segmentation_on_corrected", default=True)
     parser.add("--analysis_on_corrected", default=True)
@@ -398,12 +403,14 @@ def cell_analysis_parser(config_folder, default_config_name):
 
     # parameter for the infected cell detection
     parser.add("--infected_scale_with_mad", default=True)
-    parser.add("--infected_threshold", type=int, default=6)
+    parser.add("--infected_threshold", type=float, default=6.2)
 
     # optional fixed background value(s).
     # if None, will be computed from the data
     # otherwise, needs to be a dict with background values for the input channels
     parser.add("--fixed_background", default=None)
+    # do we use image, well or plate level background? (default is plate)
+    parser.add("--background_type", default='plate', type=str)
 
     #
     # more options
