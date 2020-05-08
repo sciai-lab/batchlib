@@ -115,3 +115,6 @@ if __name__ == '__main__':
     plate_name = '20200417_152052_943'
     control_wells = plate_metadata.get_control_wells(plate_name)
     print(control_wells)
+
+    positive_wells = plate_metadata.get_positive_wells(plate_name)
+    print(positive_wells)
