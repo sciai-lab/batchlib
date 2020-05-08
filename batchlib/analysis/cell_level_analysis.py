@@ -637,11 +637,12 @@ class ExtractBackground(CellLevelAnalysisWithTableBase):
         self.well_table_key = 'wells/' + group_name
         self.plate_table_key = 'plate/' + group_name
 
-        super(ExtractBackground, self).__init__(
+        super().__init__(
             cell_seg_key=cell_seg_key, serum_key=serum_key, marker_key=marker_key,
             table_out_keys=[self.image_table_key, self.well_table_key, self.plate_table_key],
             validate_cell_classification=False,
-            identifier=identifier
+            identifier=identifier,
+            **super_kwargs
         )
 
     def get_bg_segment(self, path, device):

@@ -7,8 +7,10 @@ from glob import glob
 from .config import get_default_extension
 from .util import is_group, get_file_lock, get_logger
 from .util import io as io
+import logging
 
 logger = get_logger('Workflow.BatchJob')
+logger.setLevel(logging.DEBUG)
 
 
 class BatchJob(ABC):
@@ -199,8 +201,10 @@ class BatchJob(ABC):
             input_folder_ = folder if input_folder is None else input_folder
             logger.info(f'{self.name}: input folder is {input_folder_}')
 
-            # monkey patch the folder, so that we can get this in the run and input / output validation methods
+            # monkey patch the folder and input_folder,
+            # so that we can get this in the run and input / output validation methods
             self.folder = folder
+            self.input_folder = input_folder if input_folder is not None else self.folder
 
             # validate and get the input files to be processed
             input_files = self.get_inputs(folder, input_folder_, status,
