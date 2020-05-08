@@ -82,6 +82,7 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
         background_type = config.background_type
         if background_type not in ('images', 'wells', 'plate'):
             raise ValueError(f"Expected background type to be one of (images, wells, plates), got {background_type}")
+        logger.info(f"Compute background from data with type {background_type}")
         return {key: f'{background_type}/backgrounds' for key in keys}, False
 
     # TODO I don't want to enforce having the _corrected everywhere, so we do this weird little dance for now
@@ -96,6 +97,8 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
         if value is None:
             raise ValueError(f"Could not find fixed background value for channel {key}")
         parsed_fixed_background_dict[key] = value
+
+    logger.info(f"Use fixed backgrounds: {parsed_fixed_background_dict}")
     return parsed_fixed_background_dict, True
 
 
@@ -285,9 +288,10 @@ def run_cell_analysis(config):
                 'identifier': identifier},
             'run': {'force_recompute': False}}))
 
-    # get a dict with all relevant analysis parameters, so that we can write it as a table
+    # get a dict with all relevant analysis parameters, so that we can write it as a table and log it
     # TODO we also need to include this in the database
-    analysis_parameters = get_analysis_parameter(config, is_fixed)
+    analysis_parameter = get_analysis_parameter(config, is_fixed)
+    logger.info(f"Analysis parameter: {analysis_parameter}")
 
     # find the identifier for the reference table (the IgG one if we have multiple tables)
     if len(table_identifiers) == 1:
@@ -302,7 +306,7 @@ def run_cell_analysis(config):
     job_list.append((MergeAnalysisTables, {
         'build': {'input_table_names': table_identifiers,
                   'reference_table_name': reference_table_name,
-                  'analysis_parameters': analysis_parameters}
+                  'analysis_parameters': analysis_parameter}
     }))
 
     # make sure that db job is executed when all result tables hdf5 are ready (outside of the loop)
