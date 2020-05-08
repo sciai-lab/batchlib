@@ -11,7 +11,7 @@ from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    ExtractBackground)
 from batchlib.analysis.cell_analysis_qc import CellLevelQC, ImageLevelQC, WellLevelQC
 from batchlib.analysis.merge_tables import MergeAnalysisTables
-#from batchlib.mongo.result_writer import DbResultWriter
+from batchlib.mongo.result_writer import DbResultWriter
 from batchlib.outliers.outlier import get_outlier_predicate
 from batchlib.preprocessing import get_barrel_corrector, get_serum_keys, Preprocess
 from batchlib.segmentation import SeededWatershed
@@ -150,6 +150,7 @@ def run_cell_analysis(config):
             'cell_seg_key': config.seg_key},
         'run': {'gpu_id': config.gpu}}))
 
+    # This is just for ExtractBackground below
     job_list.append((ImageLevelQC, {
         'build': {
             'cell_seg_key': config.seg_key,
@@ -184,7 +185,7 @@ def run_cell_analysis(config):
             # 'bg_correction_key': 'means',
             # 'per_cell_bg_correction': False,
             # new method
-            'bg_correction_key': 'wells/backgrounds',
+            'bg_correction_key': 'plate/backgrounds',
             'scale_with_mad': True,
             'infected_threshold': 6,
         },
@@ -197,6 +198,8 @@ def run_cell_analysis(config):
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
                 'marker_key': marker_ana_in_key,
+                'serum_bg_key': 'plate/backgrounds',  # here we can also put a float for constant bg subtraction
+                'marker_bg_key': 'plate/backgrounds',
                 'identifier': identifier}
         }))
         job_list.append((ImageLevelQC, {
@@ -204,6 +207,8 @@ def run_cell_analysis(config):
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
                 'marker_key': marker_ana_in_key,
+                'serum_bg_key': 'plate/backgrounds',  # here we can also put a float for constant bg subtraction
+                'marker_bg_key': 'plate/backgrounds',
                 'outlier_predicate': outlier_predicate,
                 'identifier': identifier}
         }))
@@ -212,6 +217,8 @@ def run_cell_analysis(config):
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
                 'marker_key': marker_ana_in_key,
+                'serum_bg_key': 'plate/backgrounds',  # here we can also put a float for constant bg subtraction
+                'marker_bg_key': 'plate/backgrounds',
                 'identifier': identifier}
         }))
         job_list.append((CellLevelAnalysis, {
@@ -219,6 +226,8 @@ def run_cell_analysis(config):
                 'serum_key': serum_key,
                 'marker_key': marker_ana_in_key,
                 'cell_seg_key': config.seg_key,
+                'serum_bg_key': 'plate/backgrounds',  # here we can also put a float for constant bg subtraction
+                'marker_bg_key': 'plate/backgrounds',
                 'write_summary_images': True,
                 'scale_factors': config.scale_factors,
                 'identifier': identifier},
@@ -233,14 +242,14 @@ def run_cell_analysis(config):
     }))
 
     # make sure that db job is executed when all result tables hdf5 are ready (outside of the loop)
-    # job_list.append((DbResultWriter, {
-    #     'build': {
-    #         "username": config.db_username,
-    #         "password": config.db_password,
-    #         "host": config.db_host,
-    #         "port": config.db_port,
-    #         "db_name": config.db_name
-    #     }}))
+    job_list.append((DbResultWriter, {
+        'build': {
+            "username": config.db_username,
+            "password": config.db_password,
+            "host": config.db_host,
+            "port": config.db_port,
+            "db_name": config.db_name
+        }}))
 
     t0 = time.time()
 

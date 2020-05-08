@@ -161,7 +161,7 @@ def is_table_with_specific_first_columns(first_column_names, obj):
         return False
     try:
         first_columns = obj[0][:len(first_column_names)]
-        return first_columns == first_column_names
+        return first_columns == list(first_column_names)
     except:
         return False
 
@@ -175,7 +175,7 @@ def to_plate_table(obj):
     if is_plate_table(obj):
         return obj
     else:
-        return
+        assert False, f'not a plate table: {obj}'
 
 
 def to_well_table(obj, well_names):

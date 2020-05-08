@@ -7,6 +7,7 @@ import numpy as np
 import skimage.morphology
 import torch
 from tqdm.auto import tqdm
+from glob import glob
 
 from batchlib.util.logging import get_logger
 from ..base import BatchJobOnContainer
@@ -321,6 +322,20 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
                 _save_all_stats(input_file, output_file)
 
 
+def _get_bg_correction_dict(table_path, key_in_table, column_name, in_files):
+    # if key in table is float or int, return constant background
+    if isinstance(key_in_table, (int, float)):
+        column_names, table = ['plate_name', column_name], np.array([['dummy_plate', key_in_table]])
+    else:
+        with open_file(table_path, 'r') as f:
+            column_names, table = read_table(f, key_in_table)
+    column_names, table = to_image_table((column_names, table), list(map(in_file_to_image_name, in_files)))
+    assert column_name in column_names, \
+        f'Did not find column {column_name} in background table columns {column_names}'
+    return dict(zip(table[:, column_names.index('image_name')],
+                    table[:, column_names.index(column_name)].astype(np.float32)))
+
+
 class FindInfectedCells(BatchJobOnContainer):
     """This job finds the infected and control cells to later compute the measures on"""
     def __init__(self,
@@ -368,24 +383,11 @@ class FindInfectedCells(BatchJobOnContainer):
         return self.folder_to_table_path(self.folder, self.identifier)
 
     def get_bg_correction_dict(self, in_files, column_name=None):
-        # returns dict mapping image to bg value
-        if column_name is None:
-            column_name = self.marker_key + '_median'
-        if isinstance(self.bg_correction_key, (int, float)):
-            column_names, table = ['plate_name', column_name], np.array([['dummy_plate', self.bg_correction_key]])
-        else:
-            with open_file(self.table_out_path, 'r') as f:
-                column_names, table = read_table(f, self.bg_correction_key)
-        column_names, table = to_image_table((column_names, table), list(map(in_file_to_image_name, in_files)))
-        assert column_name in column_names, \
-            f'Did not find column {column_name} in background table columns {column_names}'
-        return dict(zip(table[:, column_names.index('image_name')],
-                        table[:, column_names.index(column_name)].astype(np.float32)))
+        return _get_bg_correction_dict(self.table_out_path, self.bg_correction_key, column_name, in_files)
 
     def get_infected_indicator(self, feature_dict, offset=None, scale=None):
         offset = 0 if offset is None else offset
         scale = 1 if scale is None else scale
-        print(offset, scale)
         infected_indicator = feature_dict[self.split_statistic] > scale * self.infected_threshold + offset
         try:
             bg_ind = feature_dict['label_id'].tolist().index(0)
@@ -492,7 +494,7 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
             self.marker_key: marker_dict
         }
         if subtract_background:
-            per_cell_statistics = self.subtract_background(per_cell_statistics)
+            per_cell_statistics = self.subtract_background(per_cell_statistics, in_path)
 
         if not split_infected_and_control:
             return per_cell_statistics
@@ -518,17 +520,32 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
                     control_indicator[i] = 0
         return infected_indicator, control_indicator
 
-    def subtract_background(self, per_cell_statistics):
+    @property
+    def bg_dict(self):
+        if not hasattr(self, '_bg_dict'):
+            # TODO: this is not ideal.. get the list of input files differently
+            input_folder = self.input_folder
+            in_pattern = os.path.join(input_folder, self.input_pattern)
+            input_files = glob(in_pattern)
+            def channel_to_bg_column(channel):
+                # because e.g. serum_key = 'cell_segmentation/serum_IgA_corrected'
+                return f'{channel.split("/")[-1]}_median'
+            self._bg_dict = {channel: _get_bg_correction_dict(self.table_out_path,
+                                                              bg_key,
+                                                              channel_to_bg_column(channel),
+                                                              input_files)
+                             for channel, bg_key in ((self.serum_key, self.serum_bg_key),
+                                                     (self.marker_key, self.marker_bg_key))}
+        return self._bg_dict
+
+    def subtract_background(self, per_cell_statistics, in_path):
         per_cell_statistics = deepcopy(per_cell_statistics)
+        image_name = in_file_to_image_name(in_path)
         for channel, bg_key in ((self.serum_key, self.serum_bg_key), (self.marker_key, self.marker_bg_key)):
             if bg_key is None:
                 continue
+            bg_offset = self.bg_dict[channel][image_name]
             channel_statistics = per_cell_statistics[channel]
-            try:
-                bg_offset = next(iter(channel_statistics[bg_key]))
-            except StopIteration:
-                # no cells, nothing to do
-                continue
             for key in channel_statistics.keys():
                 if key in ['means', 'medians', 'top50', 'top30', 'top10']:
                     channel_statistics[key] -= bg_offset
@@ -541,7 +558,7 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
                     assert False, f"No background subtraction rule specified for key '{key}'"
         return per_cell_statistics
 
-    def get_stat_dict(self, infected_cell_statistics, control_cell_statistics, bg_keys=None):
+    def get_stat_dict(self, infected_cell_statistics, control_cell_statistics):
         stat_dict = compute_ratios(control_cell_statistics, infected_cell_statistics,
                                    channel_name_dict=dict(serum=self.serum_key, marker=self.marker_key))
         if hasattr(self, 'score_name') and self.score_name is not None:
@@ -558,16 +575,6 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
         stat_dict['cell_size_median_control'] = np.median(control_cell_statistics[self.serum_key]['sizes'])
         stat_dict['cell_size_mean_control'] = np.mean(control_cell_statistics[self.serum_key]['sizes'])
 
-        if bg_keys is not None:
-            # the background statistics are saved for every cell, so get them from an arbitrary one
-            all_cell_statistics = join_cell_properties(infected_cell_statistics, control_cell_statistics)
-            for bg_key in bg_keys:
-                for semantic_channel_name, channel_key in [('serum', self.serum_key), ('marker', self.marker_key)]:
-                    try:
-                        bg_stat = next(iter(all_cell_statistics[channel_key][bg_key]))
-                    except StopIteration:
-                        bg_stat = np.nan
-                    stat_dict[f'{bg_key}_{semantic_channel_name}'] = bg_stat
         return stat_dict
 
     def group_images_by_well(self, input_files):
@@ -717,8 +724,8 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
                  cell_seg_key='cell_segmentation',
                  serum_key='serum',
                  marker_key='marker',
-                 serum_bg_key='plate_bg_median',  # FIXME use new background in global table
-                 marker_bg_key='plate_bg_median',
+                 serum_bg_key='plate/backgrounds',
+                 marker_bg_key='plate/backgrounds',
                  score_name='serum_ratio_of_q0.5_of_means',
                  write_summary_images=False,
                  infected_cell_mask_key='infected_cell_mask',
@@ -808,10 +815,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
             infected_cell_statistics, control_cell_statistics = self.load_per_cell_statistics(in_file)
 
             # get all the statistics for this image and their names
-            bg_keys = ['plate_bg_median', 'plate_bg_mad',
-                       'well_bg_median', 'well_bg_mad',
-                       'image_bg_median', 'image_bg_mad']
-            stat_dict = self.get_stat_dict(infected_cell_statistics, control_cell_statistics, bg_keys)
+            stat_dict = self.get_stat_dict(infected_cell_statistics, control_cell_statistics)
 
             # Set the main score to nan if this image is an outlier
             outlier, outlier_type = image_outlier_dict.get(image_name, (-1, 'not_checked'))
@@ -885,9 +889,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
             infected_cell_statistics, control_cell_statistics = self.load_per_cell_statistics(in_files_for_current_well)
 
             # get all the statistics for this well and their names
-            bg_keys = ['plate_bg_median', 'plate_bg_mad',
-                       'well_bg_median', 'well_bg_mad']
-            stat_dict = self.get_stat_dict(infected_cell_statistics, control_cell_statistics, bg_keys)
+            stat_dict = self.get_stat_dict(infected_cell_statistics, control_cell_statistics)
 
             # get the main score, which is the measure computed for `score_name`, but set to
             # nan if this image is an outlier
