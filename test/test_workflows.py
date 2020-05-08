@@ -60,6 +60,10 @@ class BaseTestMixin(ABC):
     def test_workflow_for_naming_schemes(self):
         root = os.path.join(ROOT, 'naming_schemes')
         folders = glob(os.path.join(root, "*"))
+        folders.sort()
+
+        # for debugging
+        # folders = folders[-1:]
 
         for folder in folders:
             self._test_naming_scheme(folder)

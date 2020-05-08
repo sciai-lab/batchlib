@@ -9,7 +9,10 @@ from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    InstanceFeatureExtraction,
                                                    FindInfectedCells,
                                                    ExtractBackground)
-from batchlib.analysis.cell_analysis_qc import CellLevelQC, ImageLevelQC, WellLevelQC
+from batchlib.analysis.cell_analysis_qc import (CellLevelQC, ImageLevelQC, WellLevelQC,
+                                                DEFAULT_CELL_OUTLIER_CRITERIA,
+                                                DEFAULT_IMAGE_OUTLIER_CRITERIA,
+                                                DEFAULT_WELL_OUTLIER_CRITERIA)
 from batchlib.analysis.merge_tables import MergeAnalysisTables
 from batchlib.mongo.result_writer import DbResultWriter
 from batchlib.outliers.outlier import get_outlier_predicate
@@ -18,10 +21,31 @@ from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
+from batchlib.slack import SlackSummaryWriter
 from batchlib.util import get_logger
 from batchlib.util.plate_visualizations import all_plots
 
 logger = get_logger('Workflow.CellAnalysis')
+
+
+def get_analysis_parameter(config, use_fixed_background):
+    # collect all relevant analysis paramter, so that we can
+    # write them to a table and keep track of this
+    params = {'marker_denoise_radius': config.marker_denoise_radius,
+              'dont_ignore_nuclei': config.dont_ignore_nuclei,
+              'infected_detection_threshold': config.infected_threshold,
+              'scale_infected_detection_with_mad': config.infected_scale_with_mad}
+    params.update({'qc_cells_' + k: v for k, v in DEFAULT_CELL_OUTLIER_CRITERIA.items()})
+    params.update({'qc_images_' + k: v for k, v in DEFAULT_IMAGE_OUTLIER_CRITERIA.items()})
+    params.update({'qc_wells_' + k: v for k, v in DEFAULT_WELL_OUTLIER_CRITERIA.items()})
+
+    params['fixed_background'] = use_fixed_background
+    if use_fixed_background:
+        params.update({'background_' + name: value for name, value in config.fixed_background.items()})
+    else:
+        params.update({'background_type': config.background_type})
+
+    return params
 
 
 def get_input_keys(config, serum_in_keys):
@@ -51,9 +75,37 @@ def get_input_keys(config, serum_in_keys):
     return nuc_seg_in_key, serum_seg_in_key, marker_ana_in_key, serum_ana_in_keys
 
 
+def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
+    keys = serum_ana_in_keys + [marker_ana_in_key]
+    fixed_background_dict = config.fixed_background
+    if fixed_background_dict is None:
+        background_type = config.background_type
+        if background_type not in ('images', 'wells', 'plate'):
+            raise ValueError(f"Expected background type to be one of (images, wells, plates), got {background_type}")
+        logger.info(f"Compute background from data with type {background_type}")
+        return {key: f'{background_type}/backgrounds' for key in keys}, False
+
+    # TODO I don't want to enforce having the _corrected everywhere, so we do this weird little dance for now
+    # in the long term, I would like to eliminate running the option of using the non-corrected completely,
+    # then we can get rid of this
+    parsed_fixed_background_dict = {}
+    for key in keys:
+        value = fixed_background_dict.get(key, None)
+        if value is None:
+            alt_key = key.replace('_corrected', '')
+            value = fixed_background_dict.get(alt_key, None)
+        if value is None:
+            raise ValueError(f"Could not find fixed background value for channel {key}")
+        parsed_fixed_background_dict[key] = value
+
+    logger.info(f"Use fixed backgrounds: {parsed_fixed_background_dict}")
+    return parsed_fixed_background_dict, True
+
+
 def run_cell_analysis(config):
     """
     """
+    assert (config.dont_ignore_nuclei is False), "We need to run computation WITH nucleus exclusion"
 
     name = 'CellAnalysisWorkflow'
 
@@ -177,19 +229,22 @@ def run_cell_analysis(config):
     #         'cell_seg_key': config.seg_key},
     #     'run': {'gpu_id': config.gpu}}))
 
-    # TODO these parameters should also go into the analysis parameters!
     job_list.append((FindInfectedCells, {
         'build': {
             'marker_key': marker_ana_in_key,
             'cell_seg_key': config.seg_key,
-            # # old method
-            # 'bg_correction_key': 'means',
-            # 'per_cell_bg_correction': False,
-            # new method
             'bg_correction_key': 'plate/backgrounds',
-            'scale_with_mad': True,
-            'infected_threshold': 6,
+            'scale_with_mad': config.infected_scale_with_mad,  # default: True
+            'infected_threshold': config.infected_threshold  # default: 6.2
         }}))
+
+    # for the background substraction, we can either use a fixed value,
+    # or compute it from the data. In the first case, we pass the value
+    # as 'serum_bg_key' / 'marker_bg_key'. In the second case, we pass a key
+    # to the table holding these values.
+    background_parameters, is_fixed = parse_background_parameters(config,
+                                                                  marker_ana_in_key,
+                                                                  serum_ana_in_keys)
 
     table_identifiers = serum_ana_in_keys
     for serum_key, identifier in zip(serum_ana_in_keys, table_identifiers):
@@ -198,8 +253,8 @@ def run_cell_analysis(config):
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
                 'marker_key': marker_ana_in_key,
-                'serum_bg_key': 'plate/backgrounds',  # here we can also put a float for constant bg subtraction
-                'marker_bg_key': 'plate/backgrounds',
+                'serum_bg_key': background_parameters[serum_key],
+                'marker_bg_key': background_parameters[marker_ana_in_key],
                 'identifier': identifier}
         }))
         job_list.append((ImageLevelQC, {
@@ -207,8 +262,8 @@ def run_cell_analysis(config):
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
                 'marker_key': marker_ana_in_key,
-                'serum_bg_key': 'plate/backgrounds',  # here we can also put a float for constant bg subtraction
-                'marker_bg_key': 'plate/backgrounds',
+                'serum_bg_key': background_parameters[serum_key],
+                'marker_bg_key': background_parameters[marker_ana_in_key],
                 'outlier_predicate': outlier_predicate,
                 'identifier': identifier}
         }))
@@ -217,8 +272,8 @@ def run_cell_analysis(config):
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
                 'marker_key': marker_ana_in_key,
-                'serum_bg_key': 'plate/backgrounds',  # here we can also put a float for constant bg subtraction
-                'marker_bg_key': 'plate/backgrounds',
+                'serum_bg_key': background_parameters[serum_key],
+                'marker_bg_key': background_parameters[marker_ana_in_key],
                 'identifier': identifier}
         }))
         job_list.append((CellLevelAnalysis, {
@@ -226,19 +281,32 @@ def run_cell_analysis(config):
                 'serum_key': serum_key,
                 'marker_key': marker_ana_in_key,
                 'cell_seg_key': config.seg_key,
-                'serum_bg_key': 'plate/backgrounds',  # here we can also put a float for constant bg subtraction
-                'marker_bg_key': 'plate/backgrounds',
+                'serum_bg_key': background_parameters[serum_key],
+                'marker_bg_key': background_parameters[marker_ana_in_key],
                 'write_summary_images': False,
                 'scale_factors': config.scale_factors,
                 'identifier': identifier},
             'run': {'force_recompute': False}}))
 
+    # get a dict with all relevant analysis parameters, so that we can write it as a table and log it
+    # TODO we also need to include this in the database
+    analysis_parameter = get_analysis_parameter(config, is_fixed)
+    logger.info(f"Analysis parameter: {analysis_parameter}")
+
+    # find the identifier for the reference table (the IgG one if we have multiple tables)
+    if len(table_identifiers) == 1:
+        reference_table_name = table_identifiers[0]
+    else:
+        reference_table_name = [table_id for table_id in table_identifiers if 'IgG' in table_id]
+        assert len(reference_table_name) == 1, f"{table_identifiers}"
+        reference_table_name = reference_table_name[0]
+
     # TODO
-    # - we need to filter out the mean-with-nuclei and sum-without-nuclei results
-    # - choose the correct reference table !
+    # - we need to filter out the mean-with-nuclei and sum-without-nuclei results (not implemented yet)
     job_list.append((MergeAnalysisTables, {
         'build': {'input_table_names': table_identifiers,
-                  'reference_table_name': table_identifiers[0]}
+                  'reference_table_name': reference_table_name,
+                  'analysis_parameters': analysis_parameter}
     }))
 
     # make sure that db job is executed when all result tables hdf5 are ready (outside of the loop)
@@ -281,6 +349,10 @@ def run_cell_analysis(config):
                   wedge_width=0)
 
     t0 = time.time() - t0
+
+    summary_writer = SlackSummaryWriter(config.slack_token)
+    summary_writer(config.folder, config.folder, runtime=t0)
+
     logger.info(f"Run {name} in {t0}s")
     return name, t0
 
@@ -326,15 +398,34 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--nuc_key", default='nucleus_segmentation', type=str)
     parser.add("--seg_key", default='cell_segmentation', type=str)
 
-    # TODO I am not sure if changing away from the defaults works for this
+    #
+    # analysis parameter:
+    # these parameters change how the analysis results are computed!
+    #
+
+    # TODO get rid of these two parameters!
     # whether to run the segmentation / analysis on the corrected or on the corrected data
     parser.add("--segmentation_on_corrected", default=True)
     parser.add("--analysis_on_corrected", default=True)
 
-    # marker denoising
+    # marker denoising and ignore nuclei
     parser.add("--marker_denoise_radius", default=0, type=int)
-
     parser.add("--dont_ignore_nuclei", action='store_true')
+
+    # parameter for the infected cell detection
+    parser.add("--infected_scale_with_mad", default=True)
+    parser.add("--infected_threshold", type=float, default=6.2)
+
+    # optional fixed background value(s).
+    # if None, will be computed from the data
+    # otherwise, needs to be a dict with background values for the input channels
+    parser.add("--fixed_background", default=None)
+    # do we use image, well or plate level background? (default is plate)
+    parser.add("--background_type", default='plate', type=str)
+
+    #
+    # more options
+    #
 
     # runtime options
     parser.add("--batch_size", default=4)
@@ -348,6 +439,9 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--db_host", type=str, default='localhost')
     parser.add("--db_port", type=int, default=27017)
     parser.add("--db_name", type=str, default='covid')
+
+    # slack client
+    parser.add("--slack_token", type=str, default=None)
 
     # default_scale_factors = None
     default_scale_factors = [1, 2, 4, 8, 16]

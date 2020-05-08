@@ -18,6 +18,7 @@ dependencies:
     - vigra
     - pymongo
     - xlrd
+    - slackclient
     - pip:
         - tensorflow==1.15
         - stardist
