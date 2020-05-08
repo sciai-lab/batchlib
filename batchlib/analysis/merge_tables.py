@@ -144,7 +144,7 @@ class MergeAnalysisTables(BatchJobOnContainer):
         col_names = ['plate_name'] + list(self.analysis_parameters.keys())
 
         plate_name = os.path.split(out_file)[1]
-        table = np.array([plate_name] + list(self.analysis_parameters.values()))[:, None]
+        table = np.array([plate_name] + list(self.analysis_parameters.values()))[None]
         with open_file(out_file, 'a') as f:
             self.write_table(f, self.parameter_table_name, col_names, table)
 

@@ -341,7 +341,7 @@ def read_table(f, name, table_string_type='U100'):
 def write_table(f, name, column_names, table,
                 visible=None, force_write=False, table_string_type='S100'):
     if len(column_names) != table.shape[1]:
-        raise ValueError("Number of columns does not match")
+        raise ValueError(f"Number of columns does not match: {len(column_names)}, {table.shape[1]}")
 
     # set None to np.nan
     table[np.equal(table, None)] = np.nan
