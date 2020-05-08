@@ -28,7 +28,6 @@ from batchlib.util.plate_visualizations import all_plots
 logger = get_logger('Workflow.CellAnalysis')
 
 
-# TODO add backgrounds
 def get_analysis_parameter(config, use_fixed_background):
     # collect all relevant analysis paramter, so that we can
     # write them to a table and keep track of this
@@ -286,15 +285,23 @@ def run_cell_analysis(config):
                 'identifier': identifier},
             'run': {'force_recompute': False}}))
 
+    # get a dict with all relevant analysis parameters, so that we can write it as a table
+    # TODO we also need to include this in the database
+    analysis_parameters = get_analysis_parameter(config, is_fixed)
+
+    # find the identifier for the reference table (the IgG one if we have multiple tables)
+    if len(table_identifiers) == 1:
+        reference_table_name = table_identifiers[0]
+    else:
+        reference_table_name = [table_id for table_id in table_identifiers if 'IgG' in table_identifiers]
+        assert len(reference_table_name) == 1
+        reference_table_name = reference_table_name[0]
+
     # TODO
     # - we need to filter out the mean-with-nuclei and sum-without-nuclei results (not implemented yet)
-    # - choose the correct reference table!
-    # - report the different background values and the
-    # - then from the analysis parameter object, we know which one was used
-    analysis_parameters = get_analysis_parameter(config, is_fixed)
     job_list.append((MergeAnalysisTables, {
         'build': {'input_table_names': table_identifiers,
-                  'reference_table_name': table_identifiers[0],
+                  'reference_table_name': reference_table_name,
                   'analysis_parameters': analysis_parameters}
     }))
 
