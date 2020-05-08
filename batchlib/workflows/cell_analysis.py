@@ -7,7 +7,8 @@ from batchlib import run_workflow
 from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    DenoiseByGrayscaleOpening,
                                                    InstanceFeatureExtraction,
-                                                   FindInfectedCells)
+                                                   FindInfectedCells,
+                                                   ExtractBackground)
 from batchlib.analysis.cell_analysis_qc import CellLevelQC, ImageLevelQC, WellLevelQC
 from batchlib.analysis.merge_tables import MergeAnalysisTables
 from batchlib.mongo.result_writer import DbResultWriter
@@ -149,6 +150,24 @@ def run_cell_analysis(config):
             'cell_seg_key': config.seg_key},
         'run': {'gpu_id': config.gpu}}))
 
+    # This is just for ExtractBackground below
+    job_list.append((ImageLevelQC, {
+        'build': {
+            'cell_seg_key': config.seg_key,
+            'serum_key': serum_seg_in_key,
+            'marker_key': marker_ana_in_key,
+            'outlier_predicate': outlier_predicate,
+            'identifier': None}
+    }))
+
+    job_list.append((ExtractBackground, {
+        'build': {
+            'marker_key': marker_ana_in_key,  # is ignored
+            'serum_key': serum_seg_in_key,    # is ignored
+            'cell_seg_key': config.seg_key,
+            'actual_channels_to_use': (*serum_ana_in_keys, marker_ana_in_key),  # is actually used
+        }
+    }))
     # # Also compute features with nuclei if they should be used later
     # job_list.append((InstanceFeatureExtraction, {
     #     'build': {
@@ -167,11 +186,10 @@ def run_cell_analysis(config):
             # 'bg_correction_key': 'means',
             # 'per_cell_bg_correction': False,
             # new method
-            'bg_correction_key': 'well_bg_median',
-            'infected_threshold_scale_key': 'well_bg_mad',
-            'infected_threshold': 7,
-        },
-        'run': {'force_recompute': None}}))
+            'bg_correction_key': 'plate/backgrounds',
+            'scale_with_mad': True,
+            'infected_threshold': 6,
+        }}))
 
     table_identifiers = serum_ana_in_keys
     for serum_key, identifier in zip(serum_ana_in_keys, table_identifiers):
@@ -180,6 +198,8 @@ def run_cell_analysis(config):
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
                 'marker_key': marker_ana_in_key,
+                'serum_bg_key': 'plate/backgrounds',  # here we can also put a float for constant bg subtraction
+                'marker_bg_key': 'plate/backgrounds',
                 'identifier': identifier}
         }))
         job_list.append((ImageLevelQC, {
@@ -187,6 +207,8 @@ def run_cell_analysis(config):
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
                 'marker_key': marker_ana_in_key,
+                'serum_bg_key': 'plate/backgrounds',  # here we can also put a float for constant bg subtraction
+                'marker_bg_key': 'plate/backgrounds',
                 'outlier_predicate': outlier_predicate,
                 'identifier': identifier}
         }))
@@ -195,6 +217,8 @@ def run_cell_analysis(config):
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
                 'marker_key': marker_ana_in_key,
+                'serum_bg_key': 'plate/backgrounds',  # here we can also put a float for constant bg subtraction
+                'marker_bg_key': 'plate/backgrounds',
                 'identifier': identifier}
         }))
         job_list.append((CellLevelAnalysis, {
@@ -202,6 +226,8 @@ def run_cell_analysis(config):
                 'serum_key': serum_key,
                 'marker_key': marker_ana_in_key,
                 'cell_seg_key': config.seg_key,
+                'serum_bg_key': 'plate/backgrounds',  # here we can also put a float for constant bg subtraction
+                'marker_bg_key': 'plate/backgrounds',
                 'write_summary_images': False,
                 'scale_factors': config.scale_factors,
                 'identifier': identifier},
