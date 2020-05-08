@@ -1,6 +1,7 @@
 __pycache__/
 batchlib.egg-info/
-# don't add the db config to git
-antibodies/embl/configs/cell_analysis_db.conf
-antibodies/embl/configs/cell_analysis_db_slack.conf
+
 slurm-*.out
+
+# don't add configs containing credentials 
+antibodies/embl/configs/*.conf

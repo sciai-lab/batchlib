@@ -47,7 +47,7 @@ if __name__ == '__main__':
     parser.add_argument('--write_to_slack', type=int, default=0, help='post results to slack')
 
     args = parser.parse_args()
-    in_file = args.in_file
+    in_file = args.input_file
 
     config_file = args.config_file
     fixed_background = bool(args.fixed_background)

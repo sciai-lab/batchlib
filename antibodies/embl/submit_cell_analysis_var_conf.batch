@@ -21,4 +21,4 @@ module load OpenMPI/3.1.4-GCC-7.3.0-2.30 git
 PYTHON="/g/kreshuk/software/miniconda3/envs/antibodies-gpu/bin/python"
 SCRIPT="../cell_analysis_workflow.py"
 
-$PYTHON $SCRIPT -c $1 --input_folder $2 --gpu 0 --n_cpus 8
+$PYTHON $SCRIPT -c $1 --input_folder $2 --gpu 0 --n_cpus 8 --on_cluster 1
