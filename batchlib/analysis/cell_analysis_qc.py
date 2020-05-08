@@ -136,10 +136,6 @@ class ImageLevelQC(CellLevelAnalysisWithTableBase):
                          validate_cell_classification=False,
                          **super_kwargs)
 
-    def validate_input(self, path):
-        return True  # FIXME this job otherwise fails because
-        # 'tables/cell_classification/cell_segmentation/marker_corrected' is missing
-
     def outlier_heuristics(self, in_file):
         cell_stats = self.load_per_cell_statistics(in_file, split_infected_and_control=False)
 
