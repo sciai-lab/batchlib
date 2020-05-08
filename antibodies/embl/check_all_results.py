@@ -62,4 +62,4 @@ if __name__ == '__main__':
 
     to_process = check_all_results(args.root, bool(args.ignore_not_processed))
     with open('left_to_process.json', 'w') as f:
-        json.dump(to_process, f)
+        json.dump(to_process, f, indent=2)

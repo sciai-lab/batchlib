@@ -49,4 +49,4 @@ if __name__ == '__main__':
 
     to_process = folders_for_manuscript(args.root, bool(args.check_if_processed))
     with open('for_manuscript.json', 'w') as f:
-        json.dump(to_process, f)
+        json.dump(to_process, f, indent=2)
