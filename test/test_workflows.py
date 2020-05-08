@@ -36,8 +36,8 @@ class BaseTestMixin(ABC):
         else:
             rmtree(self.folder)
 
-    def _run_workflow(self, folder=None, input_folder=None):
-        parser = self.get_parser('./configs', 'test_cell_analysis.conf')
+    def _run_workflow(self, folder=None, input_folder=None, config_name='test_cell_analysis.conf'):
+        parser = self.get_parser('./configs', config_name)
         config, _ = parser.parse_known_args()
 
         if folder is not None:
@@ -68,6 +68,10 @@ class BaseTestMixin(ABC):
         for folder in folders:
             self._test_naming_scheme(folder)
             # TODO check the results
+
+    def test_fixed_background(self):
+        folder = os.path.join(ROOT, 'naming_schemes', 'scheme4')
+        self._run_workflow(input_folder=folder, config_name='test_cell_analysis_bg.conf')
 
 
 class TestCellAnalysis(BaseTestMixin, unittest.TestCase):

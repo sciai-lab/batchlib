@@ -1,4 +1,5 @@
 import os
+import json
 import time
 from numbers import Number
 
@@ -29,7 +30,7 @@ from batchlib.util.plate_visualizations import all_plots
 logger = get_logger('Workflow.CellAnalysis')
 
 
-def get_analysis_parameter(config, use_fixed_background):
+def get_analysis_parameter(config, use_fixed_background, background_parameters):
     # collect all relevant analysis paramter, so that we can
     # write them to a table and keep track of this
     params = {'marker_denoise_radius': config.marker_denoise_radius,
@@ -42,7 +43,7 @@ def get_analysis_parameter(config, use_fixed_background):
 
     params['fixed_background'] = use_fixed_background
     if use_fixed_background:
-        params.update({'background_' + name: value for name, value in config.fixed_background.items()})
+        params.update({'background_' + name: value for name, value in background_parameters.items()})
     else:
         params.update({'background_type': config.background_type})
 
@@ -77,12 +78,12 @@ def get_input_keys(config, serum_in_keys):
 
 
 def validate_bg_dict(bg_dict):
-    excepted_vals = ('images/background',
-                     'wells/background',
-                     'plate/background')
+    excepted_vals = ('images/backgrounds',
+                     'wells/backgrounds',
+                     'plate/backgrounds')
     for key, val in bg_dict.items():
         if not isinstance(val, Number) and val not in excepted_vals:
-            raise ValueError("Invalid background value {val} for {key}")
+            raise ValueError(f"Invalid background value {val} for {key}")
 
 
 def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
@@ -94,6 +95,9 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
             raise ValueError(f"Expected background type to be one of (images, wells, plates), got {background_type}")
         logger.info(f"Compute background from data with type {background_type}")
         return {key: f'{background_type}/backgrounds' for key in keys}, False
+
+    fixed_background_dict = json.loads(fixed_background_dict.replace('\'', '\"'))
+    assert isinstance(fixed_background_dict, dict)
 
     # TODO I don't want to enforce having the _corrected everywhere, so we do this weird little dance for now
     # in the long term, I would like to eliminate running the option of using the non-corrected completely,
@@ -301,7 +305,7 @@ def run_cell_analysis(config):
 
     # get a dict with all relevant analysis parameters, so that we can write it as a table and log it
     # TODO we also need to include this in the database
-    analysis_parameter = get_analysis_parameter(config, is_fixed)
+    analysis_parameter = get_analysis_parameter(config, is_fixed, background_parameters)
     logger.info(f"Analysis parameter: {analysis_parameter}")
 
     # find the identifier for the reference table (the IgG one if we have multiple tables)
