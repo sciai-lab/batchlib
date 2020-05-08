@@ -189,8 +189,7 @@ def run_cell_analysis(config):
             'bg_correction_key': 'plate/backgrounds',
             'scale_with_mad': True,
             'infected_threshold': 6,
-        },
-        'run': {'force_recompute': True}}))
+        }}))
 
     table_identifiers = serum_ana_in_keys
     for serum_key, identifier in zip(serum_ana_in_keys, table_identifiers):

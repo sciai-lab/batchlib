@@ -7,10 +7,8 @@ from glob import glob
 from .config import get_default_extension
 from .util import is_group, get_file_lock, get_logger
 from .util import io as io
-import logging
 
 logger = get_logger('Workflow.BatchJob')
-logger.setLevel(logging.DEBUG)
 
 
 class BatchJob(ABC):
