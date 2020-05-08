@@ -297,8 +297,8 @@ def run_cell_analysis(config):
     if len(table_identifiers) == 1:
         reference_table_name = table_identifiers[0]
     else:
-        reference_table_name = [table_id for table_id in table_identifiers if 'IgG' in table_identifiers]
-        assert len(reference_table_name) == 1
+        reference_table_name = [table_id for table_id in table_identifiers if 'IgG' in table_id]
+        assert len(reference_table_name) == 1, f"{table_identifiers}"
         reference_table_name = reference_table_name[0]
 
     # TODO
