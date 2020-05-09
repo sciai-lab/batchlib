@@ -527,6 +527,7 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
             input_folder = self.input_folder
             in_pattern = os.path.join(input_folder, self.input_pattern)
             input_files = glob(in_pattern)
+
             def channel_to_bg_column(channel):
                 # because e.g. serum_key = 'cell_segmentation/serum_IgA_corrected'
                 return f'{channel.split("/")[-1]}_median'
@@ -688,7 +689,7 @@ class ExtractBackground(CellLevelAnalysisWithTableBase):
 
     def run(self, input_files, out_files):
         # first, get plate wide and per-well background statistics
-        logger.info('computing background statistics')
+        logger.info(f'{self.name}: computing background statistics')
         bg_dict = {file: self.get_bg_segment(file, device='cpu') for file in input_files}
         bg_per_image_stats = {in_file_to_image_name(file): self.get_bg_stats(bg_segments)
                               for file, bg_segments in bg_dict.items()}
@@ -856,13 +857,14 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
 
         well_outlier_dict = self.load_well_outliers(well_names)
         image_outlier_dict = self.load_image_outliers(input_files)
-        column_names = ['well_name', 'n_outlier_images', 'n_outlier_cells', 'is_outlier', 'outlier_type']
+
+        column_names = None
+        initial_column_names = ['well_name', 'n_outlier_images', 'n_outlier_cells', 'is_outlier', 'outlier_type']
 
         table = []
         empty_wells = []
 
-        for ii, (well_name, in_files_for_current_well) in enumerate(tqdm(input_files_per_well.items(),
-                                                                         desc='generating well table')):
+        for well_name, in_files_for_current_well in tqdm(input_files_per_well.items(), desc='generating well table'):
             n_total = len(in_files_for_current_well)
             image_names_for_current_well = [os.path.splitext(os.path.split(in_file)[1])[0]
                                             for in_file in in_files_for_current_well]
@@ -897,8 +899,8 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
             stat_dict['score'] = np.nan if (stat_dict['score'] is None or well_is_outlier == 1) else stat_dict['score']
 
             stat_names, stat_list = map(list, zip(*stat_dict.items()))
-            if ii == 0:
-                column_names += list(stat_names)
+            if column_names is None:
+                column_names = initial_column_names + list(stat_names)
 
             # get number of ignored outlier cells
             n_outlier_cells = sum(sum(1 for v in self.load_cell_outliers(in_file).values() if v[0] == 1)
@@ -914,7 +916,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
             else:
                 n_cols = len(column_names)
                 if not all(len(row) in (1, n_cols) for row in table):
-                    raise RuntimeError("Invalid number of columns in well table")
+                    raise RuntimeError(f"Invalid number of columns in well table, expected 1 or {n_cols}")
                 outlier_row = [np.nan, np.nan, 1, 'all images are outliers']
                 outlier_row += [np.nan] * (n_cols - len(outlier_row) - 1)
                 assert len(outlier_row) == n_cols - 1
