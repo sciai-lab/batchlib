@@ -354,7 +354,7 @@ class FindInfectedCells(BatchJobOnContainer):
         self.cell_seg_key = cell_seg_key
         self.bg_cell_seg_key = bg_cell_seg_key if bg_cell_seg_key is not None else cell_seg_key
         self.feature_table_key = cell_seg_key + '/' + marker_key
-        self.bg_feature_table_key = bg_cell_seg_key + '/' + marker_key
+        self.bg_feature_table_key = self.bg_cell_seg_key + '/' + marker_key
 
         self.infected_threshold = infected_threshold
         self.scale_with_mad = scale_with_mad

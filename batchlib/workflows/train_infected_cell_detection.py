@@ -232,21 +232,43 @@ def extract_feature_grid(config, SubParamRanges, SearchSpace):
     #              job_list)
 
 
+class FindInfectedCellsParallel(FindInfectedCells):
+    def get_infected_indicator(self, feature_dict, offset=None, scale=None):
+        offset = 0 if offset is None else offset
+        scale = 1 if scale is None else scale
+        infected_indicators = feature_dict[self.split_statistic][:, None] > scale * self.infected_threshold[None, :] + offset
+        try:
+            bg_ind = feature_dict['label_id'].tolist().index(0)
+            infected_indicators[bg_ind] = False  # the background should never be classified as infected
+        except ValueError:
+            pass  # no bg segment
+        return infected_indicators
+
+    def compute_and_save_infected_and_control(self, in_file, out_file, offset=None, scale=None):
+        feature_dict = self.load_feature_dict(in_file)
+        infected_indicators = self.get_infected_indicator(feature_dict, offset, scale)
+        column_names = ['label_id'] + [str(t) for t in self.infected_threshold]
+        table = [feature_dict['label_id']] + list(np.array(infected_indicators).T)
+        table = np.asarray(table, dtype=float).T
+        with open_file(out_file, 'a') as f:
+            self.write_table(f, self.output_table_key, column_names, table)
+
+
 def find_infected(config, seg_key, ignore_nuclei, split_statistic, infected_threshold, denoise_radius=0):
-    identifier = get_identifier(seg_key, ignore_nuclei, denoise_radius, split_statistic, infected_threshold)
-    job_list = [((FindInfectedCells, {
+    identifier = get_identifier(seg_key, ignore_nuclei, denoise_radius, split_statistic)
+    job_list = [((FindInfectedCellsParallel, {
         'build': {
             'marker_key': _marker_key(denoise_radius),
             'cell_seg_key': seg_key + '_' + get_identifier(seg_key, ignore_nuclei),
             # old method
-            'bg_correction_key': 'image_bg_median',  # FIXME this should be the plate-wise bg. copy from results!
-            'bg_cell_seg_key': 'cell_segmentation_cell_segmentation_False',  # weird because of identifier
+            'bg_correction_key': 0,  # FIXME this should be the plate-wise bg. copy from results!
+            'bg_cell_seg_key':  None,  #'cell_segmentation_cell_segmentation_False',  # weird because of identifier
             'split_statistic': split_statistic,
             'infected_threshold': infected_threshold,
+            'scale_with_mad': False,
             #'identifier': identifier,
             # new method
             # 'bg_correction_key': 'well_bg_median',
-            'infected_threshold_scale_key': 'image_bg_mad',
             # 'infected_threshold': 7,
             },
         'run': {
@@ -256,7 +278,7 @@ def find_infected(config, seg_key, ignore_nuclei, split_statistic, infected_thre
 
     #return job_list[0]
     run_workflow(f'Infected Classification Workflow '
-                 f'({get_identifier(seg_key, ignore_nuclei, split_statistic, infected_threshold)})',
+                 f'({get_identifier(seg_key, ignore_nuclei, split_statistic)})',
                  os.path.join(config.out_dir, identifier),
                  job_list,
                  config.out_dir,
@@ -271,16 +293,9 @@ def find_infected_grid(config, SearchSpace):
         ignore_nuclei=SearchSpace.ignore_nuclei,
         denoise_radius=SearchSpace.marker_denoise_radii,
         split_statistic=SearchSpace.split_statistic,
-        infected_threshold=SearchSpace.infected_threshold,
+        infected_threshold=[SearchSpace.infected_threshold],
         n_jobs=config.n_cpus
     )
-    # job_list = job_grid['result'].reshape(-1).tolist()
-    # print(len(job_list))
-    # print(job_list[0])
-    # run_workflow(f'Infected Classification Workflow ',
-    #              config.out_dir,
-    #              job_list,
-    #              lock_folder=False)
 
 
 class GetGTInfectedTable(BatchJobOnContainer):
@@ -290,7 +305,8 @@ class GetGTInfectedTable(BatchJobOnContainer):
         self.table_out_key = out_key
         super().__init__(
             input_key=[self.nuc_seg_key, self.infected_key],
-            output_key='tables/' + out_key,
+            output_key=out_key,
+            output_format='table',
             **super_kwargs
         )
 
@@ -333,7 +349,7 @@ def get_prediction_and_eval_score(
     infected_threshold,
     ann_file,
 ):
-    identifier = get_identifier(seg_key, ignore_nuclei, denoise_radius, split_statistic, infected_threshold)
+    identifier = get_identifier(seg_key, ignore_nuclei, denoise_radius, split_statistic)
     in_file = ann_to_in_file(config, ann_file)
     out_file = in_to_out_file(config, in_file)
     out_file_in_subdir = os.path.join(os.path.dirname(out_file), identifier, os.path.basename(out_file))
@@ -343,14 +359,15 @@ def get_prediction_and_eval_score(
         column_names, table = read_table(f, 'cell_classification/' + seg_key + '_' +
                                          get_identifier(seg_key, ignore_nuclei) +
                                          '/' + _marker_key(denoise_radius))
-    with open_file(out_file, 'r') as f:
-        gt_column_names, gt_table = read_table(f, 'infected')
-    pred_infected_indicator = table[:, column_names.index('is_infected')]
+    infected_key = str(infected_threshold)
+    assert infected_key in column_names, f'{infected_key}, {column_names}'
+    pred_infected_indicator = table[:, column_names.index(infected_key)]
     pred_labels = table[:, column_names.index('label_id')].astype(np.int32)
     pred_infected_dict = dict(zip(pred_labels, pred_infected_indicator))
 
+    with open_file(out_file, 'r') as f:
+        gt_column_names, gt_table = read_table(f, 'infected')
     gt_infected_indicator = gt_table[:, gt_column_names.index('is_infected')]
-    #gt_control_indicator = gt_table[:, gt_column_names.index('is_control')]
     gt_labels = gt_table[:, gt_column_names.index('label_id')].astype(np.int32)
 
     labels = np.array(list(set(pred_labels).intersection(set(gt_labels)).difference({0})), dtype=np.int32)
