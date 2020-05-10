@@ -418,11 +418,6 @@ def cell_analysis_parser(config_folder, default_config_name):
     # these parameters change how the analysis results are computed!
     #
 
-    # TODO get rid of these two parameters!
-    # whether to run the segmentation / analysis on the corrected or on the corrected data
-    parser.add("--segmentation_on_corrected", default=True)
-    parser.add("--analysis_on_corrected", default=True)
-
     # marker denoising and ignore nuclei
     parser.add("--marker_denoise_radius", default=0, type=int)
     parser.add("--dont_ignore_nuclei", action='store_true')
