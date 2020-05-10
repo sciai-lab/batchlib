@@ -82,7 +82,7 @@ def make_summary(folder_list, experiment_name,
 
     # zip the folder
     res_zip = f'{experiment_name}.zip'
-    make_archive(experiment_name, 'zip', tmp_folder)
+    make_archive(experiment_name, 'zip', experiment_name)
     assert os.path.exists(res_zip), res_zip
 
     # clean up
