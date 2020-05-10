@@ -2,17 +2,30 @@ import os
 from glob import glob
 from shutil import rmtree, copyfile, make_archive
 
-import pandas as pd
 from slack import WebClient
+from .export_tables import export_scores
 
 
-def summarize_experiments(folder_list, experiment_name,
-                          slack_token=None, slack_channel='#latest-results',
-                          ignore_incomplete=False, clean_up=True):
+def upload_summary_to_slack(summary_file, token,
+                            channel='#latest-results', clean_up=True):
+    """ Update zipped summary folder to slack.
+    """
+    experiment_name = os.path.splitext(os.path.split(summary_file)[1])[0]
+    client = WebClient(token=token)
+    msg = f"Posting all results for {experiment_name}"
+    client.files_upload(channels=channel,
+                        initial_comment=msg,
+                        file=summary_file, filename=experiment_name)
+    if clean_up:
+        os.remove(summary_file)
+
+
+def make_summary(folder_list, experiment_name,
+                 export_score_table=True, ignore_incomplete=False, clean_up=True):
     """ Write all experiments to zip.
     """
 
-    tmp_folder = experiment_name
+    tmp_folder = os.path.join(experiment_name, experiment_name)
 
     for folder in folder_list:
         plate_name = os.path.split(folder)[1]
@@ -32,18 +45,13 @@ def summarize_experiments(folder_list, experiment_name,
             copyfile(plot, os.path.join(out_folder, plot_name))
 
         # copy the tables
-        # TODO switch to excel from the start
-        tables = glob(os.path.join(summary_folder, '*.csv'))
+        tables = glob(os.path.join(summary_folder, '*.xlsx'))
         if len(tables) == 0:
             have_summary = False
         for table in tables:
-            table_name = os.path.splitext(os.path.split(table)[1])[0]
-            table_out = os.path.join(out_folder, table_name + '.xlsx')
-
-            df = pd.read_csv(table)
-            df.to_excel(table_out, index=False)
-
-            # copyfile(table, table_out)
+            table_name = os.path.split(table)[1]
+            table_out = os.path.join(out_folder, table_name)
+            copyfile(table, table_out)
 
         # copy the text
         msg_path = os.path.join(summary_folder, 'message.txt')
@@ -60,20 +68,17 @@ def summarize_experiments(folder_list, experiment_name,
             else:
                 raise RuntimeError(msg)
 
+    if export_score_table:
+        score_table_path = os.path.join(experiment_name, f'{experiment_name}_scores.xlsx')
+        export_scores(folder_list, score_table_path)
+
     # zip the folder
     res_zip = f'{experiment_name}.zip'
     make_archive(experiment_name, 'zip', tmp_folder)
-    assert os.path.exists(res_zip)
-
-    # upload it
-    if slack_token is not None:
-        client = WebClient(token=slack_token)
-        msg = f"Posting all results for {experiment_name}"
-        client.files_upload(channels=slack_channel,
-                            initial_comment=msg,
-                            file=res_zip, filename=res_zip)
+    assert os.path.exists(res_zip), res_zip
 
     # clean up
     if clean_up:
-        os.remove(res_zip)
         rmtree(tmp_folder)
+
+    return res_zip

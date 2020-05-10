@@ -23,7 +23,7 @@ from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
-from batchlib.slack import SlackSummaryWriter
+from batchlib.reporting import SlackSummaryWriter
 from batchlib.util import get_logger
 from batchlib.util.plate_visualizations import all_plots
 
