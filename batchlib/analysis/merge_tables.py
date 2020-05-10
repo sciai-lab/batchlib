@@ -159,9 +159,6 @@ class MergeAnalysisTables(BatchJobOnContainer):
         if is_image and 'site_name' not in column_names:
             raise RuntimeError("Expected site_name column")
 
-        print("\n".join(column_names))
-        quit()
-
         visible = np.ones(len(column_names))
         if is_image:
             assert 'image_name' in column_names
