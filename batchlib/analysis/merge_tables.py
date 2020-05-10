@@ -12,13 +12,11 @@ logger = get_logger('Workflow.BatchJob.MergeAnalysisTables')
 # - all tables: q0.5, robuse_z_score
 # - reference table:  score, number of cells and outliers
 # see also https://github.com/hci-unihd/batchlib/issues/91
-DEFAULT_COMMON_NAME_PATTERNS = ('q0.5', 'robust_z_score')
+DEFAULT_COMMON_NAME_PATTERNS = ('q0.5', 'robust_z_score', 'mad')
 DEFAULT_REFERENCE_NAME_PATTERNS = ('score', 'n_cells', 'n_infected', 'n_control',
                                    'fraction_infected', 'is_outlier', 'outlier_type')
 
 
-# TODO need to add the backgrounds to the summary table; I am not sure if they are
-# copied to one of the input tables we get already
 class MergeAnalysisTables(BatchJobOnContainer):
     """ Merge analysis tables written by CellLevelAnalysis for different parameters.
     """

@@ -17,14 +17,28 @@ def is_processed(folder):
     return 'MergeAnalysisTables' in status
 
 
-def all_kinder_plates():
-    kinder_study_inputs = []
-    patterns = ['*plateK*', '*PlateK*']
+def fixed_pattern_plates(patterns):
+    inputs = []
     for pattern in patterns:
-        kinder_study_inputs.extend(glob(os.path.join(ROOT_IN, pattern)))
-    folder_names = [os.path.split(folder)[1] for folder in kinder_study_inputs]
+        inputs.extend(glob(os.path.join(ROOT_IN, pattern)))
+    folder_names = [os.path.split(folder)[1] for folder in inputs]
     folder_names.sort()
     return folder_names
+
+
+def heidelberg_kinder_plates():
+    patterns = ['*plateK*', '*PlateK*']
+    return fixed_pattern_plates(patterns)
+
+
+def tubingen_kinder_plates():
+    patterns = ['*plateT*']
+    return fixed_pattern_plates(patterns)
+
+
+def all_kinder_plates():
+    patterns = ['*plateK*', '*PlateK*', '*plateT*']
+    return fixed_pattern_plates(patterns)
 
 
 def all_manuscript_plates():

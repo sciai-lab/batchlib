@@ -2,12 +2,12 @@ import os
 import shutil
 from glob import glob
 
-import pandas as pd
 from slack import WebClient
 from slack.errors import SlackApiError
 
 from ..base import BatchJobOnContainer
 from ..util import get_logger, open_file
+from .export_tables import export_default_table
 
 DEFAULT_PLOT_PATTERNS = ('*ratio_of_q0.5_of_means*per-well.png',
                          '*robust_z_score_means*per-well.png')
@@ -62,12 +62,8 @@ class SlackSummaryWriter(BatchJobOnContainer):
 
     def copy_table(self, input_file, out_path):
         with open_file(input_file, 'r') as f:
-            columns, table = self.read_table(f, self.summary_table_key)
+            export_default_table(f, self.summary_table_key, out_path)
             param_cols, param_table = self.read_table(f, self.parameter_table_key)
-
-        # copy the summary table to csv
-        table = pd.DataFrame(table, columns=columns)
-        table.to_csv(out_path, index=False)
 
         # get the parameter dict
         params = {name: val for name, val in zip(param_cols, param_table.squeeze())}
@@ -100,7 +96,7 @@ class SlackSummaryWriter(BatchJobOnContainer):
 
         image_paths = glob(os.path.join(out_folder, '*.png'))
         image_paths.sort()
-        table_path = glob(os.path.join(out_folder, '*.csv'))
+        table_path = glob(os.path.join(out_folder, '*.xlsx'))
         assert len(table_path) == 1
         table_path = table_path[0]
 
@@ -167,7 +163,7 @@ class SlackSummaryWriter(BatchJobOnContainer):
         self.copy_plots(plot_folder, out_folder)
 
         # copy the well table as csv to the summary folder and load the analysis parameter
-        table_out_path = os.path.join(out_folder, '%s_summary.csv' % plate_name)
+        table_out_path = os.path.join(out_folder, '%s_summary.xlsx' % plate_name)
         params = self.copy_table(input_files[0], table_out_path)
 
         # compile the slack message

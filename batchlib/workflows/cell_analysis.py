@@ -23,7 +23,7 @@ from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
-from batchlib.slack import SlackSummaryWriter
+from batchlib.reporting import SlackSummaryWriter
 from batchlib.util import get_logger
 from batchlib.util.plate_visualizations import all_plots
 
@@ -353,14 +353,16 @@ def run_cell_analysis(config):
     for identifier in table_identifiers:
         table_path = CellLevelAnalysis.folder_to_table_path(config.folder, identifier)
         all_plots(table_path, plot_folder,
-                  table_key=f'tables/images/{identifier}',
+                  table_key=f'images/{identifier}',
                   identifier=identifier + '_per-image',
                   stat_names=stat_names,
+                  channel_name=identifier,
                   wedge_width=0.3)
         all_plots(table_path, plot_folder,
-                  table_key=f'tables/wells/{identifier}',
+                  table_key=f'wells/{identifier}',
                   identifier=identifier + '_per-well',
                   stat_names=stat_names,
+                  channel_name=identifier,
                   wedge_width=0)
 
     t0 = time.time() - t0

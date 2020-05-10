@@ -19,6 +19,7 @@ dependencies:
     - pymongo
     - xlrd
     - slackclient
+    - openpyxl
     - pip:
         - tensorflow==1.15
         - stardist
