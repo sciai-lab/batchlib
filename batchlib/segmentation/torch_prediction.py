@@ -7,7 +7,9 @@ from tqdm import tqdm
 
 from batchlib.base import BatchJobOnContainer
 from batchlib.segmentation.unet import UNet2D
-from batchlib.util import open_file, files_to_jobs, standardize, DelayedKeyboardInterrupt
+from batchlib.util import get_logger, open_file, files_to_jobs, standardize, DelayedKeyboardInterrupt
+
+logger = get_logger('Workflow.BatchJob.TorchPrediction')
 
 
 # TODO
@@ -83,11 +85,17 @@ class TorchPrediction(BatchJobOnContainer):
 
     # threshold channels is a dict mapping channel ids that should be thresholded to the threshold value
     def run(self, input_files, output_files, gpu_id=None, batch_size=1,
-            normalize=standardize, threshold_channels={}):
+            normalize=standardize, threshold_channels={}, on_cluster=False):
 
         with torch.no_grad():
             if gpu_id is not None:
-                os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
+                # if we run on the slurm cluster, the visible devices are set automatically and must not be changed
+                if not on_cluster:
+                    logger.info(f"{self.name}: setting CUDA_VISIBLE_DEVICES to {gpu_id}")
+                    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
+
+                vis_devices = os.environ.get('CUDA_VISIBLE_DEVICES', '')
+                logger.info(f"{self.name}: CUDA_VISIBLE_DEVICES are set to {vis_devices}")
                 device = torch.device(0)
             else:
                 device = torch.device('cpu')

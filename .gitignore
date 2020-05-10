@@ -1,2 +1,7 @@
 __pycache__/
 batchlib.egg-info/
+
+slurm-*.out
+
+# don't add configs containing credentials 
+antibodies/embl/configs/*.conf

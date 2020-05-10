@@ -1,16 +1,13 @@
 import os
 import json
+import time
 
 from abc import ABC
 from glob import glob
 
-import numpy as np
-import pandas as pd
-
-from .config import get_default_chunks, get_default_extension
-from .util import (downscale_image, is_group, is_dataset,
-                   open_file, get_file_lock, get_logger,
-                   write_viewer_settings)
+from .config import get_default_extension
+from .util import is_group, get_file_lock, get_logger
+from .util import io as io
 
 logger = get_logger('Workflow.BatchJob')
 
@@ -59,7 +56,7 @@ class BatchJob(ABC):
         is_none = identifier is None
         is_str = isinstance(identifier, str)
         if not (is_none or is_str):
-            raise ValueError("Expect identifier to  be None or string, not %s" % type(identifier))
+            raise ValueError(f"Expect identifier to  be None or string, not {identifier}")
         self.identifier = identifier
 
     @property
@@ -143,7 +140,7 @@ class BatchJob(ABC):
             return input_files
 
         # get the output files corresponding to the inputs and filter for
-        # otuputs that are NOT present yet
+        # outputs that are NOT present yet
         output_files = self.to_outputs(input_files, folder)
         output_files = [path for path in output_files if not self.check_output(path)]
 
@@ -203,8 +200,10 @@ class BatchJob(ABC):
             input_folder_ = folder if input_folder is None else input_folder
             logger.info(f'{self.name}: input folder is {input_folder_}')
 
-            # monkey patch the folder, so that we can get this in the run and input / output validation methods
+            # monkey patch the folder and input_folder,
+            # so that we can get this in the run and input / output validation methods
             self.folder = folder
+            self.input_folder = input_folder if input_folder is not None else self.folder
 
             # validate and get the input files to be processed
             input_files = self.get_inputs(folder, input_folder_, status,
@@ -220,8 +219,11 @@ class BatchJob(ABC):
             logger.info(f'{self.name}: call run method with {len(input_files)} inputs.')
             logger.debug(f'{self.name}: with the following inputs:\n {input_files}')
             logger.debug(f'{self.name}: and the following outputs:\n {output_files}')
+
             # run the actual computation
+            t0 = time.time()
             self.run(input_files, output_files, **kwargs)
+            logger.info(f"{self.name}: runtime: {time.time() - t0} s")
 
             # validate if all outputs were computed properly
             self.validate_outputs(output_files, folder, status, ignore_failed_outputs)
@@ -240,8 +242,8 @@ class BatchJob(ABC):
     # check_output. This is a separate function though to allow
     # more expensive checks, that are only computed once after
     # the calculation is finished
-    def validate_output(self, path):
-        return self.check_output(path)
+    def validate_output(self, path, **kwargs):
+        return self.check_output(path, **kwargs)
 
     def get_invalid_inputs(self, inputs):
         return [path for path in inputs if not self.validate_input(path)]
@@ -255,12 +257,15 @@ class BatchJobOnContainer(BatchJob, ABC):
     container file (= h5/n5/zarr file).
     """
     supported_container_extensions = {'.h5', '.hdf5', '.zarr', '.zr', '.n5'}
+    supported_data_formats = {'image', 'table', 'custom'}
+
     table_string_type = 'U100'  # TODO try varlen
     internal_table_string_type = 'S100'  # TODO try varlen
 
     def __init__(self, input_pattern=None, output_ext=None, identifier=None,
                  input_key=None, output_key=None,
                  input_ndim=None, output_ndim=None,
+                 input_format=None, output_format=None,
                  viewer_settings={}, scale_factors=None):
 
         input_pattern = '*' + get_default_extension() if input_pattern is None else input_pattern
@@ -279,6 +284,10 @@ class BatchJobOnContainer(BatchJob, ABC):
         self.output_ndim, self._output_exp_ndim = self.check_ndim(output_ndim,
                                                                   self._output_exp_key)
 
+        # the input and output formats
+        self.input_format = self.check_format(input_format, self._input_exp_key)
+        self.output_format = self.check_format(output_format, self._output_exp_key)
+
         self.check_scale_factors(scale_factors)
         self.scale_factors = scale_factors
 
@@ -288,31 +297,6 @@ class BatchJobOnContainer(BatchJob, ABC):
                 raise ValueError("Key %s was not specified in the outputs" % key)
         self.viewer_settings = viewer_settings
 
-    def _write_single_scale(self, g, out_key, image):
-        chunks = get_default_chunks(image)
-        ds = g.require_dataset(out_key, shape=image.shape, dtype=image.dtype,
-                               compression='gzip', chunks=chunks)
-        ds[:] = image
-        return ds
-
-    def _write_multi_scale(self, f, out_key, image, use_nearest):
-        g = f.require_group(out_key)
-        self._write_single_scale(g, "s0", image)
-
-        if self.scale_factors is None:
-            return g
-
-        prev_scale_factor = 1
-        # note: scale_factors[0] is always 1
-        for scale, scale_factor in enumerate(self.scale_factors[1:], 1):
-            rel_scale_factor = int(scale_factor / prev_scale_factor)
-            image = downscale_image(image, rel_scale_factor,
-                                    use_nearest=use_nearest)
-            key = "s%i" % scale
-            self._write_single_scale(g, key, image)
-            prev_scale_factor = scale_factor
-        return g
-
     #
     # read and write images
     #
@@ -321,110 +305,28 @@ class BatchJobOnContainer(BatchJob, ABC):
         # get the viewer and donw-sampling settings
         if settings is None:
             settings = self.viewer_settings.get(key, {})
-
-        # dimensionality is not to
-        # -> this is not in image format and we just writ the data
-        if image.ndim != 2:
-            g = self._write_single_scale(f, key, image)
-        # otherwise, write in  multi-scale format
-        else:
-            use_nearest = settings.get('use_nearest', None)
-            g = self._write_multi_scale(f, key, image, use_nearest)
-
-        assert isinstance(settings, dict)
-        write_viewer_settings(g, image,
-                              scale_factors=self.scale_factors,
-                              **settings)
+        io.write_image(f, key, image, settings, self.scale_factors)
 
     def read_image(self, f, key, channel=None, scale=0):
-        ds = f[key]
-        if is_group(ds):
-            ds = ds['s%i' % scale]
-        assert is_dataset(ds)
-        data = ds[:] if channel is None else ds[channel]
-        return data
+        return io.read_image(f, key, scale, channel)
+
+    def has_image(self, f, key):
+        return io.has_image(f, key)
 
     #
     # read and write tables
     #
 
     def write_table(self, f, name, column_names, table, visible=None, force_write=False):
-        if len(column_names) != table.shape[1]:
-            raise ValueError("Number of columns does not match")
-
-        # set None to np.nan
-        table[table == None] = np.nan
-
-        # make the table datasets. we follow the layout
-        # table/cells - contains the data
-        # table/columns - containse the column names
-        # table/visible - contains which columns are visible in the plate-viewer
-
-        key = 'tables/%s' % name
-        g = f.require_group(key)
-
-        def _write_dataset(name, data):
-            if name in g:
-                shape = g[name].shape
-                if shape != data.shape and force_write:
-                    del g[name]
-
-            ds = g.require_dataset(name, shape=data.shape, dtype=data.dtype,
-                                   compression='gzip')
-            ds[:] = data
-
-        # TODO try varlen string, and if that doesn't work with java,
-        # issue a warning if a string is cut
-        # cast all values to numpy string
-        _write_dataset('cells', table.astype(self.internal_table_string_type))
-        _write_dataset('columns', np.array(column_names, dtype=self.internal_table_string_type))
-
-        if visible is None:
-            visible = np.ones(len(column_names), dtype='uint8')
-        _write_dataset('visible', visible)
+        io.write_table(f, name, column_names, table,
+                       visible=visible, force_write=force_write,
+                       table_string_type=self.internal_table_string_type)
 
     def read_table(self, f, name):
-        key = 'tables/%s' % name
-        g = f[key]
-        ds = g['cells']
-        table = ds[:]
-
-        ds = g['columns']
-        column_names = [col_name.decode('utf-8') for col_name in ds[:]]
-
-        def _col_dtype(column):
-            try:
-                column.astype('int')
-                return 'int'
-            except ValueError:
-                pass
-            try:
-                column.astype('float')
-                return 'float'
-            except ValueError:
-                pass
-            return self.table_string_type
-
-        # find the proper dtypes for the columns and cast
-        dtypes = [_col_dtype(col) for col in table.T]
-        columns = [col.astype(dtype) for col, dtype in zip(table.T, dtypes)]
-        n_rows = table.shape[0]
-
-        table = [[col[row] for col in columns] for row in range(n_rows)]
-
-        # a bit hacky, but we use pandas to handle the mixed dataset
-        df = pd.DataFrame(table)
-
-        return column_names, df.values
+        return io.read_table(f, name)
 
     def has_table(self, f, name):
-        actual_key = 'tables/%s' % name
-        if actual_key not in f:
-            return False
-        g = f[actual_key]
-        if not ('cells' in g and 'columns' in g and 'visible' in g):
-            return False
-        return True
+        return io.has_table(f, name)
 
     @staticmethod
     def check_scale_factors(scale_factors):
@@ -436,6 +338,38 @@ class BatchJobOnContainer(BatchJob, ABC):
             raise ValueError("Expect integer scale factors")
         if scale_factors[0] != 1:
             raise ValueError("First scale factor must be 1, got %i" % scale_factors[0])
+
+    @staticmethod
+    def check_format(formats, key):
+        # if we don't have a key, the format must be custom
+        if key is None:
+            if formats is not None and formats not in ('custom', ['custom'], ('custom')):
+                raise ValueError(f"Incompatible format {format} for non-present key")
+            return ['custom']
+
+        # just making sure that key is tuple or list (this should always be the case, because
+        # it's initialized like this in the constructor)
+        assert isinstance(key, (tuple, list))
+        n_objects = len(key)
+        # if we have key(s) -> assume image
+        if formats is None:
+            return ['image'] * n_objects
+
+        if isinstance(formats, str):
+            formats_ = [formats]
+        elif isinstance(formats, (list, tuple)):
+            formats_ = formats
+        else:
+            raise ValueError(f"Formats must be of type str, list or tuple (or None), not {type(formats)}")
+
+        if len(formats_) != n_objects:
+            raise ValueError(f"Expected {n_objects} data formats to be passed, got {len(formats_)}")
+
+        supported_formats = BatchJobOnContainer.supported_data_formats
+        if any(format_ not in supported_formats for format_ in formats_):
+            raise ValueError("Unsupported format")
+
+        return formats_
 
     @staticmethod
     def check_keys(keys, ext):
@@ -472,31 +406,89 @@ class BatchJobOnContainer(BatchJob, ABC):
         return ndim, exp_ndim
 
     @staticmethod
-    def _check_impl(path, exp_keys, exp_ndims):
+    def _check_image(f, name, log_on_fail):
+        ndim = 2
+        if name not in f:
+            log_on_fail(f'BatchJobOnContainer: check failed: could not find {name} in {f.filename}')
+            return False
+        g = f[name]
+        if not is_group(g):
+            log_on_fail(f'BatchJobOnContainer: check failed: {name} is not a group')
+            return False
+        if 's0' not in g:
+            log_on_fail(f'BatchJobOnContainer: check failed: {name} does not contain an image dataset')
+            return False
+        ds = g['s0']
+        if ds.ndim != ndim:
+            log_on_fail(f'BatchJobOnContainer: check failed: {ds.ndim} != {ndim} for {name}')
+            return False
+        return True
+
+    @staticmethod
+    def _check_table(f, name, log_on_fail):
+        actual_name = f'tables/{name}'
+        if actual_name not in f:
+            log_on_fail(f'BatchJobOnContainer: check failed: could not find table {name} in {f.filename}')
+            return False
+        g = f[actual_name]
+        if not is_group(g):
+            log_on_fail(f'BatchJobOnContainer: check failed: {actual_name} is not a group')
+            return False
+        if ('cells' not in g) or ('columns' not in g):
+            cls = BatchJobOnContainer
+            msg = f"{cls}: check failed: could not find 'cells' or 'columns' in {f.fileactual_name}:{actual_name}"
+            log_on_fail(msg)
+            return False
+        return True
+
+    @staticmethod
+    def _check_custom(f, name, ndim, log_on_fail):
+        if name not in f:
+            log_on_fail(f'BatchJobOnContainer: check failed: could not find {name} in {f.filename}')
+            return False
+        if ndim is None:
+            return True
+        ds = f[name]
+        if ds.ndim != ndim:
+            log_on_fail(f'BatchJobOnContainer: check failed: {ds.ndim} != {ndim} for {name}')
+            return False
+        return True
+
+    @staticmethod
+    def _check_impl(path, exp_formats, exp_keys, exp_ndims, log_on_fail):
         if not os.path.exists(path):
+            log_on_fail(f'BatchJobOnContainer: check failed: {path} does not exist')
             return False
 
         if exp_keys is None:
             return True
 
-        with open_file(path, 'r') as f:
-            for key, ndim in zip(exp_keys, exp_ndims):
-                if key not in f:
-                    return False
-                if ndim is None:
-                    continue
-                ds = f[key]
-                if is_group(ds):
-                    ds = ds['s0']
-                if ds.ndim != ndim:
+        cls = BatchJobOnContainer
+        with io.open_file(path, 'r') as f:
+            for format_, key, ndim in zip(exp_formats, exp_keys, exp_ndims):
+                if format_ == 'image':
+                    check = cls._check_image(f, key, log_on_fail)
+                elif format_ == 'table':
+                    check = cls._check_table(f, key, log_on_fail)
+                elif format_ == 'custom':
+                    check = cls._check_custom(f, key, ndim, log_on_fail)
+                else:
+                    raise RuntimeError(f"Invalid format {format_}")
+                if check is False:
                     return False
         return True
 
-    def check_output(self, path):
-        return self._check_impl(path, self._output_exp_key, self._output_exp_ndim)
+    def check_output(self, path, log_on_fail=logger.debug):
+        return self._check_impl(path, self.output_format, self._output_exp_key,
+                                self._output_exp_ndim, log_on_fail)
 
     def validate_input(self, path):
-        return self._check_impl(path, self._input_exp_key, self._input_exp_ndim)
+        return self._check_impl(path, self.input_format,
+                                self._input_exp_key, self._input_exp_ndim, logger.warning)
+
+    def get_invalid_outputs(self, outputs):
+        return [path for path in outputs if not self.validate_output(path,
+                                                                     log_on_fail=logger.warning)]
 
 
 class BatchJobWithSubfolder(BatchJobOnContainer, ABC):
