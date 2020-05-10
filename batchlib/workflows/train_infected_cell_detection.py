@@ -458,6 +458,9 @@ def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSp
     assert n_grid_points < 60000
 
     ann_files, tiff_files = get_ann_and_tiff_files(config)
+    # for now, filter out 193 as there is no bg for it
+    ann_files, tiff_files = list(zip(*filter(lambda a: not '193' in a,
+                                             zip(ann_files, tiff_files))))
     print(f'Found input tiff files:')
     [print(f) for f in tiff_files]
 
