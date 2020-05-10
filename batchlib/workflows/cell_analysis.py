@@ -23,7 +23,7 @@ from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
-from batchlib.reporting import SlackSummaryWriter
+from batchlib.reporting import SlackSummaryWriter, export_tables_for_plate
 from batchlib.util import get_logger
 from batchlib.util.plate_visualizations import all_plots
 
@@ -55,24 +55,17 @@ def get_input_keys(config, serum_in_keys):
     nuc_in_key = 'nuclei'
     marker_in_key = 'marker'
 
+    # keys for the segmentation tasks
     # compute segmentation on IgG if available
     try:
         serum_seg_in_key = next(iter(filter(lambda key: key.endswith('IgG'), serum_in_keys)))
     except StopIteration:
         serum_seg_in_key = serum_in_keys[0]
+    nuc_seg_in_key = nuc_in_key
 
-    if config.segmentation_on_corrected:
-        nuc_seg_in_key = nuc_in_key + '_corrected'
-        serum_seg_in_key = serum_seg_in_key + '_corrected'
-    else:
-        nuc_seg_in_key = nuc_in_key
-
-    if config.analysis_on_corrected:
-        serum_ana_in_keys = [serum_in_key + '_corrected' for serum_in_key in serum_in_keys]
-        marker_ana_in_key = marker_in_key + '_corrected'
-    else:
-        serum_ana_in_keys = serum_in_keys
-        marker_ana_in_key = marker_in_key
+    # keys for the analysis tasks
+    serum_ana_in_keys = serum_in_keys
+    marker_ana_in_key = marker_in_key
 
     return nuc_seg_in_key, serum_seg_in_key, marker_ana_in_key, serum_ana_in_keys
 
@@ -99,22 +92,10 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
     fixed_background_dict = json.loads(fixed_background_dict.replace('\'', '\"'))
     assert isinstance(fixed_background_dict, dict)
 
-    # TODO I don't want to enforce having the _corrected everywhere, so we do this weird little dance for now
-    # in the long term, I would like to eliminate running the option of using the non-corrected completely,
-    # then we can get rid of this
-    parsed_fixed_background_dict = {}
-    for key in keys:
-        value = fixed_background_dict.get(key, None)
-        if value is None:
-            alt_key = key.replace('_corrected', '')
-            value = fixed_background_dict.get(alt_key, None)
-        if value is None:
-            raise ValueError(f"Could not find fixed background value for channel {key}")
-        parsed_fixed_background_dict[key] = value
-
-    validate_bg_dict(parsed_fixed_background_dict)
-    logger.info(f"Use fixed backgrounds: {parsed_fixed_background_dict}")
-    return parsed_fixed_background_dict, True
+    if len(set(serum_ana_in_keys) - set(fixed_background_dict.keys())) > 0:
+        bg_keys = list(fixed_background_dict.keys())
+        raise ValueError(f"Did not find values for all chennales {serum_ana_in_keys} in {bg_keys}")
+    return fixed_background_dict, True
 
 
 def run_cell_analysis(config):
@@ -141,6 +122,8 @@ def run_cell_analysis(config):
 
     barrel_corrector_path = get_barrel_corrector(os.path.join(misc_folder, 'barrel_correctors'),
                                                  config.input_folder)
+    if not os.path.exists(barrel_corrector_path):
+        raise ValueError(f"Invalid barrel corrector path {barrel_corrector_path}")
 
     torch_model_path = os.path.join(misc_folder, 'models/torch/fg_and_boundaries_V1.torch')
     torch_model_class = UNet2D
@@ -370,6 +353,9 @@ def run_cell_analysis(config):
     summary_writer = SlackSummaryWriter(config.slack_token)
     summary_writer(config.folder, config.folder, runtime=t0)
 
+    if config.export_tables:
+        export_tables_for_plate(config.folder)
+
     logger.info(f"Run {name} in {t0}s")
     return name, t0
 
@@ -420,11 +406,6 @@ def cell_analysis_parser(config_folder, default_config_name):
     # these parameters change how the analysis results are computed!
     #
 
-    # TODO get rid of these two parameters!
-    # whether to run the segmentation / analysis on the corrected or on the corrected data
-    parser.add("--segmentation_on_corrected", default=True)
-    parser.add("--analysis_on_corrected", default=True)
-
     # marker denoising and ignore nuclei
     parser.add("--marker_denoise_radius", default=0, type=int)
     parser.add("--dont_ignore_nuclei", action='store_true')
@@ -466,5 +447,7 @@ def cell_analysis_parser(config_folder, default_config_name):
 
     # do we run on cluster?
     parser.add("--on_cluster", type=int, default=0)
+    # do we export the tables for easier downstream analysis?
+    parser.add("--export_tables", type=int, default=0)
 
     return parser

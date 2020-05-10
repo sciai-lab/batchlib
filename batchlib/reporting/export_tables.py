@@ -1,8 +1,9 @@
 import os
+from glob import glob
 
 import numpy as np
 import pandas as pd
-from ..util import read_table, open_file
+from ..util import read_table, open_file, image_name_to_site_name
 
 SUPPORTED_TABLE_FORMATS = {'excel': '.xlsx',
                            'csv': '.csv',
@@ -54,8 +55,57 @@ def export_default_table(table_file, table_name, output_path, output_format=None
     export_table(columns, table, output_path, output_format)
 
 
-def export_cell_tables():
-    pass
+def export_cell_tables(folder, output_path, table_name, output_format=None):
+    files = glob(os.path.join(folder, '*.h5'))
+    files.sort()
+
+    plate_name = os.path.split(folder)[1]
+    initial_columns = ['plate_name', 'site_name']
+    columns = None
+    table = []
+
+    for path in files:
+        with open_file(path, 'r') as f:
+            this_columns, this_table = read_table(f, table_name)
+        if columns is None:
+            columns = initial_columns + this_columns
+
+        site_name = image_name_to_site_name(path)
+
+        plate_col = np.array([plate_name] * len(this_table))
+        site_col = np.array([site_name] * len(this_table))
+        res_table = np.concatenate([plate_col[:, None], site_col[:, None], this_table], axis=1)
+        table.append(res_table)
+
+    table = np.concatenate(table, axis=0)
+    export_table(columns, table, output_path, output_format)
+
+
+def export_tables_for_plate(folder, ext='.xlsx'):
+    """ Conveneince function to export all relevant tables for a plate
+    into a more common format (by default excel).
+    """
+    plate_name = os.path.split(folder)[1]
+    table_file = os.path.join(folder, plate_name + '_table.hdf5')
+
+    # export the images default table
+    im_out = os.path.join(folder, f'{plate_name}_image_table{ext}')
+    export_default_table(table_file, 'images/default', im_out)
+
+    # export the wells default table
+    well_out = os.path.join(folder, f'{plate_name}_well_table{ext}')
+    export_default_table(table_file, 'wells/default', well_out)
+
+    # export the cell segmentation tables
+    im_file = glob(os.path.join(folder, '*.h5'))[0]
+    with open_file(im_file, 'r') as f:
+        g = f['tables/cell_segmentation']
+        cell_table_names = ['cell_segmentation/' + name for name in g.keys()]
+
+    for cell_table_name in cell_table_names:
+        channel_name = cell_table_name.split('/')[-1]
+        cell_out = os.path.join(folder, f'{plate_name}_cell_table_{channel_name}{ext}')
+        export_cell_tables(folder, cell_out, cell_table_name)
 
 
 def export_scores(folder_list, output_path, table_name='wells/default'):

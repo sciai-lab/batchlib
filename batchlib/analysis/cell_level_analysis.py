@@ -76,7 +76,7 @@ def compute_global_statistics(cell_properties):
 
 def compute_ratios(not_infected_properties, infected_properties, channel_name_dict):
     # input should be the return value of eval_cells
-    # channel_name_dict is a map from names in the table to channel keys, e.g. {'serum': 'serum_IgA_corrected'}
+    # channel_name_dict is a map from names in the table to channel keys, e.g. {'serum': 'serum_IgA'}
     not_infected_global_properties = compute_global_statistics(not_infected_properties)
     infected_global_properties = compute_global_statistics(infected_properties)
     result = dict()
@@ -529,7 +529,7 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
             input_files = glob(in_pattern)
 
             def channel_to_bg_column(channel):
-                # because e.g. serum_key = 'cell_segmentation/serum_IgA_corrected'
+                # because e.g. serum_key = 'cell_segmentation/serum_IgA'
                 return f'{channel.split("/")[-1]}_median'
             self._bg_dict = {channel: _get_bg_correction_dict(self.table_out_path,
                                                               bg_key,
