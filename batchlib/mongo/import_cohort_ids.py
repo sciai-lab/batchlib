@@ -7,7 +7,7 @@ from batchlib.mongo.utils import ASSAY_METADATA
 from batchlib.util import get_logger
 from batchlib.util.cohort_parser import CohortIdParser
 
-logger = get_logger('MongoDB cohort_id importer')
+logger = get_logger('Workflow.BatchJob.DbResultWriter')
 
 
 def import_cohort_ids(db):
@@ -18,31 +18,40 @@ def import_cohort_ids(db):
     assay_metadata = db[ASSAY_METADATA]
     # iterate over all plates for which cohort ids were provided
     for plate_name, cohort_ids in cohort_id_parser.well_cohort_ids.items():
-        logger.info(f'Importing cohort ids for plate: {plate_name}')
+        import_cohort_ids_for_plate(plate_name, assay_metadata, cohort_id_parser)
 
-        # fetch plate metadata from DB
-        plate_doc = assay_metadata.find_one({"name": plate_name})
-        if plate_doc is None:
-            logger.warning(f"Plate {plate_name} not found in the DB")
-            continue
 
-        wells = plate_doc["wells"]
+def import_cohort_ids_for_plate(plate_name, assay_metadata, cohort_id_parser):
+    logger.info(f'Importing cohort ids for plate: {plate_name}')
 
-        for plate_row in cohort_ids:
-            for well_name, cohort_id in plate_row:
-                matching_well = list(filter(lambda w: w["name"] == well_name, wells))
-                if len(matching_well) != 1:
-                    if cohort_id != 'unknown':
-                        logger.warning(f"Well {well_name} with cohort id {cohort_id} not found in DB")
-                    continue
+    # fetch plate metadata from DB
+    plate_doc = assay_metadata.find_one({"name": plate_name})
+    if plate_doc is None:
+        logger.warning(f"Plate {plate_name} not found in the DB")
+        return
 
-                matching_well = matching_well[0]
-                # update cohort_id and patient_type
-                matching_well["cohort_id"] = cohort_id
-                matching_well["patient_type"] = cohort_id[0]
+    wells = plate_doc["wells"]
 
-        # replace plate with cohort info update
-        assay_metadata.replace_one({"name": plate_name}, plate_doc)
+    cohort_ids = cohort_id_parser.well_cohort_ids.get(plate_name, None)
+    if cohort_ids is None:
+        logger.info(f"No cohort ids info for plate: {plate_name}. Skipping cohort ids DB update")
+        return
+
+    for plate_row in cohort_ids:
+        for well_name, cohort_id in plate_row:
+            matching_well = list(filter(lambda w: w["name"] == well_name, wells))
+            if len(matching_well) != 1:
+                if cohort_id != 'unknown':
+                    logger.warning(f"Well {well_name} with cohort id {cohort_id} not found in DB")
+                continue
+
+            matching_well = matching_well[0]
+            # update cohort_id and patient_type
+            matching_well["cohort_id"] = cohort_id
+            matching_well["patient_type"] = cohort_id[0]
+
+    # replace plate with cohort info update
+    assay_metadata.replace_one({"name": plate_name}, plate_doc)
 
 
 def import_cohort_descriptions(db):
