@@ -356,11 +356,13 @@ def run_cell_analysis(config):
                   table_key=f'tables/images/{identifier}',
                   identifier=identifier + '_per-image',
                   stat_names=stat_names,
+                  channel_name=identifier,
                   wedge_width=0.3)
         all_plots(table_path, plot_folder,
                   table_key=f'tables/wells/{identifier}',
                   identifier=identifier + '_per-well',
                   stat_names=stat_names,
+                  channel_name=identifier,
                   wedge_width=0)
 
     t0 = time.time() - t0

@@ -8,6 +8,7 @@ import math
 from batchlib.util.io import open_file
 
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import matplotlib
 matplotlib.use("Agg")
 from matplotlib.collections import PatchCollection
@@ -15,6 +16,53 @@ from matplotlib.patches import Circle, Wedge
 
 row_letters = np.array(list('ABCDEFGH'))
 letter_to_row = {letter: i for i, letter in enumerate(row_letters)}
+
+to_rgb = mcolors.ColorConverter().to_rgb
+
+
+def make_colormap(seq):
+    """
+    From https://stackoverflow.com/a/16836182.
+    Return a LinearSegmentedColormap
+    seq: a sequence of floats and RGB-tuples. The floats should be increasing
+    and in the interval (0,1).
+    """
+    seq = [(None,) * 3, 0.0] + list(seq) + [1.0, (None,) * 3]
+    cdict = {'red': [], 'green': [], 'blue': []}
+    for i, item in enumerate(seq):
+        if isinstance(item, float):
+            r1, g1, b1 = seq[i - 1]
+            r2, g2, b2 = seq[i + 1]
+            cdict['red'].append([item, r1, r2])
+            cdict['green'].append([item, g1, g2])
+            cdict['blue'].append([item, b1, b2])
+    return mcolors.LinearSegmentedColormap('CustomMap', cdict)
+
+
+CATEGORICAL_COLORS = (
+    to_rgb('blue'), to_rgb('blue'),
+    (0, 0.8, 0), (0, 0.8, 0),
+    to_rgb('yellow'), to_rgb('yellow')
+)
+CONTINUOUS_COLORS = (
+    to_rgb('blue'), to_rgb('lightblue'),
+    (0, 0.8, 0), (0, 0.8, 0),
+    to_rgb('lightyellow'), to_rgb('yellow')
+)
+
+
+def make_colormap_absolute(
+    thresholds=(0.0, 0.33, 0.66, 1.0),
+    colors=CONTINUOUS_COLORS,
+):
+    thresholds = np.array(thresholds)
+    vmin = thresholds[0]
+    vmax = thresholds[-1]
+    thresholds = (thresholds[1:-1] - vmin) / (vmax - vmin)
+    seq = [x for i in range(len(thresholds))
+           for x in (colors[2*i], colors[2*i+1], thresholds[i])] + list(colors[-2:])
+    cmap = make_colormap(seq)
+    return cmap, (vmin, vmax)
 
 
 def get_well(filename, to_numeric=True):
@@ -43,7 +91,7 @@ def make_per_well_dict(data_dict, min_samples_per_well=None):
 
 def well_plot(data_dict, infected_list=None,
               fig=None, ax=None, title=None, outfile=None,
-              sort=False, print_medians=False, figsize=(7.1, 4), colorbar_range=None,
+              sort=False, print_medians=False, figsize=(7.1, 4), colorbar_range=None, cmap=None,
               radius=0.45, wedge_width=0.2, infected_marker_width=0.05, angular_gap=0.0,
               min_samples_per_well=None):
     """
@@ -121,6 +169,8 @@ def well_plot(data_dict, infected_list=None,
     coll.set_array(np.array(patch_values))
     if colorbar_range is not None:
         coll.set_clim(*colorbar_range)
+        if cmap is not None:
+            coll.set_cmap(cmap)
 
     ax.add_collection(coll)
     fig.colorbar(coll, ax=ax)
@@ -249,9 +299,31 @@ def get_colorbar_range(key):
     return colorbar_range
 
 
-# TODO this function should be refactored into two functions:
-# 1 that accepts a well table and one that accepts an image table
-def all_plots(table_path, out_folder, table_key, stat_names, identifier=None, **well_plot_kwargs):
+colorbar_threshold_dict = {
+    'serum_robust_z_score_means': {
+        'serum_IgA_corrected': (0.0, 1.8, 2.5, 5),
+        'serum_IgG_corrected': (0.0, 1.8, 2.5, 5),
+        'serum': (0.0, 1.8, 2.5, 10),
+    },
+    'serum_robust_z_score_sums': {
+        'serum_IgA_corrected': (0.0, 1.8, 2.5, 5),
+        'serum_IgG_corrected': (0.0, 1.8, 2.5, 5),
+        'serum': (0.0, 1.8, 2.5, 10),
+    },
+    'serum_ratio_of_q0.5_of_means': {
+        'serum_IgA_corrected': (0.0, 1.8, 2.5, 5),
+        'serum_IgG_corrected': (0.9, 1.25, 1.3, 2.0),
+        'serum_corrected': (0.9, 1.25, 1.3, 2.0),
+    },
+    'serum_ratio_of_q0.5_of_sums': {
+        'serum_IgA_corrected': (0.0, 1.8, 2.5, 5),
+        'serum_IgG_corrected': (0.9, 1.25, 1.3, 2.0),
+        'serum_corrected': (0.9, 1.25, 1.3, 2.0),
+    },
+}
+
+
+def all_plots(table_path, out_folder, table_key, stat_names, channel_name, identifier=None, **well_plot_kwargs):
     if not isinstance(stat_names, (list, tuple)):
         raise ValueError(f"stat_names must be either list or tuple, got {type(stat_names)}")
     os.makedirs(out_folder, exist_ok=True)
@@ -276,7 +348,11 @@ def all_plots(table_path, out_folder, table_key, stat_names, identifier=None, **
     plate_name = os.path.split(table_path)[0]
 
     for name in tqdm(stat_names, desc='making plots'):
-
+        try:
+            cmap, colorbar_range = make_colormap_absolute(colorbar_threshold_dict[name][channel_name])
+        except IndexError:
+            print(f'Warning: No colorbar thresholds specified for stat {name} and channel {channel_name}')
+            cmap, colorbar_range = None, None
         # 0th column is the image / well name
         image_or_well_names = [str(im_name) for im_name in table[:, 0]]
         # Hack for Wells
@@ -291,6 +367,8 @@ def all_plots(table_path, out_folder, table_key, stat_names, identifier=None, **
                   outfile=outfile,
                   figsize=(11, 6),
                   title=plate_name + "\n" + name,
+                  cmap=cmap,
+                  colorbar_range=colorbar_range,
                   **well_plot_kwargs)
 
 
