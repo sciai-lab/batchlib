@@ -12,8 +12,8 @@ logger = get_logger('Workflow.BatchJob.MergeAnalysisTables')
 # - all tables: q0.5, robuse_z_score
 # - reference table:  score, number of cells and outliers
 # see also https://github.com/hci-unihd/batchlib/issues/91
-DEFAULT_COMMON_NAME_PATTERNS = ('q0.5', 'robust_z_score', 'mad')
-DEFAULT_REFERENCE_NAME_PATTERNS = ('score', 'n_cells', 'n_infected', 'n_control',
+DEFAULT_COMMON_NAME_PATTERNS = ('ratio_of_q0.5', 'robust_z_score', 'mad', 'q0.5_of_cell')
+DEFAULT_REFERENCE_NAME_PATTERNS = ('score', 'n_cells', 'n_infected', 'n_control', 'n_outlier_cells',
                                    'fraction_infected', 'is_outlier', 'outlier_type')
 
 
@@ -64,7 +64,7 @@ class MergeAnalysisTables(BatchJobOnContainer):
                          output_format=out_format,
                          **super_kwargs)
 
-    def _get_column_mask(self, column_names, is_reference_table, keep_names):
+    def _get_column_mask(self, column_names, is_reference_table, keep_names, has_marker_values):
 
         keep_patterns = deepcopy(self.common_name_patterns)
         if keep_names:
@@ -73,44 +73,56 @@ class MergeAnalysisTables(BatchJobOnContainer):
             keep_patterns += self.reference_name_patterns
 
         keep_ids = [ii for ii, name in enumerate(column_names)
-                    if any(pattern in name for pattern in keep_patterns)]
+                    if (any(pattern in name for pattern in keep_patterns) and 'marker' not in name)]
+
+        if not has_marker_values:
+            marker_ids = [ii for ii, name in enumerate(column_names)
+                          if (any(pattern in name for pattern in keep_patterns) and 'marker' in name)]
+            if len(marker_ids) > 0:
+                has_marker_values = True
+                keep_ids.extend(marker_ids)
 
         col_mask = np.zeros(len(column_names), dtype='bool')
         col_mask[keep_ids] = 1
-        return col_mask
+        return col_mask, has_marker_values
 
-    def _format_col_name(self, name, prefix, dont_add_prefix_patterns=None):
-        dont_add_prefix_patterns = self.fixed_names + self.reference_name_patterns\
-            if dont_add_prefix_patterns is None else dont_add_prefix_patterns
-        if any(pattern in name for pattern in dont_add_prefix_patterns):
-            return name
+    def _format_col_name(self, name, prefix):
+        is_marker = 'marker' in name
+        is_zscore = 'robust_z_score' in name
+        override_ = is_zscore and not is_marker
+
+        dont_add_prefix_patterns = self.fixed_names + self.reference_name_patterns + ('marker',)
+        if any(pattern in name for pattern in dont_add_prefix_patterns) and not override_:
+            return name.replace('serum', '').replace('of_cell_', '')
         else:
-            return prefix + '_' + name
+            return prefix + name.replace('serum', '').replace('of_cell_', '')
 
-    def _get_seg_prefix(self, table_name):
+    def _get_table_prefix(self, table_name):
         return table_name.replace('serum_', '')
 
     def _merge_tables(self, in_file, out_file, prefix, out_name, is_image):
 
         table = None
         column_names = None
+        has_marker_values = False
 
         # FIXME we assume here that all tables store the reference column (i.e. well_name or site_name)
         # in the same order. If this is not the case, the values will get mixed. We need to check for this!
         with open_file(in_file, 'r') as f:
             for ii, table_name in enumerate(self.input_table_names):
                 this_column_names, this_table = self.read_table(f, f"{prefix}/{table_name}")
-                seg_prefix = self._get_seg_prefix(table_name)
+                table_prefix = self._get_table_prefix(table_name)
 
                 is_reference = table_name == self.reference_table_name
                 keep_names = ii == 0
-                column_mask = self._get_column_mask(this_column_names, is_reference, keep_names)
+                column_mask, has_marker_values = self._get_column_mask(this_column_names, is_reference,
+                                                                       keep_names, has_marker_values)
                 assert len(column_mask) == len(this_column_names)
 
                 this_table = [col for col, is_in_mask in zip(this_table.T, column_mask)
                               if is_in_mask]
                 this_table = np.array(this_table).T
-                this_column_names = [self._format_col_name(col_name, seg_prefix)
+                this_column_names = [self._format_col_name(col_name, table_prefix)
                                      for col_name, keep_col in zip(this_column_names,
                                                                    column_mask) if keep_col]
 
@@ -135,6 +147,7 @@ class MergeAnalysisTables(BatchJobOnContainer):
             bg_values = bg_table[:, bg_col_ids]
 
             table = [row + bg_vals.tolist() for row, bg_vals in zip(table, bg_values)]
+            bg_col_names = ['background_' + name.replace('serum_', '') for name in bg_col_names]
             column_names.extend(bg_col_names)
 
         table = np.array(table)
@@ -145,6 +158,9 @@ class MergeAnalysisTables(BatchJobOnContainer):
             raise RuntimeError("Expected well_name column")
         if is_image and 'site_name' not in column_names:
             raise RuntimeError("Expected site_name column")
+
+        print("\n".join(column_names))
+        quit()
 
         visible = np.ones(len(column_names))
         if is_image:

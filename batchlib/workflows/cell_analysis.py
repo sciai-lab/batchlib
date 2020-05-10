@@ -304,7 +304,8 @@ def run_cell_analysis(config):
     job_list.append((MergeAnalysisTables, {
         'build': {'input_table_names': table_identifiers,
                   'reference_table_name': reference_table_name,
-                  'analysis_parameters': analysis_parameter}
+                  'analysis_parameters': analysis_parameter},
+        'run': {'force_recompute': True}
     }))
 
     # make sure that db job is executed when all result tables hdf5 are ready (outside of the loop)
