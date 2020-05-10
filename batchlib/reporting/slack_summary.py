@@ -96,7 +96,7 @@ class SlackSummaryWriter(BatchJobOnContainer):
 
         image_paths = glob(os.path.join(out_folder, '*.png'))
         image_paths.sort()
-        table_path = glob(os.path.join(out_folder, '*.csv'))
+        table_path = glob(os.path.join(out_folder, '*.xlsx'))
         assert len(table_path) == 1
         table_path = table_path[0]
 
