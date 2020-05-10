@@ -127,9 +127,9 @@ class Preprocess(BatchJobOnContainer):
         self.channel_mapping = channel_mapping
         self.channel_names = channel_names
 
-        channel_out_names = list(viewer_settings.keys())
+        channel_out_names = [name + '_raw' for name in viewer_settings.keys()]
         if self.barrel_corrector_path is not None:
-            channel_out_names += [chan_name + '_corrected' for chan_name in channel_out_names]
+            channel_out_names += list(viewer_settings.keys())
         channel_out_dims = [2] * len(channel_out_names)
 
         # add the channel information to the viewer settings, so
@@ -151,6 +151,7 @@ class Preprocess(BatchJobOnContainer):
         # is usually not executed in the main thread
         with open_file(out_path, 'a') as f:
 
+            raw_is_visible = barrel_corrector is None
             for chan_id, name in enumerate(self.channel_names):
 
                 semantic_name = self.channel_mapping[name]
@@ -159,11 +160,11 @@ class Preprocess(BatchJobOnContainer):
 
                 this_settings = self.viewer_settings[semantic_name].copy()
                 if barrel_corrector is not None:
-                    this_settings.update({'visible': False})
+                    this_settings.update({'visible': raw_is_visible})
 
                 # save the raw image channel
                 chan = im[chan_id]
-                self.write_image(f, semantic_name, chan, settings=this_settings)
+                self.write_image(f, semantic_name + '_raw', chan, settings=this_settings)
 
                 # apply and save the barrel corrected channel,
                 # if we have a barrel corrector
@@ -173,8 +174,7 @@ class Preprocess(BatchJobOnContainer):
                     chan = barrel_correction(chan, *this_corrector)
 
                     # get the settings for this image channel
-                    self.write_image(f, semantic_name + '_corrected', chan,
-                                     settings=this_settings)
+                    self.write_image(f, semantic_name, chan, settings=this_settings)
 
     def load_barrel_corrector(self):
         if self.barrel_corrector_path is None:

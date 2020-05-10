@@ -304,24 +304,24 @@ def get_colorbar_range(key):
 
 colorbar_threshold_dict = {
     'serum_robust_z_score_means': {
-        'serum_IgA_corrected': (0.0, 1.8, 2.5, 5),
-        'serum_IgG_corrected': (0.0, 1.8, 2.5, 5),
+        'serum_IgA': (0.0, 1.8, 2.5, 5),
+        'serum_IgG': (0.0, 1.8, 2.5, 5),
         'serum': (0.0, 1.8, 2.5, 10),
     },
     'serum_robust_z_score_sums': {
-        'serum_IgA_corrected': (0.0, 1.8, 2.5, 5),
-        'serum_IgG_corrected': (0.0, 1.8, 2.5, 5),
+        'serum_IgA': (0.0, 1.8, 2.5, 5),
+        'serum_IgG': (0.0, 1.8, 2.5, 5),
         'serum': (0.0, 1.8, 2.5, 10),
     },
     'serum_ratio_of_q0.5_of_means': {
-        'serum_IgA_corrected': (0.9, 1.8, 2.5, 5),
-        'serum_IgG_corrected': (0.9, 1.25, 1.3, 2.0),
-        'serum_corrected': (0.9, 1.25, 1.3, 2.0),
+        'serum_IgA': (0.9, 1.8, 2.5, 5),
+        'serum_IgG': (0.9, 1.25, 1.3, 2.0),
+        'serum': (0.9, 1.25, 1.3, 2.0),
     },
     'serum_ratio_of_q0.5_of_sums': {
-        'serum_IgA_corrected': (0.9, 1.8, 2.5, 5),
-        'serum_IgG_corrected': (0.9, 1.25, 1.3, 2.0),
-        'serum_corrected': (0.9, 1.25, 1.3, 2.0),
+        'serum_IgA': (0.9, 1.8, 2.5, 5),
+        'serum_IgG': (0.9, 1.25, 1.3, 2.0),
+        'serum': (0.9, 1.25, 1.3, 2.0),
     },
 }
 
@@ -353,7 +353,6 @@ def all_plots(table_path, out_folder, table_key, stat_names, channel_name, ident
             outlier_list = [key
                             for key, value in get_column_dict(outlier_column_names, outlier_table, 'is_outlier').items()
                             if value]
-
 
     plate_name = os.path.split(table_path)[0]
 

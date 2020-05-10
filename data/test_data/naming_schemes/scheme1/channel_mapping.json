@@ -1,4 +1,4 @@
 {"DAPI": "nuclei",
  "WF_GFP": "marker",
- "TRITC": "serum",
+ "TRITC": "serum_IgG",
  "WF_Cy5": null}
