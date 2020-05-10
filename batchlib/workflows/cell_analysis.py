@@ -23,7 +23,7 @@ from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
-from batchlib.reporting import SlackSummaryWriter
+from batchlib.reporting import SlackSummaryWriter, export_tables_for_plate
 from batchlib.util import get_logger
 from batchlib.util.plate_visualizations import all_plots
 
@@ -353,6 +353,9 @@ def run_cell_analysis(config):
     summary_writer = SlackSummaryWriter(config.slack_token)
     summary_writer(config.folder, config.folder, runtime=t0)
 
+    if config.export_tables:
+        export_tables_for_plate(config.folder)
+
     logger.info(f"Run {name} in {t0}s")
     return name, t0
 
@@ -444,5 +447,7 @@ def cell_analysis_parser(config_folder, default_config_name):
 
     # do we run on cluster?
     parser.add("--on_cluster", type=int, default=0)
+    # do we export the tables for easier downstream analysis?
+    parser.add("--export_tables", type=int, default=0)
 
     return parser
