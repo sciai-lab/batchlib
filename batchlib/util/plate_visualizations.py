@@ -360,7 +360,7 @@ def all_plots(table_path, out_folder, table_key, stat_names, channel_name, ident
     for name in tqdm(stat_names, desc='making plots'):
         try:
             cmap, colorbar_range = make_colormap_absolute(colorbar_threshold_dict[name][channel_name])
-        except IndexError:
+        except KeyError:
             print(f'Warning: No colorbar thresholds specified for stat {name} and channel {channel_name}')
             cmap, colorbar_range = None, None
         # 0th column is the image / well name
