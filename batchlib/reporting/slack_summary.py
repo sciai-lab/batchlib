@@ -61,9 +61,6 @@ class SlackSummaryWriter(BatchJobOnContainer):
                 shutil.copyfile(plot, plot_out)
 
     def copy_table(self, input_file, out_path):
-        print(out_path)
-        print(out_path)
-        print(out_path)
         with open_file(input_file, 'r') as f:
             export_default_table(f, self.summary_table_key, out_path)
             param_cols, param_table = self.read_table(f, self.parameter_table_key)
