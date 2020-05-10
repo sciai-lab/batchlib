@@ -366,7 +366,7 @@ def all_plots(table_path, out_folder, table_key, stat_names, channel_name, ident
                   print_medians=True,
                   outfile=outfile,
                   figsize=(11, 6),
-                  title=plate_name + "\n" + name,
+                  title=f'{plate_name}\n{identifier} {name}',
                   cmap=cmap,
                   colorbar_range=colorbar_range,
                   **well_plot_kwargs)
