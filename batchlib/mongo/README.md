@@ -83,9 +83,6 @@ use covid
 db.foo.insert( { x: 1, y: 1 } )
 ```
 
-## Replication
-TBD
-
 ## Schema description
 The following collections are present in the `covid` database:
 - `immuno-assay-metadata` -  a collection to store all metadata associated with the plates
@@ -167,4 +164,22 @@ Schema of a single document:
   "patient_type": "STRING",
   "description": "STRING"
 }
+```
+
+## Backup & restore
+
+In order to do periodic backups or backup data from the development database and restore it in the production database 
+use `mongodump`/`mongorestore` functionality.
+
+### Dump development database and restore into the production database
+
+Dump development db into the `dump` folder in the current directory:
+```bash
+mongodump --host=vm-kreshuk08.embl.de --port=27017 --db=covid --username=covid19 --password=PASSWD
+```
+
+
+Restore the dump to the production mongod instance:
+```bash
+mongorestore --host=vm-kreshuk-11.embl.de --port=27017 --username=covid19  --password=PASSWD --authenticationDatabase=covid dump
 ```
