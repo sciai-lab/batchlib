@@ -361,6 +361,8 @@ def run_cell_analysis(config):
     if feature_identifier is None:
         workflow_summaries(name, config, table_identifiers, t0)
 
+    return table_identifiers
+
 
 def cell_analysis_parser(config_folder, default_config_name):
     """
