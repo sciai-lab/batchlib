@@ -30,23 +30,18 @@ from batchlib.util.plate_visualizations import all_plots
 logger = get_logger('Workflow.CellAnalysis')
 
 
-def get_analysis_parameter(config, use_fixed_background, background_parameters):
+def get_analysis_parameter(config, background_parameters):
     # collect all relevant analysis paramter, so that we can
     # write them to a table and keep track of this
     params = {'marker_denoise_radius': config.marker_denoise_radius,
               'dont_ignore_nuclei': config.dont_ignore_nuclei,
               'infected_detection_threshold': config.infected_threshold,
               'scale_infected_detection_with_mad': config.infected_scale_with_mad}
+
     params.update({'qc_cells_' + k: v for k, v in DEFAULT_CELL_OUTLIER_CRITERIA.items()})
     params.update({'qc_images_' + k: v for k, v in DEFAULT_IMAGE_OUTLIER_CRITERIA.items()})
     params.update({'qc_wells_' + k: v for k, v in DEFAULT_WELL_OUTLIER_CRITERIA.items()})
-
-    params['fixed_background'] = use_fixed_background
-    if use_fixed_background:
-        params.update({'background_' + name: value for name, value in background_parameters.items()})
-    else:
-        params.update({'background_type': config.background_type})
-
+    params.update({'background_' + k: v for k, v in background_parameters.items()})
     return params
 
 
@@ -81,23 +76,24 @@ def validate_bg_dict(bg_dict):
 
 def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
     keys = serum_ana_in_keys + [marker_ana_in_key]
-    fixed_background_dict = config.fixed_background
-    if fixed_background_dict is None:
-        background_type = config.background_type
-        if background_type not in ('images', 'wells', 'plate'):
-            raise ValueError(f"Expected background type to be one of (images, wells, plates), got {background_type}")
-        logger.info(f"Compute background from data with type {background_type}")
-        return {key: f'{background_type}/backgrounds' for key in keys}, False
+    background_dict = config.background_dict
+    if background_dict is None:
+        logger.info(f"Compute background from data and use the per plate background")
+        return {key: f'plate/backgrounds' for key in keys}
 
-    fixed_background_dict = json.loads(fixed_background_dict.replace('\'', '\"'))
-    assert isinstance(fixed_background_dict, dict)
+    if isinstance(background_dict, str):
+        background_dict = json.loads(background_dict.replace('\'', '\"'))
+    assert isinstance(background_dict, dict)
+    validate_bg_dict(background_dict)
 
-    if len(set(serum_ana_in_keys) - set(fixed_background_dict.keys())) > 0:
-        bg_keys = list(fixed_background_dict.keys())
-        raise ValueError(f"Did not find values for all chennales {serum_ana_in_keys} in {bg_keys}")
-    return fixed_background_dict, True
+    if len(set(keys) - set(background_dict.keys())) > 0:
+        bg_keys = list(background_dict.keys())
+        raise ValueError(f"Did not find values for all chennales {keys} in {bg_keys}")
+    return background_dict
 
 
+# TODO allow running with / without don't ignore nuclei (rename the option!) on the same
+# folder and then select the correct sum / mean values for the default table in the merge job
 def run_cell_analysis(config):
     """
     """
@@ -236,13 +232,11 @@ def run_cell_analysis(config):
             'infected_threshold': config.infected_threshold  # default: 6.2
         }}))
 
-    # for the background substraction, we can either use a fixed value,
+    # for the background substraction, we can either use a fixed value per channel,
     # or compute it from the data. In the first case, we pass the value
     # as 'serum_bg_key' / 'marker_bg_key'. In the second case, we pass a key
     # to the table holding these values.
-    background_parameters, is_fixed = parse_background_parameters(config,
-                                                                  marker_ana_in_key,
-                                                                  serum_ana_in_keys)
+    background_parameters = parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys)
 
     table_identifiers = serum_ana_in_keys
     for serum_key, identifier in zip(serum_ana_in_keys, table_identifiers):
@@ -287,8 +281,7 @@ def run_cell_analysis(config):
             'run': {'force_recompute': False}}))
 
     # get a dict with all relevant analysis parameters, so that we can write it as a table and log it
-    # TODO we also need to include this in the database
-    analysis_parameter = get_analysis_parameter(config, is_fixed, background_parameters)
+    analysis_parameter = get_analysis_parameter(config, background_parameters)
     logger.info(f"Analysis parameter: {analysis_parameter}")
 
     # find the identifier for the reference table (the IgG one if we have multiple tables)
@@ -414,12 +407,9 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--infected_scale_with_mad", default=True)
     parser.add("--infected_threshold", type=float, default=6.2)
 
-    # optional fixed background value(s).
-    # if None, will be computed from the data
-    # otherwise, needs to be a dict with background values for the input channels
-    parser.add("--fixed_background", default=None)
-    # do we use image, well or plate level background? (default is plate)
-    parser.add("--background_type", default='plate', type=str)
+    # optional background subtraction values for the individual channels
+    # if None, all backgrounds will be computed from the data and the plate background will be used
+    parser.add("--background_dict", default=None)
 
     #
     # more options
