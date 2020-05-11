@@ -98,6 +98,49 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
     return background_dict
 
 
+def get_infected_detection_jobs(config, marker_ana_in_key):
+    erosion_radius = config.erosion_radius
+
+    jobs = []
+    if erosion_radius > 0:
+        seg_key_for_infected_classification = config.seg_key + '_for_infected_classification'
+        jobs.append((ErodeSegmentation, {
+                     'build': {
+                         'input_key': config.seg_key,
+                         'output_key': seg_key_for_infected_classification,
+                         'radius': config.erosion_radius,  # default: 2
+                     }}))
+        link_out_table = config.seg_key
+    else:
+        seg_key_for_infected_classification = config.seg_key
+        link_out_table = None
+
+    jobs.extend([
+        # this one is just for the infected cell classification
+        (InstanceFeatureExtraction, {
+            'build': {
+                'channel_keys': (marker_ana_in_key,),
+                'nuc_seg_key_to_ignore': config.nuc_key,  # TODO add all the infected cell detection params to parser
+                'cell_seg_key': seg_key_for_infected_classification,
+                'identifier': None,
+                'quantiles': [0.93],
+            },
+            'run': {'gpu_id': config.gpu}}),
+        # TODO: make sure that the quantile is there
+        (FindInfectedCells, {
+         'build': {
+             'marker_key': marker_ana_in_key,
+             'cell_seg_key': seg_key_for_infected_classification,
+             'scale_with_mad': config.infected_scale_with_mad,  # default: True
+             'infected_threshold': config.infected_threshold,  # default: 5.4
+             'split_statistic': 'quantile0.93',
+             'feature_identifier': None,
+             'bg_correction_key': 'plate/backgrounds',
+             'link_out_table': link_out_table}})
+    ])
+    return jobs
+
+
 def core_workflow_tasks(config, name, feature_identifier):
 
     # to allow running on the cpu
@@ -133,8 +176,6 @@ def core_workflow_tasks(config, name, feature_identifier):
     serum_in_keys = get_serum_keys(config.input_folder)
     (nuc_seg_in_key, serum_seg_in_key,
      marker_ana_in_key, serum_ana_in_keys) = get_input_keys(config, serum_in_keys)
-
-    seg_key_for_infected_classification = config.seg_key + '_for_infected_classification'
 
     outlier_predicate = get_outlier_predicate(config)
 
@@ -215,37 +256,11 @@ def core_workflow_tasks(config, name, feature_identifier):
               'serum_key': serum_seg_in_key,    # is ignored
               'actual_channels_to_use': (*serum_ana_in_keys, marker_ana_in_key),  # is actually used
               'feature_identifier': feature_identifier,
-              'cell_seg_key': config.seg_key}}),
-         (ErodeSegmentation, {
-             'build': {
-                 'input_key': config.seg_key,
-                 'output_key': seg_key_for_infected_classification,
-                 'radius': config.erosion_radius,  # default: 2
-             }
-         }),
-         # this one is just for the infected cell classification
-         (InstanceFeatureExtraction, {
-             'build': {
-                 'channel_keys': (marker_ana_in_key,),
-                 'nuc_seg_key_to_ignore': config.nuc_key,  # TODO add all the infected cell detection params to parser
-                 'cell_seg_key': seg_key_for_infected_classification,
-                 'identifier': None,
-                 'quantiles': [0.93],
-             },
-             'run': {'gpu_id': config.gpu}}),
-         # NOTE we need to pass the feature identifier, but the infected cells will only be
-         # computed the first time
-         # TODO: make sure that the quantile is there
-         (FindInfectedCells, {
-          'build': {
-              'marker_key': marker_ana_in_key,
-              'cell_seg_key': seg_key_for_infected_classification,
-              'scale_with_mad': config.infected_scale_with_mad,  # default: True
-              'infected_threshold': config.infected_threshold,  # default: 5.4
-              'split_statistic': 'quantile0.93',
-              'feature_identifier': None,
-              'bg_correction_key': 'plate/backgrounds'}})]
+              'cell_seg_key': config.seg_key}})]
     )
+
+    infected_detection_jobs = get_infected_detection_jobs(config, marker_ana_in_key)
+    job_list.extend(infected_detection_jobs)
 
     # for the background substraction, we can either use a fixed value per channel,
     # or compute it from the data. In the first case, we pass the value

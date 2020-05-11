@@ -342,6 +342,13 @@ def _get_bg_correction_dict(table_path, key_in_table, column_name, in_files):
 
 class FindInfectedCells(BatchJobOnContainer):
     """This job finds the infected and control cells to later compute the measures on"""
+
+    @staticmethod
+    def get_table_out_key(cell_seg_key, identifier, marker_key):
+        feature_table_out_key = cell_seg_key + ('' if identifier is None
+                                                else f'_{identifier}') + '/' + marker_key
+        return 'cell_classification/' + feature_table_out_key
+
     def __init__(self,
                  cell_seg_key='cell_segmentation',
                  bg_cell_seg_key=None,
@@ -352,12 +359,13 @@ class FindInfectedCells(BatchJobOnContainer):
                  bg_correction_key='plate/backgrounds',  # can also be float
                  feature_identifier=None,
                  identifier=None,
+                 link_out_table=None,
                  **super_kwargs):
         self.marker_key = marker_key
         self.cell_seg_key = cell_seg_key
         self.bg_cell_seg_key = bg_cell_seg_key if bg_cell_seg_key is not None else cell_seg_key
         self.feature_table_key = cell_seg_key + ('' if feature_identifier is None
-                                                 else f'_{feature_identifier}') +'/' + marker_key
+                                                 else f'_{feature_identifier}') + '/' + marker_key
         self.bg_feature_table_key = self.bg_cell_seg_key + '/' + marker_key
 
         self.infected_threshold = infected_threshold
@@ -366,11 +374,11 @@ class FindInfectedCells(BatchJobOnContainer):
 
         self.bg_correction_key = bg_correction_key
 
-        # infected are per default saved at tables/cell_classification/cell_segmentation/marker_key in the container
-        feature_table_out_key = cell_seg_key + ('' if identifier is None
-                                                else f'_{identifier}') + '/' + marker_key
-        self.output_table_key = 'cell_classification/' + feature_table_out_key
-
+        self.output_table_key = self.get_table_out_key(cell_seg_key, identifier, marker_key)
+        # we might have to link the output table to a different name
+        self.link_out_table = None if link_out_table is None else self.get_table_out_key(link_out_table,
+                                                                                         identifier,
+                                                                                         marker_key)
         super().__init__(input_key=self.feature_table_key,
                          input_format='table',
                          output_key=self.output_table_key,
@@ -429,6 +437,13 @@ class FindInfectedCells(BatchJobOnContainer):
         with open_file(out_file, 'a') as f:
             self.write_table(f, self.output_table_key, column_names, table)
 
+    def link_result_table(self, output_file):
+        with open_file(output_file, 'a') as f:
+            in_key = 'tables/' + self.output_table_key
+            out_key = 'tables/' + self.link_out_table
+            # make a hard-link
+            f[out_key] = f[in_key]
+
     def run(self, input_files, output_files, enable_tqdm=True):
         offset_dict = self.get_bg_correction_dict(input_files, column_name=f'{self.marker_key}_median')
         if self.scale_with_mad:
@@ -440,6 +455,8 @@ class FindInfectedCells(BatchJobOnContainer):
             self.compute_and_save_infected_and_control(input_file, output_file,
                                                        offset=offset_dict[in_file_to_image_name(input_file)],
                                                        scale=scale_dict.get(in_file_to_image_name(input_file)))
+            if self.link_out_table is not None:
+                self.link_result_table(output_file)
 
 
 class CellLevelAnalysisBase(BatchJobOnContainer):
