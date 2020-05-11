@@ -298,10 +298,10 @@ def run_cell_analysis(config):
                 'cell_seg_key': config.seg_key,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
-                'write_summary_images': False,
+                'write_summary_images': True,
                 'scale_factors': config.scale_factors,
                 'identifier': identifier},
-            'run': {'force_recompute': False}}))
+            'run': {'force_recompute': True}}))
 
     # get a dict with all relevant analysis parameters, so that we can write it as a table and log it
     # TODO we also need to include this in the database

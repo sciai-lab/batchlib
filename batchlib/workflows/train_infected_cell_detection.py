@@ -14,7 +14,7 @@ from batchlib.segmentation.voronoi_ring_segmentation import VoronoiRingSegmentat
 from batchlib.segmentation.unet import UNet2D
 from batchlib import run_workflow
 from batchlib.analysis.cell_level_analysis import InstanceFeatureExtraction, FindInfectedCells, \
-    DenoiseByGrayscaleOpening
+    DenoiseByGrayscaleOpening, ExtractBackground
 
 from tqdm.auto import tqdm
 from glob import glob
@@ -186,6 +186,46 @@ def compute_segmentations(config, SubParamRanges):
                  force_recompute=False)
 
 
+def denoise_and_extract_backgrounds(config, SearchSpace):
+    def denoise(denoise_radius=0):
+        print('\ndenoising with radius', denoise_radius)
+        if denoise_radius == 0:
+            return
+        job_list = [(DenoiseByGrayscaleOpening, {
+            'build': {
+                'key_to_denoise': 'marker_corrected',
+                'output_key': _marker_key(denoise_radius),
+                'radius': denoise_radius},
+            }
+        )]
+        run_workflow('Denoising Workflow',
+                     config.out_dir,
+                     job_list)
+
+    grid_evaluate(
+        denoise,
+        denoise_radius=SearchSpace.marker_denoise_radii,
+        n_jobs=0)
+
+    job_list = [(ExtractBackground, {
+        'build': {
+            'marker_key': _marker_key(0),  # is ignored
+            'serum_key': _marker_key(0),  # is ignored
+            'cell_seg_key': 'cell_segmentation',
+            'actual_channels_to_use': tuple(map(_marker_key, SearchSpace.marker_denoise_radii)),  # is actually used
+        },
+        'run': {
+            'ignore_invalid_inputs': True,
+            #'ignore_failed_outputs': True,
+        }
+    })]
+    print('Computing background')
+    run_workflow('Background Extraction Workflow',
+                 config.out_dir,
+                 job_list)
+    print('Done computing backgrounds')
+
+
 def get_identifier(*args):
     return '_'.join(map(str, args))
 
@@ -197,16 +237,18 @@ def _marker_key(denoise_radius):
 def extract_feature_grid(config, SubParamRanges, SearchSpace):
     def extract_feature_job_specification(seg_key, ignore_nuclei, denoise_radius=0):
         print('\n', seg_key, ignore_nuclei)
-        if denoise_radius > 0:
-            job_list = [(DenoiseByGrayscaleOpening, {
-                'build': {
-                    'key_to_denoise': 'marker_corrected',
-                    'output_key': _marker_key(denoise_radius),
-                    'radius': denoise_radius},
-                }
-            )]
-        else:
-            job_list = []
+        # # now handled above
+        # if denoise_radius > 0:
+        #     job_list = [(DenoiseByGrayscaleOpening, {
+        #         'build': {
+        #             'key_to_denoise': 'marker_corrected',
+        #             'output_key': _marker_key(denoise_radius),
+        #             'radius': denoise_radius},
+        #         }
+        #     )]
+        # else:
+        #     job_list = []
+        job_list = []
         job_list.append((InstanceFeatureExtraction, {
             'build': {
                 'channel_keys': [_marker_key(denoise_radius)],
@@ -228,12 +270,14 @@ def extract_feature_grid(config, SubParamRanges, SearchSpace):
         denoise_radius=SearchSpace.marker_denoise_radii,
         n_jobs=0)  #['result'].reshape(-1).tolist()
 
-    # run_workflow('Feature Extraction Workflow',
-    #              config.out_dir,
-    #              job_list)
-
 
 class FindInfectedCellsParallel(FindInfectedCells):
+    @staticmethod
+    def folder_to_table_path(folder, identifier):
+        tables = glob(os.path.join(os.path.dirname(folder), '*.hdf5'))
+        assert len(tables) == 1, f'{tables}, {folder}'
+        return tables[0]
+
     def get_infected_indicator(self, feature_dict, offset=None, scale=None):
         offset = 0 if offset is None else offset
         scale = 1 if scale is None else scale
@@ -278,7 +322,7 @@ def find_infected(config, seg_key, ignore_nuclei, split_statistic, infected_thre
             'bg_cell_seg_key':  None,  #'cell_segmentation_cell_segmentation_False',  # weird because of identifier
             'split_statistic': split_statistic,
             'infected_threshold': infected_threshold,
-            'scale_with_mad': False,
+            'scale_with_mad': True,
             },
         'run': {
             'enable_tqdm': False,
@@ -286,7 +330,7 @@ def find_infected(config, seg_key, ignore_nuclei, split_statistic, infected_thre
 
     in_files = glob(os.path.join(config.out_dir, '*.h5'))
     for in_file in in_files:
-        job_spec[1]['build']['bg_correction_key'] = get_plate_bg(os.path.basename(in_file)[:os.path.basename(in_file).index('_Well')])
+        job_spec[1]['build']['bg_correction_key'] = 'images/backgrounds' #get_plate_bg(os.path.basename(in_file)[:os.path.basename(in_file).index('_Well')])
         job = job_spec[0](**(job_spec[1]['build']))
         out_file = os.path.join(os.path.dirname(in_file), identifier, os.path.basename(in_file))
         os.makedirs(os.path.dirname(out_file), exist_ok=True)
@@ -468,6 +512,7 @@ def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSp
     print('number of points on grid:', n_grid_points)
 
     ann_files, tiff_files = get_ann_and_tiff_files(config)
+    #ann_files, tiff_files = zip(*filter(lambda a: '193' not in a[0], zip(ann_files, tiff_files)))
 
     print(f'Found input tiff files:')
     [print(f) for f in tiff_files]
@@ -476,9 +521,11 @@ def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSp
 
     compute_segmentations(config, SubParamRanges)
 
-    extract_feature_grid(config, SubParamRanges, SearchSpace)
-
     save_gt_infected(config)
+
+    denoise_and_extract_backgrounds(config, SearchSpace)
+
+    extract_feature_grid(config, SubParamRanges, SearchSpace)
 
     find_infected_grid(config, SearchSpace)
 
