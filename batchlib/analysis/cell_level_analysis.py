@@ -76,7 +76,7 @@ def compute_global_statistics(cell_properties):
 
 def compute_ratios(not_infected_properties, infected_properties, channel_name_dict):
     # input should be the return value of eval_cells
-    # channel_name_dict is a map from names in the table to channel keys, e.g. {'serum': 'serum_IgA_corrected'}
+    # channel_name_dict is a map from names in the table to channel keys, e.g. {'serum': 'serum_IgA'}
     not_infected_global_properties = compute_global_statistics(not_infected_properties)
     infected_global_properties = compute_global_statistics(infected_properties)
     result = dict()
@@ -541,7 +541,7 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
             input_files = glob(in_pattern)
 
             def channel_to_bg_column(channel):
-                # because e.g. serum_key = 'cell_segmentation/serum_IgA_corrected'
+                # because e.g. serum_key = 'cell_segmentation/serum_IgA'
                 return f'{channel.split("/")[-1]}_median'
             self._bg_dict = {channel: _get_bg_correction_dict(self.table_out_path,
                                                               bg_key,
@@ -607,25 +607,29 @@ class CellLevelAnalysisWithTableBase(CellLevelAnalysisBase):
         self.check_image_outputs = check_image_outputs
         super().__init__(**super_kwargs)
 
-    def check_table(self):
+    def check_table(self, log_on_fail):
+        cls_name = 'CellLevelAnalysisWithTableBase'
         table_path = self.table_out_path
         if not os.path.exists(table_path):
+            log_on_fail(f'{cls_name}: check failed: could not find {table_path}')
             return False
         with open_file(table_path, 'r') as f:
-            if not all(key in f for key in self.table_out_keys):
+            if not all(has_table(f, key) for key in self.table_out_keys):
+                msg = f'{cls_name}: check failed: could not find all expected tables {self.table_out_keys}'
+                log_on_fail(msg)
                 return False
         return True
 
     # we only write a single output file, so need to over-write the output validation and output checks
-    def check_output(self, path):
-        have_table = self.check_table()
+    def check_output(self, path, log_on_fail=logger.debug):
+        have_table = self.check_table(log_on_fail)
         if self.check_image_outputs:
-            return have_table and super().check_output(path)
+            return have_table and super().check_output(path, log_on_fail)
         else:
             return have_table
 
     def validate_outputs(self, output_files, folder, status, ignore_failed_outputs):
-        have_table = self.check_table()
+        have_table = self.check_table(logger.warning)
         if self.check_image_outputs:
             return have_table and super().validate_outputs(output_files,
                                                            folder, status,
@@ -745,6 +749,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
                  infected_cell_mask_key='infected_cell_mask',
                  serum_per_cell_mean_key='serum_per_cell_mean',
                  edge_key='cell_segmentation_edges',
+                 outlier_cell_mask_key='outlier_cell_mask',
                  cell_outlier_table_name='outliers',
                  image_outlier_table='images/outliers',
                  well_outlier_table='wells/outliers',
@@ -765,10 +770,12 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         if self.write_summary_images:
             output_key = [infected_cell_mask_key,
                           serum_per_cell_mean_key,
-                          edge_key]
+                          edge_key,
+                          outlier_cell_mask_key]
             self.edge_key = edge_key
             self.infected_cell_mask_key = infected_cell_mask_key
             self.serum_per_cell_mean_key = serum_per_cell_mean_key
+            self.outlier_cell_mask_key = outlier_cell_mask_key
         else:
             output_key = None
 
@@ -966,6 +973,9 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         with open_file(in_path, 'r') as f:
             cell_seg = self.read_image(f, self.cell_seg_key)
 
+        # make the segmentation edge image
+        seg_edges = seg_to_edges(cell_seg).astype('uint8')
+
         # make a label mask for the infected cells
         label_ids = self.load_per_cell_statistics(in_path, False, False)['labels']
         infected_indicator, _ = self.load_infected_and_control_indicators(in_path)
@@ -973,7 +983,10 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         assert len(label_ids) == len(infected_indicator), f'{len(label_ids)} != {len(infected_indicator)}'
         infected_label_ids = label_ids[infected_indicator.astype('bool')]  # cast to bool again to be sure
         infected_mask = np.isin(cell_seg, infected_label_ids).astype(cell_seg.dtype)
+        # mark the seg edges in a different color
+        infected_mask[seg_edges == 1] = 2
 
+        # meak an image with the mean serum intensity
         result = self.load_per_cell_statistics(in_path, subtract_background=True,
                                                split_infected_and_control=False)
         mean_serum_image = np.zeros_like(cell_seg, dtype=np.float32)
@@ -981,7 +994,16 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
                                     result[self.serum_key]['means']):
             mean_serum_image[cell_seg == label] = intensity
 
-        seg_edges = seg_to_edges(cell_seg).astype('uint8')
+        # make a label mask for the cells detected as outliers
+        cell_outlier_dict = self.load_cell_outliers(in_path)
+        outlier_indicator = np.array([cell_outlier_dict.get(lid, (0, ""))[0] for lid in label_ids], dtype='int8')
+        outlier_indicator[outlier_indicator == -1] = 0
+        outlier_indicator[0] = 0
+        assert len(outlier_indicator) == len(label_ids)
+        outlier_label_ids = label_ids[outlier_indicator.astype('bool')]
+        outlier_mask = np.isin(cell_seg, outlier_label_ids).astype(cell_seg.dtype)
+        # mark the seg edges in a different color
+        outlier_mask[seg_edges == 1] = 2
 
         with open_file(out_path, 'a') as f:
             # we need to use nearest down-sampling for the mean serum images,
@@ -989,6 +1011,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
             self.write_image(f, self.serum_per_cell_mean_key, mean_serum_image,
                              settings={'use_nearest': True})
             self.write_image(f, self.infected_cell_mask_key, infected_mask)
+            self.write_image(f, self.outlier_cell_mask_key, outlier_mask)
             self.write_image(f, self.edge_key, seg_edges)
 
     def run(self, input_files, output_files):

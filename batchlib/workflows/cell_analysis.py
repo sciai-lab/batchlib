@@ -23,30 +23,25 @@ from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
-from batchlib.slack import SlackSummaryWriter
+from batchlib.reporting import SlackSummaryWriter, export_tables_for_plate
 from batchlib.util import get_logger
 from batchlib.util.plate_visualizations import all_plots
 
 logger = get_logger('Workflow.CellAnalysis')
 
 
-def get_analysis_parameter(config, use_fixed_background, background_parameters):
+def get_analysis_parameter(config, background_parameters):
     # collect all relevant analysis paramter, so that we can
     # write them to a table and keep track of this
     params = {'marker_denoise_radius': config.marker_denoise_radius,
               'dont_ignore_nuclei': config.dont_ignore_nuclei,
               'infected_detection_threshold': config.infected_threshold,
               'scale_infected_detection_with_mad': config.infected_scale_with_mad}
+
     params.update({'qc_cells_' + k: v for k, v in DEFAULT_CELL_OUTLIER_CRITERIA.items()})
     params.update({'qc_images_' + k: v for k, v in DEFAULT_IMAGE_OUTLIER_CRITERIA.items()})
     params.update({'qc_wells_' + k: v for k, v in DEFAULT_WELL_OUTLIER_CRITERIA.items()})
-
-    params['fixed_background'] = use_fixed_background
-    if use_fixed_background:
-        params.update({'background_' + name: value for name, value in background_parameters.items()})
-    else:
-        params.update({'background_type': config.background_type})
-
+    params.update({'background_' + k: v for k, v in background_parameters.items()})
     return params
 
 
@@ -55,24 +50,17 @@ def get_input_keys(config, serum_in_keys):
     nuc_in_key = 'nuclei'
     marker_in_key = 'marker'
 
+    # keys for the segmentation tasks
     # compute segmentation on IgG if available
     try:
         serum_seg_in_key = next(iter(filter(lambda key: key.endswith('IgG'), serum_in_keys)))
     except StopIteration:
         serum_seg_in_key = serum_in_keys[0]
+    nuc_seg_in_key = nuc_in_key
 
-    if config.segmentation_on_corrected:
-        nuc_seg_in_key = nuc_in_key + '_corrected'
-        serum_seg_in_key = serum_seg_in_key + '_corrected'
-    else:
-        nuc_seg_in_key = nuc_in_key
-
-    if config.analysis_on_corrected:
-        serum_ana_in_keys = [serum_in_key + '_corrected' for serum_in_key in serum_in_keys]
-        marker_ana_in_key = marker_in_key + '_corrected'
-    else:
-        serum_ana_in_keys = serum_in_keys
-        marker_ana_in_key = marker_in_key
+    # keys for the analysis tasks
+    serum_ana_in_keys = serum_in_keys
+    marker_ana_in_key = marker_in_key
 
     return nuc_seg_in_key, serum_seg_in_key, marker_ana_in_key, serum_ana_in_keys
 
@@ -88,35 +76,24 @@ def validate_bg_dict(bg_dict):
 
 def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
     keys = serum_ana_in_keys + [marker_ana_in_key]
-    fixed_background_dict = config.fixed_background
-    if fixed_background_dict is None:
-        background_type = config.background_type
-        if background_type not in ('images', 'wells', 'plate'):
-            raise ValueError(f"Expected background type to be one of (images, wells, plates), got {background_type}")
-        logger.info(f"Compute background from data with type {background_type}")
-        return {key: f'{background_type}/backgrounds' for key in keys}, False
+    background_dict = config.background_dict
+    if background_dict is None:
+        logger.info(f"Compute background from data and use the per plate background")
+        return {key: f'plate/backgrounds' for key in keys}
 
-    fixed_background_dict = json.loads(fixed_background_dict.replace('\'', '\"'))
-    assert isinstance(fixed_background_dict, dict)
+    if isinstance(background_dict, str):
+        background_dict = json.loads(background_dict.replace('\'', '\"'))
+    assert isinstance(background_dict, dict)
+    validate_bg_dict(background_dict)
 
-    # TODO I don't want to enforce having the _corrected everywhere, so we do this weird little dance for now
-    # in the long term, I would like to eliminate running the option of using the non-corrected completely,
-    # then we can get rid of this
-    parsed_fixed_background_dict = {}
-    for key in keys:
-        value = fixed_background_dict.get(key, None)
-        if value is None:
-            alt_key = key.replace('_corrected', '')
-            value = fixed_background_dict.get(alt_key, None)
-        if value is None:
-            raise ValueError(f"Could not find fixed background value for channel {key}")
-        parsed_fixed_background_dict[key] = value
-
-    validate_bg_dict(parsed_fixed_background_dict)
-    logger.info(f"Use fixed backgrounds: {parsed_fixed_background_dict}")
-    return parsed_fixed_background_dict, True
+    if len(set(keys) - set(background_dict.keys())) > 0:
+        bg_keys = list(background_dict.keys())
+        raise ValueError(f"Did not find values for all chennales {keys} in {bg_keys}")
+    return background_dict
 
 
+# TODO allow running with / without don't ignore nuclei (rename the option!) on the same
+# folder and then select the correct sum / mean values for the default table in the merge job
 def run_cell_analysis(config):
     """
     """
@@ -141,6 +118,8 @@ def run_cell_analysis(config):
 
     barrel_corrector_path = get_barrel_corrector(os.path.join(misc_folder, 'barrel_correctors'),
                                                  config.input_folder)
+    if not os.path.exists(barrel_corrector_path):
+        raise ValueError(f"Invalid barrel corrector path {barrel_corrector_path}")
 
     torch_model_path = os.path.join(misc_folder, 'models/torch/fg_and_boundaries_V1.torch')
     torch_model_class = UNet2D
@@ -253,13 +232,11 @@ def run_cell_analysis(config):
             'infected_threshold': config.infected_threshold  # default: 6.2
         }}))
 
-    # for the background substraction, we can either use a fixed value,
+    # for the background substraction, we can either use a fixed value per channel,
     # or compute it from the data. In the first case, we pass the value
     # as 'serum_bg_key' / 'marker_bg_key'. In the second case, we pass a key
     # to the table holding these values.
-    background_parameters, is_fixed = parse_background_parameters(config,
-                                                                  marker_ana_in_key,
-                                                                  serum_ana_in_keys)
+    background_parameters = parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys)
 
     table_identifiers = serum_ana_in_keys
     for serum_key, identifier in zip(serum_ana_in_keys, table_identifiers):
@@ -298,14 +275,13 @@ def run_cell_analysis(config):
                 'cell_seg_key': config.seg_key,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
-                'write_summary_images': True,
+                'write_summary_images': config.write_summary_images,
                 'scale_factors': config.scale_factors,
                 'identifier': identifier},
-            'run': {'force_recompute': True}}))
+            'run': {'force_recompute': False}}))
 
     # get a dict with all relevant analysis parameters, so that we can write it as a table and log it
-    # TODO we also need to include this in the database
-    analysis_parameter = get_analysis_parameter(config, is_fixed, background_parameters)
+    analysis_parameter = get_analysis_parameter(config, background_parameters)
     logger.info(f"Analysis parameter: {analysis_parameter}")
 
     # find the identifier for the reference table (the IgG one if we have multiple tables)
@@ -370,6 +346,9 @@ def run_cell_analysis(config):
     summary_writer = SlackSummaryWriter(config.slack_token)
     summary_writer(config.folder, config.folder, runtime=t0)
 
+    if config.export_tables:
+        export_tables_for_plate(config.folder)
+
     logger.info(f"Run {name} in {t0}s")
     return name, t0
 
@@ -408,6 +387,7 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--root", default='/home/covid19/antibodies-nuclei')
     parser.add("--output_root_name", default='data-processed')
     parser.add("--use_unique_output_folder", default=False)
+    parser.add("--write_summary_images", default=True)
 
     # keys for intermediate data
     parser.add("--bd_key", default='boundaries', type=str)
@@ -420,11 +400,6 @@ def cell_analysis_parser(config_folder, default_config_name):
     # these parameters change how the analysis results are computed!
     #
 
-    # TODO get rid of these two parameters!
-    # whether to run the segmentation / analysis on the corrected or on the corrected data
-    parser.add("--segmentation_on_corrected", default=True)
-    parser.add("--analysis_on_corrected", default=True)
-
     # marker denoising and ignore nuclei
     parser.add("--marker_denoise_radius", default=0, type=int)
     parser.add("--dont_ignore_nuclei", action='store_true')
@@ -433,12 +408,9 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--infected_scale_with_mad", default=True)
     parser.add("--infected_threshold", type=float, default=6.2)
 
-    # optional fixed background value(s).
-    # if None, will be computed from the data
-    # otherwise, needs to be a dict with background values for the input channels
-    parser.add("--fixed_background", default=None)
-    # do we use image, well or plate level background? (default is plate)
-    parser.add("--background_type", default='plate', type=str)
+    # optional background subtraction values for the individual channels
+    # if None, all backgrounds will be computed from the data and the plate background will be used
+    parser.add("--background_dict", default=None)
 
     #
     # more options
@@ -466,5 +438,7 @@ def cell_analysis_parser(config_folder, default_config_name):
 
     # do we run on cluster?
     parser.add("--on_cluster", type=int, default=0)
+    # do we export the tables for easier downstream analysis?
+    parser.add("--export_tables", type=int, default=0)
 
     return parser

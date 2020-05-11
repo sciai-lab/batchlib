@@ -6,9 +6,11 @@ import h5py
 from pymongo import MongoClient
 
 from batchlib.base import BatchJobOnContainer
+from batchlib.mongo.import_cohort_ids import import_cohort_ids_for_plate
 from batchlib.mongo.utils import ASSAY_ANALYSIS_RESULTS, ASSAY_METADATA, create_plate_doc, parse_workflow_duration, \
     parse_workflow_name, parse_plate_dir
 from batchlib.util import get_logger, get_commit_id
+from batchlib.util.cohort_parser import CohortIdParser
 from batchlib.util.io import read_table
 
 logger = get_logger('Workflow.BatchJob.DbResultWriter')
@@ -52,6 +54,16 @@ def _get_analysis_tables(in_file):
             )
 
         return tables
+
+
+def _get_analysis_params(result_tables):
+    analysis_params = list(filter(lambda t: t.get('table_name', None) == 'plate/analysis_parameter', result_tables))
+    if not analysis_params:
+        logger.warning(f'Cannot find plate/analysis_parameter table')
+        return None
+    else:
+        analysis_params = analysis_params[0]
+        return analysis_params["results"][0]
 
 
 class DbResultWriter(BatchJobOnContainer):
@@ -110,6 +122,7 @@ class DbResultWriter(BatchJobOnContainer):
             "workflow_duration": parse_workflow_duration(work_dir),
             "plate_name": plate_name,
             "batchlib_version": get_commit_id(),
+            "analysis_parameters": _get_analysis_params(result_tables),
             "result_tables": result_tables
         }
 
@@ -127,3 +140,7 @@ class DbResultWriter(BatchJobOnContainer):
         plate_dir = parse_plate_dir(work_dir, default_dir=self.folder)
         plate_doc = create_plate_doc(plate_name, plate_dir)
         self.db[ASSAY_METADATA].find_one_and_replace({"name": plate_name}, plate_doc, upsert=True)
+
+        # update cohort ids if present for the plate
+        cohort_id_parser = CohortIdParser()
+        import_cohort_ids_for_plate(plate_name, self.db[ASSAY_METADATA], cohort_id_parser)
