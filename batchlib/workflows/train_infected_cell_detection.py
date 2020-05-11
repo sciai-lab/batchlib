@@ -322,7 +322,7 @@ def find_infected(config, seg_key, ignore_nuclei, split_statistic, infected_thre
             'bg_cell_seg_key':  None,  #'cell_segmentation_cell_segmentation_False',  # weird because of identifier
             'split_statistic': split_statistic,
             'infected_threshold': infected_threshold,
-            'scale_with_mad': True,
+            'scale_with_mad': config.scale_with_mad,
             },
         'run': {
             'enable_tqdm': False,

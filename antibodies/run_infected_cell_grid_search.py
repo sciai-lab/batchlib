@@ -17,7 +17,7 @@ if __name__ == '__main__':
         ignore_nuclei = [True, False]
         split_statistic = [f'top{k}' for k in SubParamRanges.ks_for_topk] + [f'quantile{q}' for q in
                                                                              SubParamRanges.quantiles]
-        infected_threshold = np.arange(0, 10, 0.1)  #np.arange(0, 4000, 50)
+        infected_threshold = np.arange(0, 4000, 40) #np.arange(0, 10, 0.1)  #np.arange(0, 4000, 50)
         marker_denoise_radii = [0, 2, 4]
 
     # For debugging
@@ -39,6 +39,8 @@ if __name__ == '__main__':
     #     marker_denoise_radii = [0, 5]
 
     class config:  # TODO make an argument parser for this
+        scale_with_mad = False
+
         ann_dir = '/home_sdc/rremme_tmp/src/antibodies-nuclei/groundtruth'
         data_dir = '/home_sdc/rremme_tmp/DatasetsHCIHome/antibodies/covid-data-vibor/'
         out_dir = '/home_sdc/rremme_tmp/Datasets/covid_antibodies/grid_search_20200511_00'

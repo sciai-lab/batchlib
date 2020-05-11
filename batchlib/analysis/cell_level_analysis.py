@@ -516,6 +516,10 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
     def load_infected_and_control_indicators(self, in_path):
         with open_file(in_path, 'r') as f:
             column_names, table = self.read_table(f, self.classification_key)
+
+        labels = table[:, column_names.index('label_id')].astype(np.int32)
+        assert np.all(labels == np.arange(len(labels)))
+
         infected_indicator = table[:, column_names.index('is_infected')]
         control_indicator = table[:, column_names.index('is_control')]
         if hasattr(self, 'load_cell_outliers'):
@@ -965,6 +969,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         # make a label mask for the infected cells
         label_ids = self.load_per_cell_statistics(in_path, False, False)['labels']
         infected_indicator, _ = self.load_infected_and_control_indicators(in_path)
+        assert np.all(np.array(label_ids) == np.arange(len(label_ids)))
         assert len(label_ids) == len(infected_indicator), f'{len(label_ids)} != {len(infected_indicator)}'
         infected_label_ids = label_ids[infected_indicator.astype('bool')]  # cast to bool again to be sure
         infected_mask = np.isin(cell_seg, infected_label_ids).astype(cell_seg.dtype)
