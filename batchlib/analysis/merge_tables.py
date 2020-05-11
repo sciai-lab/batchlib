@@ -20,15 +20,13 @@ DEFAULT_REFERENCE_NAME_PATTERNS = ('score', 'n_cells', 'n_infected', 'n_control'
 class MergeAnalysisTables(BatchJobOnContainer):
     """ Merge analysis tables written by CellLevelAnalysis for different parameters.
     """
-    image_table_name = 'images/default'
-    well_table_name = 'wells/default'
     fixed_names = ('well_name', 'image_name', 'site_name')
 
     def __init__(self, input_table_names, reference_table_name,
                  common_name_patterns=DEFAULT_COMMON_NAME_PATTERNS,
                  reference_name_patterns=DEFAULT_REFERENCE_NAME_PATTERNS,
                  analysis_parameters=None, background_column_pattern='median',
-                 **super_kwargs):
+                 identifier=None, **super_kwargs):
 
         if reference_table_name not in input_table_names:
             raise ValueError(f"{reference_table_name} was not found in {input_table_names}")
@@ -47,6 +45,12 @@ class MergeAnalysisTables(BatchJobOnContainer):
         in_table_keys += ['wells/' + in_key for in_key in input_table_names]
         in_table_keys += [self.image_background_table, self.well_background_table]
 
+        self.image_table_name = 'images/default'
+        self.well_table_name = 'wells/default'
+        if identifier is not None:
+            self.image_table_name += f'_{identifier}'
+            self.well_table_name += f'_{identifier}'
+
         out_keys = [self.image_table_name, self.well_table_name]
         out_format = ['table', 'table']
         if analysis_parameters is not None:
@@ -62,6 +66,7 @@ class MergeAnalysisTables(BatchJobOnContainer):
                          input_format=['table'] * len(in_table_keys),
                          output_key=out_keys,
                          output_format=out_format,
+                         identifier=None,
                          **super_kwargs)
 
     def _get_column_mask(self, column_names, is_reference_table, keep_names, has_marker_values):
