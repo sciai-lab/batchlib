@@ -23,6 +23,7 @@ from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
+from batchlib.segmentation.voronoi_ring_segmentation import ErodeSegmentation
 from batchlib.reporting import SlackSummaryWriter, export_tables_for_plate
 from batchlib.util import get_logger
 from batchlib.util.plate_visualizations import all_plots
@@ -133,6 +134,8 @@ def core_workflow_tasks(config, name, feature_identifier):
     (nuc_seg_in_key, serum_seg_in_key,
      marker_ana_in_key, serum_ana_in_keys) = get_input_keys(config, serum_in_keys)
 
+    seg_key_for_infected_classification = config.seg_key + '_for_infected_classification'
+
     outlier_predicate = get_outlier_predicate(config)
 
     job_list = [
@@ -213,15 +216,34 @@ def core_workflow_tasks(config, name, feature_identifier):
               'actual_channels_to_use': (*serum_ana_in_keys, marker_ana_in_key),  # is actually used
               'feature_identifier': feature_identifier,
               'cell_seg_key': config.seg_key}}),
+         (ErodeSegmentation, {
+             'build': {
+                 'input_key': config.seg_key,
+                 'output_key': seg_key_for_infected_classification,
+                 'radius': config.erosion_radius,  # default: 2
+             }
+         }),
+         # this one is just for the infected cell classification
+         (InstanceFeatureExtraction, {
+             'build': {
+                 'channel_keys': (marker_ana_in_key,),
+                 'nuc_seg_key_to_ignore': config.nuc_key,  # TODO add all the infected cell detection params to parser
+                 'cell_seg_key': seg_key_for_infected_classification,
+                 'identifier': None,
+                 'quantiles': [0.93],
+             },
+             'run': {'gpu_id': config.gpu}}),
          # NOTE we need to pass the feature identifier, but the infected cells will only be
          # computed the first time
+         # TODO: make sure that the quantile is there
          (FindInfectedCells, {
           'build': {
               'marker_key': marker_ana_in_key,
-              'cell_seg_key': config.seg_key,
+              'cell_seg_key': seg_key_for_infected_classification,
               'scale_with_mad': config.infected_scale_with_mad,  # default: True
-              'infected_threshold': config.infected_threshold,  # default: 6.2
-              'feature_identifier': feature_identifier,
+              'infected_threshold': config.infected_threshold,  # default: 5.4
+              'split_statistic': 'quantile0.93',
+              'feature_identifier': None,
               'bg_correction_key': 'plate/backgrounds'}})]
     )
 
@@ -413,13 +435,14 @@ def cell_analysis_parser(config_folder, default_config_name):
     # these parameters change how the analysis results are computed!
     #
 
-    # marker denoising and ignore nuclei
+    # marker denoising, segmentation erosion (only for cell classifictaion) and ignore nuclei
     parser.add("--marker_denoise_radius", default=0, type=int)
+    parser.add("--erosion_radius", default=2, type=int)
     parser.add("--ignore_nuclei", default=True)
 
     # parameter for the infected cell detection
     parser.add("--infected_scale_with_mad", default=True)
-    parser.add("--infected_threshold", type=float, default=6.2)
+    parser.add("--infected_threshold", type=float, default=4.2)
 
     # optional background subtraction values for the individual channels
     # if None, all backgrounds will be computed from the data and the plate background will be used
