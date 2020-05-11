@@ -34,7 +34,7 @@ def get_analysis_parameter(config, background_parameters):
     # collect all relevant analysis paramter, so that we can
     # write them to a table and keep track of this
     params = {'marker_denoise_radius': config.marker_denoise_radius,
-              'dont_ignore_nuclei': config.dont_ignore_nuclei,
+              'ignore_nuclei': config.ignore_nuclei,
               'infected_detection_threshold': config.infected_threshold,
               'scale_infected_detection_with_mad': config.infected_scale_with_mad}
 
@@ -92,13 +92,11 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
     return background_dict
 
 
-# TODO allow running with / without don't ignore nuclei (rename the option!) on the same
-# folder and then select the correct sum / mean values for the default table in the merge job
+# TODO if ignore_nuclei is false, we need to somehow change keys and / or identifiers so
+# that everything can be run twice on the same folder and only the necessary steps are recomputed
 def run_cell_analysis(config):
     """
     """
-    assert (config.dont_ignore_nuclei is False), "We need to run computation WITH nucleus exclusion"
-
     name = 'CellAnalysisWorkflow'
 
     # to allow running on the cpu
@@ -185,52 +183,39 @@ def run_cell_analysis(config):
         job_list.append((DenoiseByGrayscaleOpening, {
             'build': {
                 'key_to_denoise': marker_ana_in_key,
-                'radius': config.marker_denoise_radius},
-            'run': {}}))
+                'radius': config.marker_denoise_radius}}))
         marker_ana_in_key = marker_ana_in_key + '_denoised'
 
-    job_list.append((InstanceFeatureExtraction, {
-        'build': {
-            'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
-            'nuc_seg_key_to_ignore': config.nuc_key if not config.dont_ignore_nuclei else None,
-            'cell_seg_key': config.seg_key},
-        'run': {'gpu_id': config.gpu}}))
-
-    # This is just for ExtractBackground below
-    job_list.append((ImageLevelQC, {
-        'build': {
-            'cell_seg_key': config.seg_key,
-            'serum_key': serum_seg_in_key,
-            'marker_key': marker_ana_in_key,
-            'outlier_predicate': outlier_predicate,
-            'identifier': None}
-    }))
-
-    job_list.append((ExtractBackground, {
-        'build': {
-            'marker_key': marker_ana_in_key,  # is ignored
-            'serum_key': serum_seg_in_key,    # is ignored
-            'cell_seg_key': config.seg_key,
-            'actual_channels_to_use': (*serum_ana_in_keys, marker_ana_in_key),  # is actually used
-        }
-    }))
-    # # Also compute features with nuclei if they should be used later
-    # job_list.append((InstanceFeatureExtraction, {
-    #     'build': {
-    #         'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
-    #         'nuc_seg_key_to_ignore': None,
-    #         'identifier': 'with_nuclei',
-    #         'cell_seg_key': config.seg_key},
-    #     'run': {'gpu_id': config.gpu}}))
-
-    job_list.append((FindInfectedCells, {
-        'build': {
-            'marker_key': marker_ana_in_key,
-            'cell_seg_key': config.seg_key,
-            'bg_correction_key': 'plate/backgrounds',
-            'scale_with_mad': config.infected_scale_with_mad,  # default: True
-            'infected_threshold': config.infected_threshold  # default: 6.2
-        }}))
+    # add the tasks to extract the features from the cell instance segmentation,
+    # do initial image level qc (necessary for the background extraction).
+    # extract the background and find the infected cells
+    job_list.extend(
+        [(InstanceFeatureExtraction, {
+          'build': {
+              'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
+              'nuc_seg_key_to_ignore': None if config.ignore_nuclei else config.nuc_key,
+              'cell_seg_key': config.seg_key},
+          'run': {'gpu_id': config.gpu}}),
+         (ImageLevelQC, {
+          'build': {
+              'cell_seg_key': config.seg_key,
+              'serum_key': serum_seg_in_key,
+              'marker_key': marker_ana_in_key,
+              'outlier_predicate': outlier_predicate}}),
+         (ExtractBackground, {
+          'build': {
+              'marker_key': marker_ana_in_key,  # is ignored
+              'serum_key': serum_seg_in_key,    # is ignored
+              'actual_channels_to_use': (*serum_ana_in_keys, marker_ana_in_key),  # is actually used
+              'cell_seg_key': config.seg_key}}),
+         (FindInfectedCells, {
+          'build': {
+              'marker_key': marker_ana_in_key,
+              'cell_seg_key': config.seg_key,
+              'scale_with_mad': config.infected_scale_with_mad,  # default: True
+              'infected_threshold': config.infected_threshold,  # default: 6.2
+              'bg_correction_key': 'plate/backgrounds'}})]
+    )
 
     # for the background substraction, we can either use a fixed value per channel,
     # or compute it from the data. In the first case, we pass the value
@@ -386,7 +371,6 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--root", default='/home/covid19/antibodies-nuclei')
     parser.add("--output_root_name", default='data-processed')
     parser.add("--use_unique_output_folder", default=False)
-    parser.add("--write_summary_images", default=True)
 
     # keys for intermediate data
     parser.add("--bd_key", default='boundaries', type=str)
@@ -401,7 +385,7 @@ def cell_analysis_parser(config_folder, default_config_name):
 
     # marker denoising and ignore nuclei
     parser.add("--marker_denoise_radius", default=0, type=int)
-    parser.add("--dont_ignore_nuclei", action='store_true')
+    parser.add("--ignore_nuclei", default=True)
 
     # parameter for the infected cell detection
     parser.add("--infected_scale_with_mad", default=True)
@@ -420,6 +404,7 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--force_recompute", default=None)
     parser.add("--ignore_invalid_inputs", default=None)
     parser.add("--ignore_failed_outputs", default=None)
+    parser.add("--write_summary_images", default=True)
 
     # MongoDB client config
     parser.add("--db_username", type=str, default='covid19')
@@ -431,7 +416,6 @@ def cell_analysis_parser(config_folder, default_config_name):
     # slack client
     parser.add("--slack_token", type=str, default=None)
 
-    # default_scale_factors = None
     default_scale_factors = [1, 2, 4, 8, 16]
     parser.add("--scale_factors", default=default_scale_factors)
 
