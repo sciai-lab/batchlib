@@ -4,6 +4,7 @@ import configargparse
 from batchlib.base import BatchJobOnContainer
 from functools import partial
 from batchlib.util import open_file
+from batchlib.util.io import *
 from collections import defaultdict
 from batchlib.preprocessing import get_barrel_corrector, get_serum_keys, Preprocess
 from batchlib.segmentation import SeededWatershed
@@ -254,35 +255,44 @@ class FindInfectedCellsParallel(FindInfectedCells):
             self.write_table(f, self.output_table_key, column_names, table)
 
 
+def get_plate_bg(
+    plate_name,
+    channel='marker_corrected',
+    processed_dir='/home_sdc/rremme_tmp/DatasetsHCIHome/antibodies/data-processed-embl/',
+):
+    tables = glob(os.path.join(processed_dir, plate_name, '*.hdf5'))
+    assert len(tables) == 1, f'Not exactly one table: {tables}\n(plate_name: {plate_name})'
+    table = tables[0]
+    with open_file(table) as f:
+        column_names, table = read_table(f, 'plate/backgrounds')
+    return float(list(get_column_dict(column_names, table, f'{channel}_median').values())[0])
+
+
 def find_infected(config, seg_key, ignore_nuclei, split_statistic, infected_threshold, denoise_radius=0):
     identifier = get_identifier(seg_key, ignore_nuclei, denoise_radius, split_statistic)
-    job_list = [((FindInfectedCellsParallel, {
+    job_spec = (FindInfectedCellsParallel, {
         'build': {
             'marker_key': _marker_key(denoise_radius),
             'cell_seg_key': seg_key + '_' + get_identifier(seg_key, ignore_nuclei),
-            # old method
-            'bg_correction_key': 0,  # FIXME this should be the plate-wise bg. copy from results!
+            'bg_correction_key': None,#get_plate_bg(),
             'bg_cell_seg_key':  None,  #'cell_segmentation_cell_segmentation_False',  # weird because of identifier
             'split_statistic': split_statistic,
             'infected_threshold': infected_threshold,
             'scale_with_mad': False,
-            #'identifier': identifier,
-            # new method
-            # 'bg_correction_key': 'well_bg_median',
-            # 'infected_threshold': 7,
             },
         'run': {
             'enable_tqdm': False,
-        }}))]
+        }})
 
-
-    #return job_list[0]
-    run_workflow(f'Infected Classification Workflow '
-                 f'({get_identifier(seg_key, ignore_nuclei, split_statistic)})',
-                 os.path.join(config.out_dir, identifier),
-                 job_list,
-                 config.out_dir,
-                 force_recompute=True,)
+    in_files = glob(os.path.join(config.out_dir, '*.h5'))
+    for in_file in in_files:
+        job_spec[1]['build']['bg_correction_key'] = get_plate_bg(os.path.basename(in_file)[:os.path.basename(in_file).index('_Well')])
+        job = job_spec[0](**(job_spec[1]['build']))
+        out_file = os.path.join(os.path.dirname(in_file), identifier, os.path.basename(in_file))
+        os.makedirs(os.path.dirname(out_file), exist_ok=True)
+        job.folder = os.path.dirname(out_file)
+        job.in_folder = os.path.dirname(in_file)
+        job.run([in_file], [out_file], **job_spec[1]['run'])
 
 
 def find_infected_grid(config, SearchSpace):
@@ -455,11 +465,10 @@ def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSp
         SearchSpace.marker_denoise_radii,
     ]])
     print('number of points on grid:', n_grid_points)
-    assert n_grid_points < 60000
 
     ann_files, tiff_files = get_ann_and_tiff_files(config)
     # for now, filter out 193 as there is no bg for it
-    ann_files, tiff_files = list(zip(*filter(lambda a: not '193' in a,
+    ann_files, tiff_files = list(zip(*filter(lambda a: not '193' in a[0],
                                              zip(ann_files, tiff_files))))
     print(f'Found input tiff files:')
     [print(f) for f in tiff_files]
