@@ -63,7 +63,7 @@ class BaseTestMixin(ABC):
         folders.sort()
 
         # for debugging
-        # folders = folders[-1:]
+        folders = folders[-1:]
 
         for folder in folders:
             self._test_naming_scheme(folder)

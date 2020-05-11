@@ -42,6 +42,8 @@ def get_analysis_parameter(config, background_parameters):
     params = {'marker_denoise_radius': config.marker_denoise_radius,
               'ignore_nuclei': config.ignore_nuclei,
               'infected_detection_threshold': config.infected_threshold,
+              'infected_detection_erosion_radius': config.infected_erosion_radius,
+              'infected_detection_quantile': config.infected_quantile,
               'scale_infected_detection_with_mad': config.infected_scale_with_mad}
 
     params.update({'qc_cells_' + k: v for k, v in DEFAULT_CELL_OUTLIER_CRITERIA.items()})
@@ -99,45 +101,45 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
 
 
 def get_infected_detection_jobs(config, marker_ana_in_key):
-    erosion_radius = config.erosion_radius
+    erosion_radius = config.infected_erosion_radius
+    quantile = config.infected_quantile
 
     jobs = []
     if erosion_radius > 0:
         seg_key_for_infected_classification = config.seg_key + '_for_infected_classification'
-        jobs.append((ErodeSegmentation, {
+        jobs.extend([
+            (ErodeSegmentation, {
                      'build': {
                          'input_key': config.seg_key,
                          'output_key': seg_key_for_infected_classification,
                          'radius': config.erosion_radius,  # default: 2
-                     }}))
+                     }}),
+            (InstanceFeatureExtraction, {
+                'build': {
+                    'channel_keys': (marker_ana_in_key,),
+                    'nuc_seg_key_to_ignore': config.nuc_key,
+                    'cell_seg_key': seg_key_for_infected_classification,
+                    'identifier': None,
+                    'quantiles': [quantile]},
+                'run': {'gpu_id': config.gpu}})
+        ])
         link_out_table = config.seg_key
     else:
         seg_key_for_infected_classification = config.seg_key
-        link_out_table = None
+        link_out_table = config.seg_key
 
-    jobs.extend([
-        # this one is just for the infected cell classification
-        (InstanceFeatureExtraction, {
-            'build': {
-                'channel_keys': (marker_ana_in_key,),
-                'nuc_seg_key_to_ignore': config.nuc_key,  # TODO add all the infected cell detection params to parser
-                'cell_seg_key': seg_key_for_infected_classification,
-                'identifier': None,
-                'quantiles': [0.93],
-            },
-            'run': {'gpu_id': config.gpu}}),
-        # TODO: make sure that the quantile is there
+    jobs.append(
         (FindInfectedCells, {
          'build': {
              'marker_key': marker_ana_in_key,
              'cell_seg_key': seg_key_for_infected_classification,
              'scale_with_mad': config.infected_scale_with_mad,  # default: True
              'infected_threshold': config.infected_threshold,  # default: 5.4
-             'split_statistic': 'quantile0.93',
+             'split_statistic': 'quantile' + str(quantile),
              'feature_identifier': None,
              'bg_correction_key': 'plate/backgrounds',
              'link_out_table': link_out_table}})
-    ])
+    )
     return jobs
 
 
@@ -231,14 +233,14 @@ def core_workflow_tasks(config, name, feature_identifier):
         marker_ana_in_key = marker_ana_in_key + '_denoised'
 
     # add the tasks to extract the features from the cell instance segmentation,
-    # do initial image level qc (necessary for the background extraction).
-    # extract the background and find the infected cells
+    # do initial image level qc (necessary for the background extraction) and extract the quantiles
     job_list.extend(
         [(InstanceFeatureExtraction, {
           'build': {
               'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
               'nuc_seg_key_to_ignore': None if config.ignore_nuclei else config.nuc_key,
               'cell_seg_key': config.seg_key,
+              'quantiles': [config.infected_quantile],
               'identifier': feature_identifier},
           'run': {'gpu_id': config.gpu}}),
          (ImageLevelQC, {
@@ -454,12 +456,13 @@ def cell_analysis_parser(config_folder, default_config_name):
 
     # marker denoising, segmentation erosion (only for cell classifictaion) and ignore nuclei
     parser.add("--marker_denoise_radius", default=0, type=int)
-    parser.add("--erosion_radius", default=2, type=int)
     parser.add("--ignore_nuclei", default=True)
 
     # parameter for the infected cell detection
+    parser.add("--infected_erosion_radius", default=0, type=int)
     parser.add("--infected_scale_with_mad", default=True)
-    parser.add("--infected_threshold", type=float, default=4.2)
+    parser.add("--infected_threshold", type=float, default=6.5)
+    parser.add("--infected_quantile", type=float, default=0.96)
 
     # optional background subtraction values for the individual channels
     # if None, all backgrounds will be computed from the data and the plate background will be used

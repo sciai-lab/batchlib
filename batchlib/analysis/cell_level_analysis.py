@@ -442,7 +442,8 @@ class FindInfectedCells(BatchJobOnContainer):
             in_key = 'tables/' + self.output_table_key
             out_key = 'tables/' + self.link_out_table
             # make a hard-link
-            f[out_key] = f[in_key]
+            if out_key not in f:
+                f[out_key] = f[in_key]
 
     def run(self, input_files, output_files, enable_tqdm=True):
         offset_dict = self.get_bg_correction_dict(input_files, column_name=f'{self.marker_key}_median')
