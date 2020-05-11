@@ -1,5 +1,6 @@
 import time
 from .cell_analysis import run_cell_analysis, workflow_summaries
+from ..analysis.merge_tables import MergeMeanAndSumTables
 
 
 def mean_and_sum_cell_analysis(config):
@@ -18,10 +19,11 @@ def mean_and_sum_cell_analysis(config):
     # don't need to write summary images twice
     config.write_summary_images = False
     run_cell_analysis(config)
-    return
 
-    # TODO
     # 3.) merge the two tables into default
+    merger = MergeMeanAndSumTables()
+    merger(config.folder, config.folder)
+    return
 
     # TODO I think we need to over-ride the state names to make
     # it work for IgA and IgG

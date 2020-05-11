@@ -17,6 +17,108 @@ DEFAULT_REFERENCE_NAME_PATTERNS = ('score', 'n_cells', 'n_infected', 'n_control'
                                    'fraction_infected', 'is_outlier', 'outlier_type')
 
 
+class MergeMeanAndSumTables(BatchJobOnContainer):
+    image_table_name = 'images/default'
+    well_table_name = 'wells/default'
+    feature_identifiers = ['mean', 'sum']
+
+    def __init__(self):
+        in_pattern = '*.hdf5'
+        self.image_in_tables = [self.image_table_name + f'_{idf}' for idf in self.feature_identifiers]
+        self.well_in_tables = [self.well_table_name + f'_{idf}' for idf in self.feature_identifiers]
+
+        in_keys = self.image_in_tables + self.well_in_tables
+        super().__init__(input_pattern=in_pattern,
+                         input_key=in_keys,
+                         input_format=len(in_keys) * ['table'],
+                         output_key=[self.image_table_name,
+                                     self.well_table_name],
+                         output_format=['table', 'table'])
+
+    # we need to remove the first occurrence of the feature identifier if
+    # we get it twice, because of stuff we do to the table key beforehand ...
+    def _modify_column_names(self, col_names):
+
+        def modify_name(name):
+            counts = 0
+            begins = {}
+            for idf in self.feature_identifiers:
+                idf_count = name.count(idf)
+                counts += idf_count
+                if idf_count > 0:
+                    begins[idf] = name.find(idf)
+
+            if counts > 1:
+                begin = min(begins.values())
+                to_remove = [idf for idf, beg in begins.items() if beg == begin]
+                assert len(to_remove) == 1
+                to_remove = to_remove[0] + '_'
+                return name.replace(to_remove, '')
+            else:
+                return name
+
+        return [modify_name(name) for name in col_names]
+
+    def _merge_tables(self, in_file, out_file, in_tables, out_table_name):
+        table = None
+        column_names = None
+
+        with open_file(in_file, 'r') as f:
+            for idf, table_name in zip(self.feature_identifiers, in_tables):
+                this_column_names, this_table = self.read_table(f, table_name)
+                # before = deepcopy(this_column_names)
+                this_column_names = self._modify_column_names(this_column_names)
+
+                # for n1, n2 in zip(before, this_column_names):
+                #     if n1 != n2:
+                #         print(n1, n2)
+                # quit()
+
+                # first feature identifier -> just set the table
+                if table is None:
+                    table = this_table
+                    column_names = this_column_names
+
+                # second feature identifier -> replace the columns corresponding to the feature identifier
+                else:
+                    if table.shape != this_table.shape:
+                        raise RuntimeError(f"Incompatible columns: {table.shape}, {this_table.shape}")
+                    # make sure the col names are identical
+                    if column_names != this_column_names:
+                        diff_colls = [ii for ii, (ca, cb) in enumerate(zip(column_names, this_column_names))
+                                      if ca != cb]
+                        diff_colls_a = [column_names[ii] for ii in diff_colls]
+                        diff_colls_b = [this_column_names[ii] for ii in diff_colls]
+                        raise RuntimeError(f"Incompatible columns:\n{diff_colls_a}\n{diff_colls_b}")
+
+                    replace_col_ids = [ii for ii, name in enumerate(column_names)]
+                    if len(replace_col_ids) == 0:
+                        raise RuntimeError(f"Did not find any columns to replace for identifier {idf}")
+
+                    table[:, replace_col_ids] = this_table[:, replace_col_ids]
+
+        visible = np.ones(len(column_names), dtype='uint8')
+        if out_table_name == self.image_table_name:
+            visible[0] = 0
+
+        with open_file(out_file, 'a') as f:
+            self.write_table(f, out_table_name, column_names, table, visible)
+
+    def merge_image_tables(self, in_file, out_file):
+        self._merge_tables(in_file, out_file, self.image_in_tables, self.image_table_name)
+
+    def merge_well_tables(self, in_file, out_file):
+        self._merge_tables(in_file, out_file, self.well_in_tables, self.well_table_name)
+
+    def run(self, input_files, output_files):
+        if len(input_files) != 1 or len(output_files) != 1:
+            raise ValueError(f"{self.name}: expect only a single table file, not {len(input_files)}")
+
+        in_file, out_file = input_files[0], output_files[0]
+        self.merge_image_tables(in_file, out_file)
+        self.merge_well_tables(in_file, out_file)
+
+
 class MergeAnalysisTables(BatchJobOnContainer):
     """ Merge analysis tables written by CellLevelAnalysis for different parameters.
     """
