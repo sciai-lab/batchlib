@@ -211,11 +211,16 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
                  channel_keys=('serum', 'marker'),
                  nuc_seg_key_to_ignore=None,
                  cell_seg_key='cell_segmentation',
+                 topk=(10, 30, 50),
+                 quantiles=tuple(),
                  identifier=None):
 
         self.channel_keys = tuple(channel_keys)
         self.nuc_seg_key_to_ignore = nuc_seg_key_to_ignore
         self.cell_seg_key = cell_seg_key
+
+        self.topk = topk
+        self.quantiles = quantiles
 
         # all inputs should be 2d
         input_ndim = [2] * (1 + len(channel_keys) + (1 if nuc_seg_key_to_ignore else 0))
@@ -251,12 +256,12 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         sums = data.new([arr.sum() for arr in per_cell_values])
         means = data.new([arr.mean() for arr in per_cell_values])
         instance_sizes = data.new([len(arr.view(-1)) for arr in per_cell_values])
-        top50 = np.array([0 if len(t) < 50 else t.topk(50)[0][-1].item()
-                          for t in per_cell_values])
-        top30 = np.array([0 if len(t) < 30 else t.topk(30)[0][-1].item()
-                          for t in per_cell_values])
-        top10 = np.array([0 if len(t) < 10 else t.topk(10)[0][-1].item()
-                          for t in per_cell_values])
+        topkdict = {f'top{k}': np.array([0 if len(t) < k else t.topk(k)[0][-1].item()
+                                         for t in per_cell_values])
+                    for k in self.topk}
+        quantile_dict = {f'quantile{q}': np.array([np.quantile(t.cpu().numpy(), q)
+                                                   for t in per_cell_values])
+                         for q in self.quantiles}
         medians = np.array([t.median().item()
                             for t in per_cell_values])
         mads = np.array([(t - median).abs().median().item()
@@ -269,9 +274,8 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
                     medians=medians,
                     mads=mads,
                     sizes=instance_sizes.cpu().numpy(),
-                    top50=top50,
-                    top30=top30,
-                    top10=top10)
+                    **topkdict,
+                    **quantile_dict)
 
     def eval_cells(self, channels, cell_seg,
                    ignore_label=0):
@@ -340,6 +344,7 @@ class FindInfectedCells(BatchJobOnContainer):
     """This job finds the infected and control cells to later compute the measures on"""
     def __init__(self,
                  cell_seg_key='cell_segmentation',
+                 bg_cell_seg_key=None,
                  marker_key='marker',
                  infected_threshold=6.2,
                  split_statistic='top50',
@@ -350,9 +355,10 @@ class FindInfectedCells(BatchJobOnContainer):
                  **super_kwargs):
         self.marker_key = marker_key
         self.cell_seg_key = cell_seg_key
-
+        self.bg_cell_seg_key = bg_cell_seg_key if bg_cell_seg_key is not None else cell_seg_key
         self.feature_table_key = cell_seg_key + ('' if feature_identifier is None
-                                                 else f'_{feature_identifier}') + '/' + marker_key
+                                                 else f'_{feature_identifier}') +'/' + marker_key
+        self.bg_feature_table_key = self.bg_cell_seg_key + '/' + marker_key
 
         self.infected_threshold = infected_threshold
         self.scale_with_mad = scale_with_mad
@@ -372,9 +378,10 @@ class FindInfectedCells(BatchJobOnContainer):
                          identifier=identifier,
                          **super_kwargs)
 
-    def load_feature_dict(self, in_path):
+    def load_feature_dict(self, in_path, for_bg=False):
+        table_key = self.feature_table_key if not for_bg else self.bg_feature_table_key
         with open_file(in_path, 'r') as f:
-            keys, table = self.read_table(f, self.feature_table_key)
+            keys, table = self.read_table(f, table_key)
             feature_dict = {key: values for key, values in zip(keys, table.T)}
         return feature_dict
 
@@ -422,13 +429,14 @@ class FindInfectedCells(BatchJobOnContainer):
         with open_file(out_file, 'a') as f:
             self.write_table(f, self.output_table_key, column_names, table)
 
-    def run(self, input_files, output_files):
+    def run(self, input_files, output_files, enable_tqdm=True):
         offset_dict = self.get_bg_correction_dict(input_files, column_name=f'{self.marker_key}_median')
         if self.scale_with_mad:
             scale_dict = self.get_bg_correction_dict(input_files, column_name=f'{self.marker_key}_mad')
         else:
             scale_dict = {}
-        for input_file, output_file in tqdm(list(zip(input_files, output_files)), desc='finding infected cells'):
+        for input_file, output_file in tqdm(list(zip(input_files, output_files)),
+                                            desc='finding infected cells', disable=not enable_tqdm):
             self.compute_and_save_infected_and_control(input_file, output_file,
                                                        offset=offset_dict[in_file_to_image_name(input_file)],
                                                        scale=scale_dict.get(in_file_to_image_name(input_file)))
@@ -556,7 +564,7 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
             bg_offset = self.bg_dict[channel][image_name]
             channel_statistics = per_cell_statistics[channel]
             for key in channel_statistics.keys():
-                if key in ['means', 'medians', 'top50', 'top30', 'top10']:
+                if key in ['means', 'medians'] or key.startswith('top') or key.startswith('quantile'):
                     channel_statistics[key] -= bg_offset
                 elif key == 'sums':
                     # sums are special case
