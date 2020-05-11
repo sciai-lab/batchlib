@@ -8,17 +8,17 @@ from ..util.io import open_file, image_name_to_site_name
 
 # TODO all values are still preliminary and need to be validated on actual data
 # default size threshold provided by Vibor
-DEFAULT_CELL_OUTLIER_CRITERIA = {'max_size_threshold': 10000,
-                                 'min_size_threshold': 1000}
+DEFAULT_CELL_OUTLIER_CRITERIA = {'max_size_threshold': None,  # previous: 10000
+                                 'min_size_threshold': 10}  # previous: 1000
 
 
-DEFAULT_IMAGE_OUTLIER_CRITERIA = {'max_number_cells': 1000,
-                                  'min_number_cells': 10}
+DEFAULT_IMAGE_OUTLIER_CRITERIA = {'max_number_cells': None,  # previous: 1000
+                                  'min_number_cells': None}  # previous: 10
 
-DEFAULT_WELL_OUTLIER_CRITERIA = {'max_number_cells_per_image': 1000,
-                                 'min_number_cells_per_image': 10,
-                                 'min_number_control_cells_per_image': 5,
-                                 'min_fraction_of_control_cells': 0.05,
+DEFAULT_WELL_OUTLIER_CRITERIA = {'max_number_cells_per_image': None,  # previous: 1000
+                                 'min_number_cells_per_image': None,  # previous: 10
+                                 'min_number_control_cells_per_image': None,  # previous: 5
+                                 'min_fraction_of_control_cells': None,  # previous: 0.05
                                  'check_ratios': True}
 
 
