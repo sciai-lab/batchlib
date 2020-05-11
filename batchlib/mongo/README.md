@@ -128,6 +128,7 @@ Schema of a single document:
   "workflow_name": "name of the workflow",
   "plate_name": "name of the plate",
   "batchlib_version": "version of batchlib the that produced the result",
+  "analysis_parameters": "parameters/values the analysis was run with",
   "result_tables": [
     {
       "analysis_name": "analysis1_table",

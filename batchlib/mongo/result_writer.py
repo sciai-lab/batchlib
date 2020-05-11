@@ -56,6 +56,16 @@ def _get_analysis_tables(in_file):
         return tables
 
 
+def _get_analysis_params(result_tables):
+    analysis_params = list(filter(lambda t: t.get('table_name', None) == 'plate/analysis_parameter', result_tables))
+    if not analysis_params:
+        logger.warning(f'Cannot find plate/analysis_parameter table')
+        return None
+    else:
+        analysis_params = analysis_params[0]
+        return analysis_params["results"][0]
+
+
 class DbResultWriter(BatchJobOnContainer):
     def __init__(self, username, password, host, port=27017, db_name='covid', **super_kwargs):
         super().__init__(input_pattern='*.hdf5', **super_kwargs)
@@ -112,6 +122,7 @@ class DbResultWriter(BatchJobOnContainer):
             "workflow_duration": parse_workflow_duration(work_dir),
             "plate_name": plate_name,
             "batchlib_version": get_commit_id(),
+            "analysis_parameters": _get_analysis_params(result_tables),
             "result_tables": result_tables
         }
 
