@@ -7,4 +7,4 @@ from .io import (open_file, downscale_image, is_dataset, is_group,
                  get_image_and_site_names, image_name_to_well_name, image_name_to_site_name,
                  DelayedKeyboardInterrupt)
 from .jobs import files_to_jobs, get_file_lock
-from .logging import get_logger, add_file_handler
+from .logging import get_logger, add_file_handler, remove_file_handler

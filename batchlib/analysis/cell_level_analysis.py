@@ -211,11 +211,16 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
                  channel_keys=('serum', 'marker'),
                  nuc_seg_key_to_ignore=None,
                  cell_seg_key='cell_segmentation',
+                 topk=(10, 30, 50),
+                 quantiles=tuple(),
                  identifier=None):
 
         self.channel_keys = tuple(channel_keys)
         self.nuc_seg_key_to_ignore = nuc_seg_key_to_ignore
         self.cell_seg_key = cell_seg_key
+
+        self.topk = topk
+        self.quantiles = quantiles
 
         # all inputs should be 2d
         input_ndim = [2] * (1 + len(channel_keys) + (1 if nuc_seg_key_to_ignore else 0))
@@ -251,12 +256,12 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         sums = data.new([arr.sum() for arr in per_cell_values])
         means = data.new([arr.mean() for arr in per_cell_values])
         instance_sizes = data.new([len(arr.view(-1)) for arr in per_cell_values])
-        top50 = np.array([0 if len(t) < 50 else t.topk(50)[0][-1].item()
-                          for t in per_cell_values])
-        top30 = np.array([0 if len(t) < 30 else t.topk(30)[0][-1].item()
-                          for t in per_cell_values])
-        top10 = np.array([0 if len(t) < 10 else t.topk(10)[0][-1].item()
-                          for t in per_cell_values])
+        topkdict = {f'top{k}': np.array([0 if len(t) < k else t.topk(k)[0][-1].item()
+                                         for t in per_cell_values])
+                    for k in self.topk}
+        quantile_dict = {f'quantile{q}': np.array([np.quantile(t.cpu().numpy(), q)
+                                                   for t in per_cell_values])
+                         for q in self.quantiles}
         medians = np.array([t.median().item()
                             for t in per_cell_values])
         mads = np.array([(t - median).abs().median().item()
@@ -269,9 +274,8 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
                     medians=medians,
                     mads=mads,
                     sizes=instance_sizes.cpu().numpy(),
-                    top50=top50,
-                    top30=top30,
-                    top10=top10)
+                    **topkdict,
+                    **quantile_dict)
 
     def eval_cells(self, channels, cell_seg,
                    ignore_label=0):
@@ -338,17 +342,31 @@ def _get_bg_correction_dict(table_path, key_in_table, column_name, in_files):
 
 class FindInfectedCells(BatchJobOnContainer):
     """This job finds the infected and control cells to later compute the measures on"""
+
+    @staticmethod
+    def get_table_out_key(cell_seg_key, identifier, marker_key):
+        feature_table_out_key = cell_seg_key + ('' if identifier is None
+                                                else f'_{identifier}') + '/' + marker_key
+        return 'cell_classification/' + feature_table_out_key
+
     def __init__(self,
                  cell_seg_key='cell_segmentation',
+                 bg_cell_seg_key=None,
                  marker_key='marker',
-                 infected_threshold=6.2, split_statistic='top50',
+                 infected_threshold=6.2,
+                 split_statistic='top50',
                  scale_with_mad=True,
                  bg_correction_key='plate/backgrounds',  # can also be float
+                 feature_identifier=None,
                  identifier=None,
+                 link_out_table=None,
                  **super_kwargs):
         self.marker_key = marker_key
         self.cell_seg_key = cell_seg_key
-        self.feature_table_key = cell_seg_key + '/' + marker_key
+        self.bg_cell_seg_key = bg_cell_seg_key if bg_cell_seg_key is not None else cell_seg_key
+        self.feature_table_key = cell_seg_key + ('' if feature_identifier is None
+                                                 else f'_{feature_identifier}') + '/' + marker_key
+        self.bg_feature_table_key = self.bg_cell_seg_key + '/' + marker_key
 
         self.infected_threshold = infected_threshold
         self.scale_with_mad = scale_with_mad
@@ -356,9 +374,11 @@ class FindInfectedCells(BatchJobOnContainer):
 
         self.bg_correction_key = bg_correction_key
 
-        # infected are per default saved at tables/cell_classification/cell_segmentation/marker_key in the container
-        self.output_table_key = 'cell_classification/' + self.feature_table_key + \
-                                ('' if identifier is None else '_' + identifier)
+        self.output_table_key = self.get_table_out_key(cell_seg_key, identifier, marker_key)
+        # we might have to link the output table to a different name
+        self.link_out_table = None if link_out_table is None else self.get_table_out_key(link_out_table,
+                                                                                         identifier,
+                                                                                         marker_key)
         super().__init__(input_key=self.feature_table_key,
                          input_format='table',
                          output_key=self.output_table_key,
@@ -366,21 +386,22 @@ class FindInfectedCells(BatchJobOnContainer):
                          identifier=identifier,
                          **super_kwargs)
 
-    def load_feature_dict(self, in_path):
+    def load_feature_dict(self, in_path, for_bg=False):
+        table_key = self.feature_table_key if not for_bg else self.bg_feature_table_key
         with open_file(in_path, 'r') as f:
-            keys, table = self.read_table(f, self.feature_table_key)
+            keys, table = self.read_table(f, table_key)
             feature_dict = {key: values for key, values in zip(keys, table.T)}
         return feature_dict
 
     @staticmethod
-    def folder_to_table_path(folder, identifier):
+    def folder_to_table_path(folder):
         # NOTE, we call this .hdf5 to avoid pattern matching, it's a bit hacky ...
         table_file_name = os.path.split(folder)[1] + '_table.hdf5'
         return os.path.join(folder, table_file_name)
 
     @property
     def table_out_path(self):
-        return self.folder_to_table_path(self.folder, self.identifier)
+        return self.folder_to_table_path(self.folder)
 
     def get_bg_correction_dict(self, in_files, column_name=None):
         return _get_bg_correction_dict(self.table_out_path, self.bg_correction_key, column_name, in_files)
@@ -416,16 +437,27 @@ class FindInfectedCells(BatchJobOnContainer):
         with open_file(out_file, 'a') as f:
             self.write_table(f, self.output_table_key, column_names, table)
 
-    def run(self, input_files, output_files):
+    def link_result_table(self, output_file):
+        with open_file(output_file, 'a') as f:
+            in_key = 'tables/' + self.output_table_key
+            out_key = 'tables/' + self.link_out_table
+            # make a hard-link
+            if out_key not in f:
+                f[out_key] = f[in_key]
+
+    def run(self, input_files, output_files, enable_tqdm=True):
         offset_dict = self.get_bg_correction_dict(input_files, column_name=f'{self.marker_key}_median')
         if self.scale_with_mad:
             scale_dict = self.get_bg_correction_dict(input_files, column_name=f'{self.marker_key}_mad')
         else:
             scale_dict = {}
-        for input_file, output_file in tqdm(list(zip(input_files, output_files)), desc='finding infected cells'):
+        for input_file, output_file in tqdm(list(zip(input_files, output_files)),
+                                            desc='finding infected cells', disable=not enable_tqdm):
             self.compute_and_save_infected_and_control(input_file, output_file,
                                                        offset=offset_dict[in_file_to_image_name(input_file)],
                                                        scale=scale_dict.get(in_file_to_image_name(input_file)))
+            if self.link_out_table is not None:
+                self.link_result_table(output_file)
 
 
 class CellLevelAnalysisBase(BatchJobOnContainer):
@@ -437,6 +469,7 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
                  serum_bg_key=None, marker_bg_key=None,
                  output_key=None,
                  validate_cell_classification=True,
+                 feature_identifier=None,
                  **super_kwargs):
 
         self.cell_seg_key = cell_seg_key
@@ -446,10 +479,11 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
         # TODO allow for serum and marker data to come from different segmentations
         #  Idea: pass these things directly (with cell_seg_key and '/').
         #  Allows for more options + job_dict is more readable
-        self.serum_key = cell_seg_key + '/' + serum_key
-        self.marker_key = cell_seg_key + '/' + marker_key
-        self.classification_key = 'cell_classification/' + cell_seg_key + '/' + marker_key
+        root_key = cell_seg_key if feature_identifier is None else cell_seg_key + f'_{feature_identifier}'
+        self.serum_key = root_key + '/' + serum_key
+        self.marker_key = root_key + '/' + marker_key
 
+        self.classification_key = f'cell_classification/{cell_seg_key}/{marker_key}'
         if validate_cell_classification:
             input_key = [self.serum_key, self.marker_key, self.classification_key]
         else:
@@ -460,14 +494,14 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
                          **super_kwargs)
 
     @staticmethod
-    def folder_to_table_path(folder, identifier):
+    def folder_to_table_path(folder):
         # NOTE, we call this .hdf5 to avoid pattern matching, it's a bit hacky ...
         table_file_name = os.path.split(folder)[1] + '_table.hdf5'
         return os.path.join(folder, table_file_name)
 
     @property
     def table_out_path(self):
-        return self.folder_to_table_path(self.folder, self.identifier)
+        return self.folder_to_table_path(self.folder)
 
     def load_per_cell_statistics(self, in_path, subtract_background=True, split_infected_and_control=True):
         # if multiple paths are given, concatenate the individual statistics
@@ -548,7 +582,7 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
             bg_offset = self.bg_dict[channel][image_name]
             channel_statistics = per_cell_statistics[channel]
             for key in channel_statistics.keys():
-                if key in ['means', 'medians', 'top50', 'top30', 'top10']:
+                if key in ['means', 'medians'] or key.startswith('top') or key.startswith('quantile'):
                     channel_statistics[key] -= bg_offset
                 elif key == 'sums':
                     # sums are special case
@@ -817,7 +851,6 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         column_names = ['image_name', 'site_name', 'is_outlier', 'outlier_type', 'n_outlier_cells']
         table = []
 
-        # TODO parallelize
         for ii, in_file in enumerate(tqdm(input_files, desc='generating image table')):
             image_name = os.path.splitext(os.path.split(in_file)[1])[0]
 
@@ -1001,13 +1034,14 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
             self.write_image(f, self.outlier_cell_mask_key, outlier_mask)
             self.write_image(f, self.edge_key, seg_edges)
 
-    def run(self, input_files, output_files):
+    def run(self, input_files, output_files, n_jobs=1):
         image_table, image_columns = self.write_image_table(input_files)
         well_table, well_columns = self.write_well_table(input_files)
         self.write_image_and_well_information(output_files, image_table, image_columns,
                                               well_table, well_columns)
 
         if self.write_summary_images:
+            # TODO parallelize
             for input_file, output_file in tqdm(list(zip(input_files, output_files)),
                                                 desc='write cell level analysis summary images'):
                 self.write_summary_image(input_file, output_file)

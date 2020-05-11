@@ -188,7 +188,8 @@ def to_well_table(obj, well_names):
 
 def to_image_table(obj, image_names):
     if is_image_table(obj):
-        assert set(obj[1][:, 0]) == set(image_names), f'{set(obj[1][:, 0])}, {set(image_names)}'
+        # TODO: filter table if there are more images than requested
+        assert not (set(image_names) - set(obj[1][:, 0])), f'{set(obj[1][:, 0])}, {set(image_names)}'
         return obj
     else:
         return well_table_to_image_table(*to_well_table(obj, list(map(image_name_to_well_name, image_names))), image_names)

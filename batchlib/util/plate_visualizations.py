@@ -354,7 +354,7 @@ def all_plots(table_path, out_folder, table_key, stat_names, channel_name, ident
                             for key, value in get_column_dict(outlier_column_names, outlier_table, 'is_outlier').items()
                             if value]
 
-    plate_name = os.path.split(table_path)[0]
+    plate_name = os.path.split(table_path)[1]
 
     for name in tqdm(stat_names, desc='making plots'):
         try:
