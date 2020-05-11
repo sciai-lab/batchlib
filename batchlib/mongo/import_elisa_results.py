@@ -18,11 +18,13 @@ def import_elisa_results(db):
 
     # iterate over all plates
     for plate_doc in assay_metadata.find({}):
-        plate_name = plate_doc['plate_name']
+        plate_name = plate_doc['name']
 
         should_replace = False
         for well in plate_doc["wells"]:
             cohort_id = well.get("cohort_id", None)
+            if cohort_id is None:
+                continue
             # make sure cohort_id matching is not case sensitive
             cohort_id = cohort_id.lower()
 
