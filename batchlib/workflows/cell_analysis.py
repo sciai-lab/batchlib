@@ -275,10 +275,9 @@ def run_cell_analysis(config):
                 'cell_seg_key': config.seg_key,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
-                'write_summary_images': False,
+                'write_summary_images': config.write_summary_images,
                 'scale_factors': config.scale_factors,
-                'identifier': identifier},
-            'run': {'force_recompute': False}}))
+                'identifier': identifier}}))
 
     # get a dict with all relevant analysis parameters, so that we can write it as a table and log it
     analysis_parameter = get_analysis_parameter(config, background_parameters)
@@ -387,6 +386,7 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--root", default='/home/covid19/antibodies-nuclei')
     parser.add("--output_root_name", default='data-processed')
     parser.add("--use_unique_output_folder", default=False)
+    parser.add("--write_summary_images", default=True)
 
     # keys for intermediate data
     parser.add("--bd_key", default='boundaries', type=str)
