@@ -277,7 +277,8 @@ def run_cell_analysis(config):
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'write_summary_images': config.write_summary_images,
                 'scale_factors': config.scale_factors,
-                'identifier': identifier}}))
+                'identifier': identifier},
+            'run': {'force_recompute': False}}))
 
     # get a dict with all relevant analysis parameters, so that we can write it as a table and log it
     analysis_parameter = get_analysis_parameter(config, background_parameters)
