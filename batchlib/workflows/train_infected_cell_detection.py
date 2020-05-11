@@ -257,7 +257,6 @@ class FindInfectedCellsParallel(FindInfectedCells):
 
 def get_plate_bg(
     plate_name,
-    channel='marker_corrected',
     processed_dir='/home_sdc/rremme_tmp/DatasetsHCIHome/antibodies/data-processed-embl/',
 ):
     tables = glob(os.path.join(processed_dir, plate_name, '*.hdf5'))
@@ -265,7 +264,8 @@ def get_plate_bg(
     table = tables[0]
     with open_file(table) as f:
         column_names, table = read_table(f, 'plate/backgrounds')
-    return float(list(get_column_dict(column_names, table, f'{channel}_median').values())[0])
+    column_key = 'marker_corrected_median' if 'marker_corrected_median' in column_names else 'marker_median'
+    return float(list(get_column_dict(column_names, table, column_key).values())[0])
 
 
 def find_infected(config, seg_key, ignore_nuclei, split_statistic, infected_threshold, denoise_radius=0):
@@ -349,6 +349,7 @@ def save_gt_infected(config):
                  config.out_dir,
                  job_list,
                  force_recompute=False)
+
 
 def get_prediction_and_eval_score(
     config,
@@ -467,9 +468,7 @@ def run_grid_search_for_infected_cell_detection(config, SubParamRanges, SearchSp
     print('number of points on grid:', n_grid_points)
 
     ann_files, tiff_files = get_ann_and_tiff_files(config)
-    # for now, filter out 193 as there is no bg for it
-    ann_files, tiff_files = list(zip(*filter(lambda a: not '193' in a[0],
-                                             zip(ann_files, tiff_files))))
+
     print(f'Found input tiff files:')
     [print(f) for f in tiff_files]
 
