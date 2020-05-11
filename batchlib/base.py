@@ -180,8 +180,12 @@ class BatchJob(ABC):
 
     def __call__(self, folder, input_folder=None, force_recompute=False,
                  ignore_invalid_inputs=False, ignore_failed_outputs=False,
-                 executable=None, **kwargs):
+                 **kwargs):
         logger.info(f'{self.name}: called on the folder {folder}')
+        logger.debug(f"""{self.name}: got the following rutime options:
+                     force_recompute: {force_recompute}
+                     ignore_invalid_inputs: {ignore_invalid_inputs}
+                     ignore_failed_outputs: {ignore_failed_outputs}""")
 
         # make the work dir, that stores all batchlib status and log files
         work_dir = os.path.join(folder, 'batchlib')
@@ -232,10 +236,10 @@ class BatchJob(ABC):
             status = self.update_status(folder, status, processed=True)
             return status['state']
 
-    def check_output(self, path):
+    def check_output(self, path, **kwargs):
         return os.path.exists(path)
 
-    def validate_input(self, path):
+    def validate_input(self, path, **kwargs):
         return os.path.exists(path)
 
     # in the default implementation, validate_output just calls

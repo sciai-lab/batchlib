@@ -595,25 +595,29 @@ class CellLevelAnalysisWithTableBase(CellLevelAnalysisBase):
         self.check_image_outputs = check_image_outputs
         super().__init__(**super_kwargs)
 
-    def check_table(self):
+    def check_table(self, log_on_fail):
+        cls_name = 'CellLevelAnalysisWithTableBase'
         table_path = self.table_out_path
         if not os.path.exists(table_path):
+            log_on_fail(f'{cls_name}: check failed: could not find {table_path}')
             return False
         with open_file(table_path, 'r') as f:
-            if not all(key in f for key in self.table_out_keys):
+            if not all(has_table(f, key) for key in self.table_out_keys):
+                msg = f'{cls_name}: check failed: could not find all expected tables {self.table_out_keys}'
+                log_on_fail(msg)
                 return False
         return True
 
     # we only write a single output file, so need to over-write the output validation and output checks
-    def check_output(self, path):
-        have_table = self.check_table()
+    def check_output(self, path, log_on_fail=logger.debug):
+        have_table = self.check_table(log_on_fail)
         if self.check_image_outputs:
-            return have_table and super().check_output(path)
+            return have_table and super().check_output(path, log_on_fail)
         else:
             return have_table
 
     def validate_outputs(self, output_files, folder, status, ignore_failed_outputs):
-        have_table = self.check_table()
+        have_table = self.check_table(logger.warning)
         if self.check_image_outputs:
             return have_table and super().validate_outputs(output_files,
                                                            folder, status,
