@@ -29,6 +29,11 @@ from batchlib.util.plate_visualizations import all_plots
 
 logger = get_logger('Workflow.CellAnalysis')
 
+DEFAULT_PLOT_NAMES = ['serum_ratio_of_q0.5_of_means',
+                      'serum_ratio_of_q0.5_of_sums',
+                      'serum_robust_z_score_sums',
+                      'serum_robust_z_score_means']
+
 
 def get_analysis_parameter(config, background_parameters):
     # collect all relevant analysis paramter, so that we can
@@ -95,7 +100,7 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
 def core_workflow_tasks(config, name, feature_identifier):
 
     # to allow running on the cpu
-    if config.gpu < 0:
+    if config.gpu is not None and config.gpu < 0:
         config.gpu = None
 
     config.input_folder = os.path.abspath(config.input_folder)
@@ -197,20 +202,26 @@ def core_workflow_tasks(config, name, feature_identifier):
               'cell_seg_key': config.seg_key,
               'serum_key': serum_seg_in_key,
               'marker_key': marker_ana_in_key,
-              'identifier': feature_identifier,
+              'feature_identifier': feature_identifier,
               'outlier_predicate': outlier_predicate}}),
-         (ExtractBackground, {  # NOTE the bg extraction is independent of the features, so we don't need the identifier
+         # NOTE the bg extraction is independent of the features, but we still need to pass
+         # the identifier so that the input validation passes
+         (ExtractBackground, {
           'build': {
               'marker_key': marker_ana_in_key,  # is ignored
               'serum_key': serum_seg_in_key,    # is ignored
               'actual_channels_to_use': (*serum_ana_in_keys, marker_ana_in_key),  # is actually used
+              'feature_identifier': feature_identifier,
               'cell_seg_key': config.seg_key}}),
+         # NOTE we need to pass the feature identifier, but the infected cells will only be
+         # computed the first time
          (FindInfectedCells, {
           'build': {
               'marker_key': marker_ana_in_key,
               'cell_seg_key': config.seg_key,
               'scale_with_mad': config.infected_scale_with_mad,  # default: True
               'infected_threshold': config.infected_threshold,  # default: 6.2
+              'feature_identifier': feature_identifier,
               'bg_correction_key': 'plate/backgrounds'}})]
     )
 
@@ -290,13 +301,10 @@ def core_workflow_tasks(config, name, feature_identifier):
     return job_list, table_identifiers
 
 
-def workflow_summaries(name, config, table_identifiers, t0):
+def workflow_summaries(name, config, table_identifiers, t0, stat_names=DEFAULT_PLOT_NAMES):
     # run all plots on the output files
     plot_folder = os.path.join(config.folder, 'plots')
-    stat_names = ['serum_ratio_of_q0.5_of_means',
-                  'serum_ratio_of_q0.5_of_sums',
-                  'serum_robust_z_score_sums',
-                  'serum_robust_z_score_means']
+
     for identifier in table_identifiers:
         table_path = CellLevelAnalysis.folder_to_table_path(config.folder)
         all_plots(table_path, plot_folder,
@@ -312,8 +320,16 @@ def workflow_summaries(name, config, table_identifiers, t0):
                   channel_name=identifier,
                   wedge_width=0)
 
-    t0 = time.time() - t0
+    db_writer = DbResultWriter(
+        username=config.db_username,
+        password=config.db_password,
+        host=config.db_host,
+        port=config.db_port,
+        db_name=config.db_name
+    )
+    db_writer(config.folder, config.folder)
 
+    t0 = time.time() - t0
     summary_writer = SlackSummaryWriter(config.slack_token)
     summary_writer(config.folder, config.folder, runtime=t0)
 
@@ -331,19 +347,6 @@ def run_cell_analysis(config):
         name += f'_{feature_identifier}'
 
     job_list, table_identifiers = core_workflow_tasks(config, name, feature_identifier)
-
-    # we only run the db writer if we don't have a feature identifier.
-    # otherwise, this workflow is run as part of a larger workflow with different feature options
-    if feature_identifier is None:
-        # make sure that db job is executed when all result tables hdf5 are ready (outside of the loop)
-        job_list.append((DbResultWriter, {
-            'build': {
-                "username": config.db_username,
-                "password": config.db_password,
-                "host": config.db_host,
-                "port": config.db_port,
-                "db_name": config.db_name
-            }}))
 
     t0 = time.time()
     run_workflow(name,

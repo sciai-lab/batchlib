@@ -345,12 +345,14 @@ class FindInfectedCells(BatchJobOnContainer):
                  split_statistic='top50',
                  scale_with_mad=True,
                  bg_correction_key='plate/backgrounds',  # can also be float
+                 feature_identifier=None,
                  identifier=None,
                  **super_kwargs):
         self.marker_key = marker_key
         self.cell_seg_key = cell_seg_key
-        # FIXME if we pass an identifier here it is not possible any more to read this with the downstream tasks
-        self.feature_table_key = cell_seg_key + ('' if identifier is None else f'_{identifier}') + '/' + marker_key
+
+        self.feature_table_key = cell_seg_key + ('' if feature_identifier is None
+                                                 else f'_{feature_identifier}') + '/' + marker_key
 
         self.infected_threshold = infected_threshold
         self.scale_with_mad = scale_with_mad
@@ -359,7 +361,10 @@ class FindInfectedCells(BatchJobOnContainer):
         self.bg_correction_key = bg_correction_key
 
         # infected are per default saved at tables/cell_classification/cell_segmentation/marker_key in the container
-        self.output_table_key = 'cell_classification/' + self.feature_table_key
+        feature_table_out_key = cell_seg_key + ('' if identifier is None
+                                                else f'_{identifier}') + '/' + marker_key
+        self.output_table_key = 'cell_classification/' + feature_table_out_key
+
         super().__init__(input_key=self.feature_table_key,
                          input_format='table',
                          output_key=self.output_table_key,
