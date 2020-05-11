@@ -69,22 +69,16 @@ class SlackSummaryWriter(BatchJobOnContainer):
         params = {name: val for name, val in zip(param_cols, param_table.squeeze())}
         return params
 
-    def compile_message(self, out_folder, plate_name, runtime,
-                        use_fixed_background, background_type, background_values):
+    def compile_message(self, out_folder, plate_name, runtime, background_dict):
         msg_path = os.path.join(self.out_folder, 'message.txt')
 
         with open(msg_path, 'w') as f:
             f.write(f"Results for plate {plate_name}:\n")
             f.write(f"Files are stored in {self.folder}\n")
-
             if runtime is not None:
                 # TODO format to hours
                 f.write(f"Computation ran in {runtime} s\n")
-
-            if use_fixed_background:
-                f.write(f"The background was fixed to {background_values}\n")
-            else:
-                f.write(f"The background was computed on the {background_type}\n")
+            f.write(f"Parameter used for the background subtraction: {background_dict}\n")
 
     def post_slack(self, out_folder):
         msg_sent_path = os.path.join(self.out_folder, 'message_sent.txt')
@@ -131,23 +125,6 @@ class SlackSummaryWriter(BatchJobOnContainer):
         except SlackApiError as e:
             logger.info(f"{self.name}: connection failed with {e.response['error']}")
 
-    def parse_bg_params(self, params):
-        print(params)
-        background_type = params.get('background_type', None)
-        use_fixed_background = True if params['fixed_background'] == 'True' else False
-
-        if background_type is None and (not use_fixed_background):
-            raise RuntimeError("Invalid background parameter")
-
-        if use_fixed_background:
-            background_values = {k.lstrip('background_'): v for k, v in params.items() if k.startswith('background_')}
-        else:
-            background_values = {}
-
-        return {'use_fixed_background': use_fixed_background,
-                'background_type': background_type,
-                'background_values': background_values}
-
     def run(self, input_files, output_files, runtime=None):
         if len(input_files) != 1 or len(output_files) != 1:
             raise ValueError(f"{self.name}: expect only a single table file, not {len(input_files)}")
@@ -167,8 +144,8 @@ class SlackSummaryWriter(BatchJobOnContainer):
         params = self.copy_table(input_files[0], table_out_path)
 
         # compile the slack message
-        bg_params = self.parse_bg_params(params)
-        self.compile_message(out_folder, plate_name, runtime, **bg_params)
+        background_dict = {k.lstrip('background_'): v for k, v in params.items() if k.startswith('background')}
+        self.compile_message(out_folder, plate_name, runtime, background_dict)
 
         # post to slack with the slack bot
         if self.slack_token is None:
