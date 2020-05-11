@@ -92,12 +92,7 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
     return background_dict
 
 
-# TODO if ignore_nuclei is false, we need to somehow change keys and / or identifiers so
-# that everything can be run twice on the same folder and only the necessary steps are recomputed
-def run_cell_analysis(config):
-    """
-    """
-    name = 'CellAnalysisWorkflow'
+def core_workflow_tasks(config, name, feature_identifier):
 
     # to allow running on the cpu
     if config.gpu < 0:
@@ -194,15 +189,17 @@ def run_cell_analysis(config):
           'build': {
               'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
               'nuc_seg_key_to_ignore': None if config.ignore_nuclei else config.nuc_key,
-              'cell_seg_key': config.seg_key},
+              'cell_seg_key': config.seg_key,
+              'identifier': feature_identifier},
           'run': {'gpu_id': config.gpu}}),
          (ImageLevelQC, {
           'build': {
               'cell_seg_key': config.seg_key,
               'serum_key': serum_seg_in_key,
               'marker_key': marker_ana_in_key,
+              'identifier': feature_identifier,
               'outlier_predicate': outlier_predicate}}),
-         (ExtractBackground, {
+         (ExtractBackground, {  # NOTE the bg extraction is independent of the features, so we don't need the identifier
           'build': {
               'marker_key': marker_ana_in_key,  # is ignored
               'serum_key': serum_seg_in_key,    # is ignored
@@ -223,7 +220,9 @@ def run_cell_analysis(config):
     # to the table holding these values.
     background_parameters = parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys)
 
-    table_identifiers = serum_ana_in_keys
+    table_identifiers = serum_ana_in_keys if feature_identifier is None else [k + f'_{feature_identifier}'
+                                                                              for k in serum_ana_in_keys]
+    # NOTE currently the QC tasks will not be rerun if the feature identifier changes
     for serum_key, identifier in zip(serum_ana_in_keys, table_identifiers):
         job_list.append((CellLevelQC, {
             'build': {
@@ -232,6 +231,7 @@ def run_cell_analysis(config):
                 'marker_key': marker_ana_in_key,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
+                'feature_identifier': feature_identifier,
                 'identifier': identifier}
         }))
         job_list.append((ImageLevelQC, {
@@ -242,6 +242,7 @@ def run_cell_analysis(config):
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'outlier_predicate': outlier_predicate,
+                'feature_identifier': feature_identifier,
                 'identifier': identifier}
         }))
         job_list.append((WellLevelQC, {
@@ -251,6 +252,7 @@ def run_cell_analysis(config):
                 'marker_key': marker_ana_in_key,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
+                'feature_identifier': feature_identifier,
                 'identifier': identifier}
         }))
         job_list.append((CellLevelAnalysis, {
@@ -262,6 +264,7 @@ def run_cell_analysis(config):
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'write_summary_images': config.write_summary_images,
                 'scale_factors': config.scale_factors,
+                'feature_identifier': feature_identifier,
                 'identifier': identifier},
             'run': {'force_recompute': False}}))
 
@@ -277,34 +280,17 @@ def run_cell_analysis(config):
         assert len(reference_table_name) == 1, f"{table_identifiers}"
         reference_table_name = reference_table_name[0]
 
-    # TODO
-    # - we need to filter out the mean-with-nuclei and sum-without-nuclei results (not implemented yet)
     job_list.append((MergeAnalysisTables, {
         'build': {'input_table_names': table_identifiers,
                   'reference_table_name': reference_table_name,
-                  'analysis_parameters': analysis_parameter}
+                  'analysis_parameters': analysis_parameter,
+                  'identifier': feature_identifier}
     }))
 
-    # make sure that db job is executed when all result tables hdf5 are ready (outside of the loop)
-    job_list.append((DbResultWriter, {
-        'build': {
-            "username": config.db_username,
-            "password": config.db_password,
-            "host": config.db_host,
-            "port": config.db_port,
-            "db_name": config.db_name
-        }}))
+    return job_list, table_identifiers
 
-    t0 = time.time()
 
-    run_workflow(name,
-                 config.folder,
-                 job_list,
-                 input_folder=config.input_folder,
-                 force_recompute=config.force_recompute,
-                 ignore_invalid_inputs=config.ignore_invalid_inputs,
-                 ignore_failed_outputs=config.ignore_failed_outputs)
-
+def workflow_summaries(name, config, table_identifiers, t0):
     # run all plots on the output files
     plot_folder = os.path.join(config.folder, 'plots')
     stat_names = ['serum_ratio_of_q0.5_of_means',
@@ -312,7 +298,7 @@ def run_cell_analysis(config):
                   'serum_robust_z_score_sums',
                   'serum_robust_z_score_means']
     for identifier in table_identifiers:
-        table_path = CellLevelAnalysis.folder_to_table_path(config.folder, identifier)
+        table_path = CellLevelAnalysis.folder_to_table_path(config.folder)
         all_plots(table_path, plot_folder,
                   table_key=f'images/{identifier}',
                   identifier=identifier + '_per-image',
@@ -333,9 +319,44 @@ def run_cell_analysis(config):
 
     if config.export_tables:
         export_tables_for_plate(config.folder)
-
     logger.info(f"Run {name} in {t0}s")
-    return name, t0
+
+
+def run_cell_analysis(config):
+    """
+    """
+    name = 'CellAnalysisWorkflow'
+    feature_identifier = config.feature_identifier
+    if feature_identifier is not None:
+        name += f'_{feature_identifier}'
+
+    job_list, table_identifiers = core_workflow_tasks(config, name, feature_identifier)
+
+    # we only run the db writer if we don't have a feature identifier.
+    # otherwise, this workflow is run as part of a larger workflow with different feature options
+    if feature_identifier is None:
+        # make sure that db job is executed when all result tables hdf5 are ready (outside of the loop)
+        job_list.append((DbResultWriter, {
+            'build': {
+                "username": config.db_username,
+                "password": config.db_password,
+                "host": config.db_host,
+                "port": config.db_port,
+                "db_name": config.db_name
+            }}))
+
+    t0 = time.time()
+    run_workflow(name,
+                 config.folder,
+                 job_list,
+                 input_folder=config.input_folder,
+                 force_recompute=config.force_recompute,
+                 ignore_invalid_inputs=config.ignore_invalid_inputs,
+                 ignore_failed_outputs=config.ignore_failed_outputs)
+
+    # only run the workflow summaries if we don't have the feature identifier
+    if feature_identifier is None:
+        workflow_summaries(name, config, table_identifiers, t0)
 
 
 def cell_analysis_parser(config_folder, default_config_name):
@@ -378,6 +399,11 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--mask_key", default='mask', type=str)
     parser.add("--nuc_key", default='nucleus_segmentation', type=str)
     parser.add("--seg_key", default='cell_segmentation', type=str)
+
+    # we can set an additional feature identifier, to make several runs
+    # of the cell analysis workflow unique
+    # if this is done, the full workflow will not be run, only up until MergeTables
+    parser.add("--feature_identifier", type=str, default=None)
 
     #
     # analysis parameter:
