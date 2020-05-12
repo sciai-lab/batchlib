@@ -17,6 +17,30 @@ DEFAULT_REFERENCE_NAME_PATTERNS = ('score', 'n_cells', 'n_infected', 'n_control'
                                    'fraction_infected', 'is_outlier', 'outlier_type')
 
 
+# we need to remove the first occurrence of the feature identifier if
+# we get it twice, because of stuff we do to the table key beforehand ...
+def modify_column_names(col_names, feature_identifiers):
+    def modify_name(name):
+        counts = 0
+        begins = {}
+        for idf in feature_identifiers:
+            idf_count = name.count(idf)
+            counts += idf_count
+            if idf_count > 0:
+                begins[idf] = name.find(idf)
+
+        if counts > 1:
+            begin = min(begins.values())
+            to_remove = [idf for idf, beg in begins.items() if beg == begin]
+            assert len(to_remove) == 1
+            to_remove = to_remove[0] + '_'
+            return name.replace(to_remove, '')
+        else:
+            return name
+
+    return [modify_name(name) for name in col_names]
+
+
 class MergeMeanAndSumTables(BatchJobOnContainer):
     image_table_name = 'images/default'
     well_table_name = 'wells/default'
@@ -35,30 +59,6 @@ class MergeMeanAndSumTables(BatchJobOnContainer):
                                      self.well_table_name],
                          output_format=['table', 'table'])
 
-    # we need to remove the first occurrence of the feature identifier if
-    # we get it twice, because of stuff we do to the table key beforehand ...
-    def _modify_column_names(self, col_names):
-
-        def modify_name(name):
-            counts = 0
-            begins = {}
-            for idf in self.feature_identifiers:
-                idf_count = name.count(idf)
-                counts += idf_count
-                if idf_count > 0:
-                    begins[idf] = name.find(idf)
-
-            if counts > 1:
-                begin = min(begins.values())
-                to_remove = [idf for idf, beg in begins.items() if beg == begin]
-                assert len(to_remove) == 1
-                to_remove = to_remove[0] + '_'
-                return name.replace(to_remove, '')
-            else:
-                return name
-
-        return [modify_name(name) for name in col_names]
-
     def _merge_tables(self, in_file, out_file, in_tables, out_table_name):
         table = None
         column_names = None
@@ -66,13 +66,7 @@ class MergeMeanAndSumTables(BatchJobOnContainer):
         with open_file(in_file, 'r') as f:
             for idf, table_name in zip(self.feature_identifiers, in_tables):
                 this_column_names, this_table = self.read_table(f, table_name)
-                # before = deepcopy(this_column_names)
-                this_column_names = self._modify_column_names(this_column_names)
-
-                # for n1, n2 in zip(before, this_column_names):
-                #     if n1 != n2:
-                #         print(n1, n2)
-                # quit()
+                this_column_names = modify_column_names(this_column_names, self.feature_identifiers)
 
                 # first feature identifier -> just set the table
                 if table is None:
@@ -91,7 +85,8 @@ class MergeMeanAndSumTables(BatchJobOnContainer):
                         diff_colls_b = [this_column_names[ii] for ii in diff_colls]
                         raise RuntimeError(f"Incompatible columns:\n{diff_colls_a}\n{diff_colls_b}")
 
-                    replace_col_ids = [ii for ii, name in enumerate(column_names)]
+                    # replace column ids for this feature identifier
+                    replace_col_ids = [ii for ii, name in enumerate(column_names) if idf in name]
                     if len(replace_col_ids) == 0:
                         raise RuntimeError(f"Did not find any columns to replace for identifier {idf}")
 
@@ -103,6 +98,7 @@ class MergeMeanAndSumTables(BatchJobOnContainer):
 
         with open_file(out_file, 'a') as f:
             self.write_table(f, out_table_name, column_names, table, visible)
+        logger.info(f"{self.name}: write merged table to {out_file}:{out_table_name}")
 
     def merge_image_tables(self, in_file, out_file):
         self._merge_tables(in_file, out_file, self.image_in_tables, self.image_table_name)

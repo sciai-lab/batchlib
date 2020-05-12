@@ -30,7 +30,8 @@ def mean_and_sum_cell_analysis(config):
 
     # 3.) merge the two tables into default
     merger = MergeMeanAndSumTables()
-    merger(config.folder, config.folder)
+    merger(config.folder, config.folder, force_recompute=config.force_recompute)
+    # merger(config.folder, config.folder, force_recompute=True)
 
     # 4.) run all the usual workflow summaries
     identifiers = modify_identifiers(identifiers)
