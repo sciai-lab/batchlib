@@ -342,7 +342,7 @@ def core_workflow_tasks(config, name, feature_identifier):
     return job_list, table_identifiers
 
 
-def workflow_summaries(name, config, t0, stat_names):
+def workflow_summaries(name, config, t0, workflow_name, stat_names):
     # run all plots on the output files
     plot_folder = os.path.join(config.folder, 'plots')
 
@@ -359,13 +359,12 @@ def workflow_summaries(name, config, t0, stat_names):
               stat_names=stat_names,
               wedge_width=0)
 
-    db_writer = DbResultWriter(
-        username=config.db_username,
-        password=config.db_password,
-        host=config.db_host,
-        port=config.db_port,
-        db_name=config.db_name
-    )
+    db_writer = DbResultWriter(workflow_name=workflow_name,
+                               username=config.db_username,
+                               password=config.db_password,
+                               host=config.db_host,
+                               port=config.db_port,
+                               db_name=config.db_name)
     db_writer(config.folder, config.folder)
 
     t0 = time.time() - t0
@@ -400,7 +399,7 @@ def run_cell_analysis(config):
     if feature_identifier is None:
         stat_names = [idf.replace('serum_', '') + '_' + name
                       for name in DEFAULT_PLOT_NAMES for idf in table_identifiers]
-        workflow_summaries(name, config, t0, stat_names)
+        workflow_summaries(name, config, t0, workflow_name=name, stat_names=stat_names)
 
     return table_identifiers
 

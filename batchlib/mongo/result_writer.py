@@ -8,7 +8,7 @@ from pymongo import MongoClient
 from batchlib.base import BatchJobOnContainer
 from batchlib.mongo.import_cohort_ids import import_cohort_ids_for_plate
 from batchlib.mongo.utils import ASSAY_ANALYSIS_RESULTS, ASSAY_METADATA, create_plate_doc, parse_workflow_duration, \
-    parse_workflow_name, parse_plate_dir
+    parse_plate_dir
 from batchlib.util import get_logger, get_commit_id
 from batchlib.util.cohort_parser import CohortIdParser
 from batchlib.util.io import read_table
@@ -67,8 +67,10 @@ def _get_analysis_params(result_tables):
 
 
 class DbResultWriter(BatchJobOnContainer):
-    def __init__(self, username, password, host, port=27017, db_name='covid', **super_kwargs):
+    def __init__(self, workflow_name, username, password, host, port=27017, db_name='covid', **super_kwargs):
         super().__init__(input_pattern='*.hdf5', **super_kwargs)
+
+        self.workflow_name = workflow_name
 
         username = urllib.parse.quote_plus(username)
         password = urllib.parse.quote_plus(password)
@@ -88,10 +90,10 @@ class DbResultWriter(BatchJobOnContainer):
     def check_output(self, path, **kwargs):
         if self.db is None:
             return True
+
         # check if result document already exist for a given (batchlib_version, workflow_name, plate_name)
-        work_dir = os.path.join(self.folder, 'batchlib')
         _filter = {
-            "workflow_name": parse_workflow_name(work_dir),
+            "workflow_name": self.workflow_name,
             "plate_name": os.path.split(self.folder)[1],
             "batchlib_version": get_commit_id()
         }
@@ -116,10 +118,12 @@ class DbResultWriter(BatchJobOnContainer):
         # this is a bit hacky: parsing the workflow name and execution duration from the log file in the work_dir,
         # but I don't see a better way to do it atm
         work_dir = os.path.join(self.folder, 'batchlib')
+        log_path = os.path.join(work_dir, self.workflow_name + '.log')
+
         result_object = {
             "created_at": datetime.now(),
-            "workflow_name": parse_workflow_name(work_dir),
-            "workflow_duration": parse_workflow_duration(work_dir),
+            "workflow_name": self.workflow_name,
+            "workflow_duration": parse_workflow_duration(log_path),
             "plate_name": plate_name,
             "batchlib_version": get_commit_id(),
             "analysis_parameters": _get_analysis_params(result_tables),
@@ -137,7 +141,7 @@ class DbResultWriter(BatchJobOnContainer):
         self.db[ASSAY_ANALYSIS_RESULTS].find_one_and_replace(_filter, result_object, upsert=True)
 
         # create plate metadata
-        plate_dir = parse_plate_dir(work_dir, default_dir=self.folder)
+        plate_dir = parse_plate_dir(default_dir=self.folder, log_path=log_path)
         plate_doc = create_plate_doc(plate_name, plate_dir)
         self.db[ASSAY_METADATA].find_one_and_replace({"name": plate_name}, plate_doc, upsert=True)
 

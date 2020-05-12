@@ -123,13 +123,12 @@ def create_plate_doc(plate_name, plate_dir):
     return result
 
 
-def parse_plate_dir(work_dir, default_dir):
+def parse_plate_dir(default_dir, log_path):
     """
     Parses plate dir containing the original tiff files and channel mapping from the log file.
     Returns default_dir if the plate dir cannot be parsed from the log file.
     """
     try:
-        log_path = _get_log_path(work_dir)
         with open(log_path, 'r') as fh:
             lines = list(fh)
             input_dir_line = None
@@ -149,19 +148,10 @@ def parse_plate_dir(work_dir, default_dir):
         return default_dir
 
 
-def _get_log_path(work_dir):
-    logs = list(glob.glob(os.path.join(work_dir, '*.log')))
-    # FIXME this is bad, there can be multiple logs!
-    # should choose them based on some heuristics !
-    # assert len(logs) == 1
-    return logs[0]
-
-
-def parse_workflow_duration(work_dir):
+def parse_workflow_duration(log_path):
     """
     Reads workflow duration by parsing the first and the last log event in the log file and taking the time difference
     """
-    log_path = _get_log_path(work_dir)
     with open(log_path, 'r') as fh:
         lines = list(fh)
         for first_log in lines:
@@ -177,13 +167,3 @@ def parse_workflow_duration(work_dir):
 
         delta = end - start
         return delta.seconds
-
-
-def parse_workflow_name(work_dir):
-    """
-    Parses workflow name from the log file
-    """
-    log_path = _get_log_path(work_dir)
-    logfile = os.path.split(log_path)[1]
-    workflow_name = os.path.splitext(logfile)[0]
-    return workflow_name
