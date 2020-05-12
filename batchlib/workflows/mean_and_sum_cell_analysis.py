@@ -35,7 +35,7 @@ def mean_and_sum_cell_analysis(config):
 
     # 4.) run all the usual workflow summaries
     identifiers = modify_identifiers(identifiers)
-    stat_names = [idf + stat_name.replace('serum_', '')
+    stat_names = [idf + stat_name
                   for idf in identifiers for stat_name in DEFAULT_PLOT_NAMES]
     name = "MeanAndSumCellAnalysisWorkflow"
     workflow_summaries(name, config, t0, stat_names)
