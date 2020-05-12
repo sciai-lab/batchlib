@@ -24,8 +24,15 @@ def get_bg_config_file(folder, tischi_mode):
             return './configs/cell_analysis_bg.conf'
 
 
-def submit_folders(folder_list, config_file=None, fixed_background=False, tischi_mode=False):
+def submit_folders(folder_list, config_file=None, fixed_background=False, tischi_mode=False, mean_and_sum=False):
     assert all(os.path.exists(folder) for folder in folder_list), str(folder_list)
+
+    if mean_and_sum:
+        slurm_file = 'submit_mean_and_sum.batch'
+    else:
+        slurm_file = 'submit_cell_analysis_var_conf.batch'
+    print("Using slurm file:", slurm_file)
+
     for folder in folder_list:
 
         if fixed_background:
@@ -35,7 +42,7 @@ def submit_folders(folder_list, config_file=None, fixed_background=False, tischi
             this_config_file = config_file
 
         print("Submitting", folder, "with config file", this_config_file)
-        cmd = ['sbatch', 'submit_cell_analysis_var_conf.batch', this_config_file, folder]
+        cmd = ['sbatch', slurm_file, this_config_file, folder]
         try:
             output = check_output(cmd).decode('utf8').rstrip('\n')
         except Exception as e:
@@ -52,6 +59,7 @@ if __name__ == '__main__':
     parser.add_argument('--fixed_background', type=int, default=0, help='run computation with fixed background')
     parser.add_argument('--tischi_mode', type=int, default=0, help='recompute stuff for tischi')
     parser.add_argument('--write_to_slack', type=int, default=0, help='post results to slack')
+    parser.add_argument('--mean_and_sum', type=int, default=0, help='run the mean and sum workflow')
 
     args = parser.parse_args()
     in_file = args.input_file
@@ -73,4 +81,4 @@ if __name__ == '__main__':
     with open(in_file, 'r') as f:
         folder_list = json.load(f)
 
-    submit_folders(folder_list, config_file, fixed_background, tischi_mode)
+    submit_folders(folder_list, config_file, fixed_background, tischi_mode, bool(args.mean_and_sum))
