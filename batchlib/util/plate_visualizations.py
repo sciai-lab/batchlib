@@ -323,7 +323,7 @@ def extend_colorbar_threshold_dict(replace_names=['IgA', 'IgG']):
 colorbar_threshold_dict = extend_colorbar_threshold_dict()
 
 
-def all_plots(table_path, out_folder, table_key, stat_names, identifier=None,
+def all_plots(table_path, out_folder, table_key, stat_names, identifier,
               outlier_table_key='wells/outliers', **well_plot_kwargs):
     if not isinstance(stat_names, (list, tuple)):
         raise ValueError(f"stat_names must be either list or tuple, got {type(stat_names)}")
@@ -351,7 +351,7 @@ def all_plots(table_path, out_folder, table_key, stat_names, identifier=None,
                             for key, value in get_column_dict(outlier_column_names, outlier_table, 'is_outlier').items()
                             if value]
 
-    plate_name = os.path.split(table_path)[1]
+    plate_name = os.path.split(os.path.split(table_path)[0])[1]
 
     for name in tqdm(stat_names, desc='making plots'):
         try:
@@ -359,19 +359,19 @@ def all_plots(table_path, out_folder, table_key, stat_names, identifier=None,
         except KeyError:
             print(f'Warning: No colorbar thresholds specified for stat {name}')
             cmap, colorbar_range = None, None
+
         # 0th column is the image / well name
         image_or_well_names = [str(im_name) for im_name in table[:, 0]]
         stat_id = column_names.index(name)
         stats_per_file = dict(zip(image_or_well_names, table[:, stat_id].astype('float')))
 
-        outfile = os.path.join(out_folder, f"plates_{name}.png") if identifier is None else \
-            os.path.join(out_folder, f"plates_{name}_{identifier}.png")
+        outfile = os.path.join(out_folder, f"{plate_name}_{name}_{identifier}.png")
         well_plot(stats_per_file,
                   infected_list=outlier_list,
                   print_medians=True,
                   outfile=outfile,
                   figsize=(11, 6),
-                  title=f'{plate_name}\n{identifier}\n{name}',
+                  title=f'{plate_name}\n{name}_{identifier}',
                   cmap=cmap,
                   colorbar_range=colorbar_range,
                   **well_plot_kwargs)

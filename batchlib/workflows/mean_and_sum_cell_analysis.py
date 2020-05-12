@@ -30,14 +30,12 @@ def mean_and_sum_cell_analysis(config):
 
     # 3.) merge the two tables into default
     merger = MergeMeanAndSumTables()
-    merger(config.folder, config.folder, force_recompute=config.force_recompute)
-    # merger(config.folder, config.folder, force_recompute=True)
+    # merger(config.folder, config.folder, force_recompute=config.force_recompute)
+    merger(config.folder, config.folder, force_recompute=True)
 
     # 4.) run all the usual workflow summaries
     identifiers = modify_identifiers(identifiers)
     stat_names = [idf + stat_name.replace('serum_', '')
                   for idf in identifiers for stat_name in DEFAULT_PLOT_NAMES]
     name = "MeanAndSumCellAnalysisWorkflow"
-    # FIXME this is not correct yet
-    identifier_to_table = {'serum_IgG': 'default'}
-    workflow_summaries(name, config, identifier_to_table, t0, stat_names)
+    workflow_summaries(name, config, t0, stat_names)
