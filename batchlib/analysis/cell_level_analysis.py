@@ -12,7 +12,7 @@ from glob import glob
 from batchlib.util.logging import get_logger
 from ..base import BatchJobOnContainer
 from ..util.image import seg_to_edges
-from ..util.io import (open_file, image_name_to_site_name, image_name_to_well_name,
+from ..util.io import (open_file, image_name_to_site_name, image_name_to_well_name, get_column_dict,
                        in_file_to_image_name, in_file_to_plate_name,
                        has_table, read_table, write_image_information,
                        to_image_table, add_site_name_to_image_table)
@@ -533,25 +533,28 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
         if not split_infected_and_control:
             return per_cell_statistics
 
-        infected_indicator, control_indicator = self.load_infected_and_control_indicators(in_path)
+        infected_indicator, control_indicator = self.load_infected_and_control_indicators(
+            in_path, labels=per_cell_statistics['labels'])
         infected_cell_statistics = index_cell_properties(per_cell_statistics, infected_indicator)
         control_cell_statistics = index_cell_properties(per_cell_statistics, control_indicator)
 
         return infected_cell_statistics, control_cell_statistics
 
-    def load_infected_and_control_indicators(self, in_path):
+    def load_infected_and_control_indicators(self, in_path, labels):
         with open_file(in_path, 'r') as f:
             column_names, table = self.read_table(f, self.classification_key)
-        infected_indicator = table[:, column_names.index('is_infected')]
-        control_indicator = table[:, column_names.index('is_control')]
+        infected_dict = get_column_dict(column_names, table, 'is_infected')
+        control_dict = get_column_dict(column_names, table, 'is_control')
         if hasattr(self, 'load_cell_outliers'):
             # remove cell outliers from infected / control and thereby the analysis
             cell_outlier_dict = self.load_cell_outliers(in_path)
-            labels = table[:, column_names.index('label_id')].astype(np.int32)
-            for i, label in enumerate(labels):
-                if cell_outlier_dict.get(label, (-1, ""))[0] == 1:
-                    infected_indicator[i] = 0
-                    control_indicator[i] = 0
+            for label, (is_outlier, _) in cell_outlier_dict.items():
+                if is_outlier == 1:
+                    infected_dict[label] = 0
+                    control_dict[label] = 0
+        # convert dicts to lists
+        infected_indicator = np.array([infected_dict.get(label, 0) for label in labels])
+        control_indicator = np.array([control_dict.get(label, 0) for label in labels])
         return infected_indicator, control_indicator
 
     @property
@@ -999,7 +1002,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
 
         # make a label mask for the infected cells
         label_ids = self.load_per_cell_statistics(in_path, False, False)['labels']
-        infected_indicator, _ = self.load_infected_and_control_indicators(in_path)
+        infected_indicator, _ = self.load_infected_and_control_indicators(in_path, label_ids)
         assert len(label_ids) == len(infected_indicator), f'{len(label_ids)} != {len(infected_indicator)}'
         infected_label_ids = label_ids[infected_indicator.astype('bool')]  # cast to bool again to be sure
         infected_mask = np.isin(cell_seg, infected_label_ids).astype(cell_seg.dtype)
