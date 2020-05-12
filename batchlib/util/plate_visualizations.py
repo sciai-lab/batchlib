@@ -303,30 +303,27 @@ def get_colorbar_range(key):
 
 
 colorbar_threshold_dict = {
-    'serum_robust_z_score_means': {
-        'serum_IgA': (0.0, 1.8, 2.5, 5),
-        'serum_IgG': (0.0, 1.8, 2.5, 5),
-        'serum': (0.0, 1.8, 2.5, 10),
-    },
-    'serum_robust_z_score_sums': {
-        'serum_IgA': (0.0, 1.8, 2.5, 5),
-        'serum_IgG': (0.0, 1.8, 2.5, 5),
-        'serum': (0.0, 1.8, 2.5, 10),
-    },
-    'serum_ratio_of_q0.5_of_means': {
-        'serum_IgA': (0.9, 1.8, 2.5, 5),
-        'serum_IgG': (0.9, 1.25, 1.3, 2.0),
-        'serum': (0.9, 1.25, 1.3, 2.0),
-    },
-    'serum_ratio_of_q0.5_of_sums': {
-        'serum_IgA': (0.9, 1.8, 2.5, 5),
-        'serum_IgG': (0.9, 1.25, 1.3, 2.0),
-        'serum': (0.9, 1.25, 1.3, 2.0),
-    },
+    'serum_robust_z_score_means':     (0.0, 1.8, 2.5, 5),
+    'serum_robust_z_score_sums':      (0.0, 1.8, 2.5, 5),
+    'serum_ratio_of_q0.5_of_means':   (0.9, 1.8, 2.5, 5),
+    'serum_ratio_of_q0.5_of_sums':    (0.9, 1.8, 2.5, 5),
 }
 
 
-def all_plots(table_path, out_folder, table_key, stat_names, channel_name, identifier=None,
+def extend_colorbar_threshold_dict(replace_names=['IgA', 'IgG']):
+    extended_dict = {}
+    for name, values in colorbar_threshold_dict.items():
+        for replacer in replace_names:
+            new_name = name.replace('serum', replacer)
+            extended_dict[new_name] = values
+    colorbar_threshold_dict.update(extended_dict)
+    return colorbar_threshold_dict
+
+
+colorbar_threshold_dict = extend_colorbar_threshold_dict()
+
+
+def all_plots(table_path, out_folder, table_key, stat_names, identifier=None,
               outlier_table_key='wells/outliers', **well_plot_kwargs):
     if not isinstance(stat_names, (list, tuple)):
         raise ValueError(f"stat_names must be either list or tuple, got {type(stat_names)}")
@@ -358,9 +355,9 @@ def all_plots(table_path, out_folder, table_key, stat_names, channel_name, ident
 
     for name in tqdm(stat_names, desc='making plots'):
         try:
-            cmap, colorbar_range = make_colormap_absolute(colorbar_threshold_dict[name][channel_name])
+            cmap, colorbar_range = make_colormap_absolute(colorbar_threshold_dict[name])
         except KeyError:
-            print(f'Warning: No colorbar thresholds specified for stat {name} and channel {channel_name}')
+            print(f'Warning: No colorbar thresholds specified for stat {name}')
             cmap, colorbar_range = None, None
         # 0th column is the image / well name
         image_or_well_names = [str(im_name) for im_name in table[:, 0]]
