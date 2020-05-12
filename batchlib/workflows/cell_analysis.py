@@ -352,13 +352,11 @@ def workflow_summaries(name, config, identifier_to_table, t0, stat_names=DEFAULT
                   table_key=f'images/{table_name}',
                   identifier=identifier + '_per-image',
                   stat_names=stat_names,
-                  channel_name=identifier,
                   wedge_width=0.3)
         all_plots(table_path, plot_folder,
                   table_key=f'wells/{table_name}',
                   identifier=identifier + '_per-well',
                   stat_names=stat_names,
-                  channel_name=identifier,
                   wedge_width=0)
 
     db_writer = DbResultWriter(
