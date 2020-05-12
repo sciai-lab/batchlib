@@ -96,7 +96,7 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
 
     if len(set(keys) - set(background_dict.keys())) > 0:
         bg_keys = list(background_dict.keys())
-        raise ValueError(f"Did not find values for all chennales {keys} in {bg_keys}")
+        raise ValueError(f"Did not find values for all channels {keys} in {bg_keys}")
     return background_dict
 
 

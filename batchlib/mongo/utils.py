@@ -151,7 +151,9 @@ def parse_plate_dir(work_dir, default_dir):
 
 def _get_log_path(work_dir):
     logs = list(glob.glob(os.path.join(work_dir, '*.log')))
-    assert len(logs) == 1
+    # FIXME this is bad, there can be multiple logs!
+    # should choose them based on some heuristics !
+    # assert len(logs) == 1
     return logs[0]
 
 
