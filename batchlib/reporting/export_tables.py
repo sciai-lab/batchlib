@@ -98,8 +98,11 @@ def export_tables_for_plate(folder, ext='.xlsx'):
 
     # export the cell segmentation tables
     im_file = glob(os.path.join(folder, '*.h5'))[0]
+    cell_tables_key = 'tables/cell_segmentation'
     with open_file(im_file, 'r') as f:
-        g = f['tables/cell_segmentation']
+        if cell_tables_key not in f:
+            raise RuntimeError(f"Could not find {cell_tables_key} in {im_file}")
+        g = f[cell_tables_key]
         cell_table_names = ['cell_segmentation/' + name for name in g.keys()]
 
     for cell_table_name in cell_table_names:
