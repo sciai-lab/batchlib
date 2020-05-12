@@ -100,7 +100,7 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
     return background_dict
 
 
-def get_infected_detection_jobs(config, marker_ana_in_key):
+def get_infected_detection_jobs(config, marker_ana_in_key, feature_identifier):
     erosion_radius = config.infected_erosion_radius
     quantile = config.infected_quantile
 
@@ -124,9 +124,11 @@ def get_infected_detection_jobs(config, marker_ana_in_key):
                 'run': {'gpu_id': config.gpu}})
         ])
         link_out_table = config.seg_key
+        this_feature_identifier = None
     else:
         seg_key_for_infected_classification = config.seg_key
         link_out_table = config.seg_key
+        this_feature_identifier = feature_identifier
 
     jobs.append(
         (FindInfectedCells, {
@@ -136,7 +138,7 @@ def get_infected_detection_jobs(config, marker_ana_in_key):
              'scale_with_mad': config.infected_scale_with_mad,  # default: True
              'infected_threshold': config.infected_threshold,  # default: 5.4
              'split_statistic': 'quantile' + str(quantile),
-             'feature_identifier': None,
+             'feature_identifier': this_feature_identifier,
              'bg_correction_key': 'plate/backgrounds',
              'link_out_table': link_out_table}})
     )
@@ -261,7 +263,7 @@ def core_workflow_tasks(config, name, feature_identifier):
               'cell_seg_key': config.seg_key}})]
     )
 
-    infected_detection_jobs = get_infected_detection_jobs(config, marker_ana_in_key)
+    infected_detection_jobs = get_infected_detection_jobs(config, marker_ana_in_key, feature_identifier)
     job_list.extend(infected_detection_jobs)
 
     # for the background substraction, we can either use a fixed value per channel,

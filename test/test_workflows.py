@@ -5,6 +5,7 @@ from glob import glob
 from shutil import rmtree
 
 from batchlib.workflows import run_cell_analysis, cell_analysis_parser
+from batchlib.workflows.mean_and_sum_cell_analysis import mean_and_sum_cell_analysis
 
 ROOT = os.path.join(os.path.split(__file__)[0], '../data/test_data')
 
@@ -82,6 +83,16 @@ class TestCellAnalysis(BaseTestMixin, unittest.TestCase):
     @staticmethod
     def run_workflow(config):
         return run_cell_analysis(config)
+
+
+class TestMeanAndSum(BaseTestMixin, unittest.TestCase):
+    @staticmethod
+    def get_parser(config_folder, config_name):
+        return cell_analysis_parser(config_folder, config_name)
+
+    @staticmethod
+    def run_workflow(config):
+        return mean_and_sum_cell_analysis(config)
 
 
 if __name__ == '__main__':
