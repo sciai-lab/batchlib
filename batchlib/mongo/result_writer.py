@@ -1,15 +1,14 @@
 import os
+import time
 import urllib.parse
 from datetime import datetime
-import time
 
 import h5py
 from pymongo import MongoClient
 
 from batchlib.base import BatchJobOnContainer
 from batchlib.mongo.import_cohort_ids import import_cohort_ids_for_plate
-from batchlib.mongo.utils import ASSAY_ANALYSIS_RESULTS, ASSAY_METADATA, create_plate_doc, parse_workflow_duration, \
-    parse_plate_dir
+from batchlib.mongo.utils import ASSAY_ANALYSIS_RESULTS, ASSAY_METADATA, create_plate_doc
 from batchlib.util import get_logger, get_commit_id
 from batchlib.util.cohort_parser import CohortIdParser
 from batchlib.util.io import read_table
