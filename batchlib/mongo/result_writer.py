@@ -1,4 +1,5 @@
 import os
+import time
 import urllib.parse
 from datetime import datetime
 
@@ -7,8 +8,7 @@ from pymongo import MongoClient
 
 from batchlib.base import BatchJobOnContainer
 from batchlib.mongo.import_cohort_ids import import_cohort_ids_for_plate
-from batchlib.mongo.utils import ASSAY_ANALYSIS_RESULTS, ASSAY_METADATA, create_plate_doc, parse_workflow_duration, \
-    parse_workflow_name, parse_plate_dir
+from batchlib.mongo.utils import ASSAY_ANALYSIS_RESULTS, ASSAY_METADATA, create_plate_doc
 from batchlib.util import get_logger, get_commit_id
 from batchlib.util.cohort_parser import CohortIdParser
 from batchlib.util.io import read_table
@@ -67,8 +67,15 @@ def _get_analysis_params(result_tables):
 
 
 class DbResultWriter(BatchJobOnContainer):
-    def __init__(self, username, password, host, port=27017, db_name='covid', **super_kwargs):
+    def __init__(self, workflow_name, plate_dir, username, password, host, port=27017, db_name='covid',
+                 **super_kwargs):
         super().__init__(input_pattern='*.hdf5', **super_kwargs)
+
+        assert workflow_name is not None
+        assert plate_dir is not None
+
+        self.workflow_name = workflow_name
+        self.plate_dir = plate_dir
 
         username = urllib.parse.quote_plus(username)
         password = urllib.parse.quote_plus(password)
@@ -88,10 +95,10 @@ class DbResultWriter(BatchJobOnContainer):
     def check_output(self, path, **kwargs):
         if self.db is None:
             return True
+
         # check if result document already exist for a given (batchlib_version, workflow_name, plate_name)
-        work_dir = os.path.join(self.folder, 'batchlib')
         _filter = {
-            "workflow_name": parse_workflow_name(work_dir),
+            "workflow_name": self.workflow_name,
             "plate_name": os.path.split(self.folder)[1],
             "batchlib_version": get_commit_id()
         }
@@ -113,13 +120,10 @@ class DbResultWriter(BatchJobOnContainer):
         input_file = input_files[0]
         result_tables = _get_analysis_tables(input_file)
 
-        # this is a bit hacky: parsing the workflow name and execution duration from the log file in the work_dir,
-        # but I don't see a better way to do it atm
-        work_dir = os.path.join(self.folder, 'batchlib')
         result_object = {
             "created_at": datetime.now(),
-            "workflow_name": parse_workflow_name(work_dir),
-            "workflow_duration": parse_workflow_duration(work_dir),
+            "workflow_name": self.workflow_name,
+            "workflow_duration": self._get_workflow_duration(kwargs),
             "plate_name": plate_name,
             "batchlib_version": get_commit_id(),
             "analysis_parameters": _get_analysis_params(result_tables),
@@ -136,11 +140,17 @@ class DbResultWriter(BatchJobOnContainer):
         }
         self.db[ASSAY_ANALYSIS_RESULTS].find_one_and_replace(_filter, result_object, upsert=True)
 
-        # create plate metadata
-        plate_dir = parse_plate_dir(work_dir, default_dir=self.folder)
-        plate_doc = create_plate_doc(plate_name, plate_dir)
+        # scan the plate directory, create the metadata document and insert into DB (or replace existing)
+        plate_doc = create_plate_doc(plate_name, self.plate_dir)
         self.db[ASSAY_METADATA].find_one_and_replace({"name": plate_name}, plate_doc, upsert=True)
 
         # update cohort ids if present for the plate
         cohort_id_parser = CohortIdParser()
         import_cohort_ids_for_plate(plate_name, self.db[ASSAY_METADATA], cohort_id_parser)
+
+    @staticmethod
+    def _get_workflow_duration(kwargs):
+        t0 = kwargs.get('t0', None)
+        if t0 is None:
+            return 0
+        return int(time.time() - t0)

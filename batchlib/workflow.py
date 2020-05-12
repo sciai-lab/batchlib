@@ -77,7 +77,7 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
 
     work_dir = os.path.join(folder, 'batchlib')
     os.makedirs(work_dir, exist_ok=True)
-    # register file workflow's log file
+    # register workflow's log file
     if enable_logging:
         fh = add_file_handler(logger, work_dir, name)
         # add file handler to tensorboard logger
