@@ -32,20 +32,20 @@ def summarize_kinder_experiment(token, clean_up):
 
 def redo_summary():
     folder_names = all_manuscript_plates() + all_kinder_plates()
-    table_identifiers = ['serum_IgG_corrected', 'serum_IgA_corrected']
+
+    stat_names = ['IgG_ratio_of_q0.5_of_means',
+                  'IgG_robust_z_score_means',
+                  'IgA_ratio_of_q0.5_of_means',
+                  'IgA_robust_z_score_means']
 
     def redo_folder(folder):
         plot_folder = os.path.join(folder, 'plots')
-        stat_names = ['serum_ratio_of_q0.5_of_means',
-                      'serum_robust_z_score_means']
-        for identifier in table_identifiers:
-            table_path = CellLevelAnalysis.folder_to_table_path(folder, identifier)
-            all_plots(table_path, plot_folder,
-                      table_key=f'wells/{identifier}',
-                      identifier=identifier + '_per-well',
-                      stat_names=stat_names,
-                      channel_name=identifier,
-                      wedge_width=0)
+        table_path = CellLevelAnalysis.folder_to_table_path(folder)
+        all_plots(table_path, plot_folder,
+                  table_key='wells/default',
+                  identifier='per-well',
+                  stat_names=stat_names,
+                  wedge_width=0)
 
         summary_writer = SlackSummaryWriter()
         summary_writer(folder, folder, force_recompute=True)

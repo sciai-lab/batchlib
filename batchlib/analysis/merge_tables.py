@@ -283,7 +283,7 @@ class MergeAnalysisTables(BatchJobOnContainer):
         plate_name = os.path.split(out_file)[1]
         table = np.array([plate_name] + list(self.analysis_parameters.values()))[None]
         with open_file(out_file, 'a') as f:
-            self.write_table(f, self.parameter_table_name, col_names, table)
+            self.write_table(f, self.parameter_table_name, col_names, table, force_write=True)
 
     def run(self, input_files, output_files):
         if len(input_files) != 1 or len(output_files) != 1:
