@@ -67,15 +67,15 @@ def _get_analysis_params(result_tables):
 
 
 class DbResultWriter(BatchJobOnContainer):
-    def __init__(self, workflow_name, input_folder, username, password, host, port=27017, db_name='covid',
+    def __init__(self, workflow_name, plate_dir, username, password, host, port=27017, db_name='covid',
                  **super_kwargs):
         super().__init__(input_pattern='*.hdf5', **super_kwargs)
 
         assert workflow_name is not None
-        assert input_folder is not None
+        assert plate_dir is not None
 
         self.workflow_name = workflow_name
-        self.input_folder = input_folder
+        self.plate_dir = plate_dir
 
         username = urllib.parse.quote_plus(username)
         password = urllib.parse.quote_plus(password)
@@ -141,7 +141,7 @@ class DbResultWriter(BatchJobOnContainer):
         self.db[ASSAY_ANALYSIS_RESULTS].find_one_and_replace(_filter, result_object, upsert=True)
 
         # scan the plate directory, create the metadata document and insert into DB (or replace existing)
-        plate_doc = create_plate_doc(plate_name, self.input_folder)
+        plate_doc = create_plate_doc(plate_name, self.plate_dir)
         self.db[ASSAY_METADATA].find_one_and_replace({"name": plate_name}, plate_doc, upsert=True)
 
         # update cohort ids if present for the plate

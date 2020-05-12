@@ -361,7 +361,7 @@ def workflow_summaries(name, config, t0, workflow_name, input_folder, stat_names
 
     db_writer = DbResultWriter(
         workflow_name=workflow_name,
-        input_folder=input_folder,
+        plate_dir=input_folder,
         username=config.db_username,
         password=config.db_password,
         host=config.db_host,
