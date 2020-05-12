@@ -1,6 +1,7 @@
 import os
 import urllib.parse
 from datetime import datetime
+import time
 
 import h5py
 from pymongo import MongoClient
@@ -67,10 +68,15 @@ def _get_analysis_params(result_tables):
 
 
 class DbResultWriter(BatchJobOnContainer):
-    def __init__(self, workflow_name, username, password, host, port=27017, db_name='covid', **super_kwargs):
+    def __init__(self, workflow_name, input_folder, username, password, host, port=27017, db_name='covid',
+                 **super_kwargs):
         super().__init__(input_pattern='*.hdf5', **super_kwargs)
 
+        assert workflow_name is not None
+        assert input_folder is not None
+
         self.workflow_name = workflow_name
+        self.input_folder = input_folder
 
         username = urllib.parse.quote_plus(username)
         password = urllib.parse.quote_plus(password)
@@ -115,15 +121,10 @@ class DbResultWriter(BatchJobOnContainer):
         input_file = input_files[0]
         result_tables = _get_analysis_tables(input_file)
 
-        # this is a bit hacky: parsing the workflow name and execution duration from the log file in the work_dir,
-        # but I don't see a better way to do it atm
-        work_dir = os.path.join(self.folder, 'batchlib')
-        log_path = os.path.join(work_dir, self.workflow_name + '.log')
-
         result_object = {
             "created_at": datetime.now(),
             "workflow_name": self.workflow_name,
-            "workflow_duration": parse_workflow_duration(log_path),
+            "workflow_duration": self._get_workflow_duration(kwargs),
             "plate_name": plate_name,
             "batchlib_version": get_commit_id(),
             "analysis_parameters": _get_analysis_params(result_tables),
@@ -140,11 +141,17 @@ class DbResultWriter(BatchJobOnContainer):
         }
         self.db[ASSAY_ANALYSIS_RESULTS].find_one_and_replace(_filter, result_object, upsert=True)
 
-        # create plate metadata
-        plate_dir = parse_plate_dir(default_dir=self.folder, log_path=log_path)
-        plate_doc = create_plate_doc(plate_name, plate_dir)
+        # scan the plate directory, create the metadata document and insert into DB (or replace existing)
+        plate_doc = create_plate_doc(plate_name, self.input_folder)
         self.db[ASSAY_METADATA].find_one_and_replace({"name": plate_name}, plate_doc, upsert=True)
 
         # update cohort ids if present for the plate
         cohort_id_parser = CohortIdParser()
         import_cohort_ids_for_plate(plate_name, self.db[ASSAY_METADATA], cohort_id_parser)
+
+    @staticmethod
+    def _get_workflow_duration(kwargs):
+        t0 = kwargs.get('t0', None)
+        if t0 is None:
+            return 0
+        return int(time.time() - t0)

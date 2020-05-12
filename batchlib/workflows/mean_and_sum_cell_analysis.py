@@ -38,4 +38,4 @@ def mean_and_sum_cell_analysis(config):
     stat_names = [idf + stat_name
                   for idf in identifiers for stat_name in DEFAULT_PLOT_NAMES]
     name = "MeanAndSumCellAnalysisWorkflow"
-    workflow_summaries(name, config, t0, stat_names)
+    workflow_summaries(name, config, t0, workflow_name=name, input_folder=config.input_folder, stat_names=stat_names)
