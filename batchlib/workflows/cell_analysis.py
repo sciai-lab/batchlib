@@ -342,20 +342,20 @@ def core_workflow_tasks(config, name, feature_identifier):
     return job_list, table_identifiers
 
 
-def workflow_summaries(name, config, table_identifiers, t0, stat_names=DEFAULT_PLOT_NAMES):
+def workflow_summaries(name, config, identifier_to_table, t0, stat_names=DEFAULT_PLOT_NAMES):
     # run all plots on the output files
     plot_folder = os.path.join(config.folder, 'plots')
 
-    for identifier in table_identifiers:
+    for identifier, table_name in identifier_to_table.items():
         table_path = CellLevelAnalysis.folder_to_table_path(config.folder)
         all_plots(table_path, plot_folder,
-                  table_key=f'images/{identifier}',
+                  table_key=f'images/{table_name}',
                   identifier=identifier + '_per-image',
                   stat_names=stat_names,
                   channel_name=identifier,
                   wedge_width=0.3)
         all_plots(table_path, plot_folder,
-                  table_key=f'wells/{identifier}',
+                  table_key=f'wells/{table_name}',
                   identifier=identifier + '_per-well',
                   stat_names=stat_names,
                   channel_name=identifier,
@@ -400,7 +400,8 @@ def run_cell_analysis(config):
 
     # only run the workflow summaries if we don't have the feature identifier
     if feature_identifier is None:
-        workflow_summaries(name, config, table_identifiers, t0)
+        identifier_to_table = {identifier: identifier for identifier in table_identifiers}
+        workflow_summaries(name, config, identifier_to_table, t0)
 
     return table_identifiers
 

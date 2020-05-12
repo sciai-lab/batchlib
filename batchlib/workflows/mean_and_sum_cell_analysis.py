@@ -38,4 +38,6 @@ def mean_and_sum_cell_analysis(config):
     stat_names = [idf + stat_name.replace('serum_', '')
                   for idf in identifiers for stat_name in DEFAULT_PLOT_NAMES]
     name = "MeanAndSumCellAnalysisWorkflow"
-    workflow_summaries(name, config, ['default'], t0, stat_names)
+    # FIXME this is not correct yet
+    identifier_to_table = {'serum_IgG': 'default'}
+    workflow_summaries(name, config, identifier_to_table, t0, stat_names)

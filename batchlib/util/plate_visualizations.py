@@ -326,6 +326,19 @@ colorbar_threshold_dict = {
 }
 
 
+def extend_colorbar_threshold_dict(replace_names=['IgA', 'IgG']):
+    extended_dict = {}
+    for name, values in colorbar_threshold_dict.items():
+        for replacer in replace_names:
+            new_name = name.replace('serum', replacer)
+            extended_dict[new_name] = values
+    colorbar_threshold_dict.update(extended_dict)
+    return colorbar_threshold_dict
+
+
+colorbar_threshold_dict = extend_colorbar_threshold_dict()
+
+
 def all_plots(table_path, out_folder, table_key, stat_names, channel_name, identifier=None,
               outlier_table_key='wells/outliers', **well_plot_kwargs):
     if not isinstance(stat_names, (list, tuple)):
