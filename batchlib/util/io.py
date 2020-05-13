@@ -162,7 +162,7 @@ def is_table_with_specific_first_columns(first_column_names, obj):
     try:
         first_columns = obj[0][:len(first_column_names)]
         return first_columns == list(first_column_names)
-    except:
+    except Exception:
         return False
 
 
@@ -192,7 +192,8 @@ def to_image_table(obj, image_names):
         assert not (set(image_names) - set(obj[1][:, 0])), f'{set(obj[1][:, 0])}, {set(image_names)}'
         return obj
     else:
-        return well_table_to_image_table(*to_well_table(obj, list(map(image_name_to_well_name, image_names))), image_names)
+        return well_table_to_image_table(*to_well_table(obj, list(map(image_name_to_well_name, image_names))),
+                                         image_names)
 
 
 def sample_shape(shape, scale_factor, add_incomplete_blocks=False):
@@ -344,6 +345,23 @@ def write_viewer_settings(ds, image, color=None, alpha=1., visible=False, skip=N
         attrs.update({'ContrastLimits': [mi, ma]})
 
     ds.attrs.update(attrs)
+
+
+def read_viewer_settings(f, key):
+    attrs = f[key].attrs
+
+    # TODO use proper CamelCase replace regex
+    def _modify_key(k):
+        if k == 'ChannelInformation':
+            return 'channel_information'
+        if k == 'ScaleFactors':
+            return 'scale_factors'
+        return k.lower()
+
+    def _filter_key(k):
+        return k in ('ContrastLimits')
+
+    return {_modify_key(k): v for k, v in attrs.items() if not _filter_key(k)}
 
 
 # read/write images
