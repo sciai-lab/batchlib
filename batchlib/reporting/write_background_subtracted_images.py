@@ -4,11 +4,11 @@ from tqdm import tqdm
 
 from ..analysis.cell_level_analysis import _get_bg_correction_dict
 from ..base import BatchJobOnContainer
-from ..util import open_file, in_file_to_image_name
+from ..util import open_file, in_file_to_image_name, read_viewer_settings
 
 
 class WriteBackgroundSubtractedImages(BatchJobOnContainer):
-    def __init__(self, background_dict, table_path):
+    def __init__(self, background_dict, table_path, **super_kwargs):
         self.background_dict = background_dict
         self.table_path = table_path
 
@@ -20,7 +20,8 @@ class WriteBackgroundSubtractedImages(BatchJobOnContainer):
         super().__init__(input_key=self.channel_names,
                          input_format=['image'] * len(self.channel_names),
                          output_key=self.output_keys,
-                         output_format=['image'] * len(self.output_keys))
+                         output_format=['image'] * len(self.output_keys),
+                         **super_kwargs)
 
     def write_bg_image(self, in_file, out_file, background_dict):
         images = []
@@ -33,8 +34,11 @@ class WriteBackgroundSubtractedImages(BatchJobOnContainer):
                 images.append(im - bg_val)
 
         with open_file(out_file, 'a') as f:
-            for out_key, im in zip(self.output_keys, images):
-                self.write_image(f, out_key, im)
+            for in_key, out_key, im in zip(self.channel_names, self.output_keys, images):
+                viewer_settings = read_viewer_settings(f, in_key)
+                viewer_settings['visible'] = False
+                viewer_settings.pop('scale_factors', None)
+                self.write_image(f, out_key, im, viewer_settings)
 
     def get_actual_bacground_dict(self, input_files):
         actual_bg_dict = {}

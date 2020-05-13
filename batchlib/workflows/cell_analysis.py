@@ -276,8 +276,10 @@ def core_workflow_tasks(config, name, feature_identifier):
         job_list.append(
             (WriteBackgroundSubtractedImages, {
                  'build': {'background_dict': background_parameters,
-                           'table_path': table_path},
-                 'run': {'n_jobs': config.n_cpus}
+                           'table_path': table_path,
+                           'scale_factors': config.scale_factors},
+                 'run': {'n_jobs': config.n_cpus,
+                         'force_recompute': None}
             })
         )
 
