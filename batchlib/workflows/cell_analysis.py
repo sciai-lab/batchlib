@@ -24,7 +24,7 @@ from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
-from batchlib.segmentation.voronoi_ring_segmentation import ErodeSegmentation
+from batchlib.segmentation.voronoi_ring_segmentation import ErodeSegmentation, VoronoiRingSegmentation
 from batchlib.reporting import (SlackSummaryWriter,
                                 export_tables_for_plate,
                                 WriteBackgroundSubtractedImages)
@@ -116,8 +116,8 @@ def get_infected_detection_jobs(config, marker_key_for_infected_classification, 
             'build': {
                  'input_key': config.seg_key,
                  'output_key': seg_key_for_infected_classification,
-                 'radius': erosion_radius
-            }
+                 'radius': erosion_radius},
+            'run': {'n_jobs': config.n_cpus}
         }))
     else:
         seg_key_for_infected_classification = config.seg_key
@@ -152,6 +152,35 @@ def get_infected_detection_jobs(config, marker_key_for_infected_classification, 
              'bg_correction_key': 'plate/backgrounds',
              'link_out_table': link_out_table}})
     )
+    return jobs
+
+
+# TODO maybe add bg extraction + infected cell detection on voronois
+def get_voronoi_jobs(config, marker_ana_in_key, serum_ana_in_keys):
+    width_dict = config.voronoi_width_dict
+    if isinstance(width_dict, str):
+        width_dict = json.loads(width_dict.replace('\'', '\"'))
+
+    jobs = []
+    for identifier, width in width_dict.items():
+        voronoi_key = config.nuc_key + f'_voronoi_{identifier}'
+        jobs.extend([
+            (VoronoiRingSegmentation, {
+                'build': {'input_key': config.nuc_key,
+                          'output_key': voronoi_key,
+                          'identifier': identifier,
+                          'ring_width': width,
+                          'scale_factors': config.scale_factors},
+                'run': {'n_jobs': config.n_cpus}}),
+            (InstanceFeatureExtraction, {
+                'build': {
+                    'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
+                    'nuc_seg_key_to_ignore': None,
+                    'cell_seg_key': voronoi_key
+                },
+                'run': {'gpu_id': config.gpu}
+            })
+        ])
     return jobs
 
 
@@ -257,6 +286,9 @@ def core_workflow_tasks(config, name, feature_identifier):
         }))
     else:
         marker_key_for_infected_classification = marker_ana_in_key
+
+    if config.voronoi_width_dict is not None:
+        job_list.extend(get_voronoi_jobs(config, marker_ana_in_key, serum_ana_in_keys))
 
     # add the tasks to extract the features from the cell instance segmentation,
     # do initial image level qc (necessary for the background extraction) and extract the quantiles
@@ -514,6 +546,9 @@ def cell_analysis_parser(config_folder, default_config_name):
     # optional background subtraction values for the individual channels
     # if None, all backgrounds will be computed from the data and the plate background will be used
     parser.add("--background_dict", default=None)
+
+    # do we run voronoi segmentation?
+    parser.add("--voronoi_width_dict", default=None)
 
     #
     # more options

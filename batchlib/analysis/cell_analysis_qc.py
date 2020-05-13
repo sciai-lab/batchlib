@@ -86,7 +86,6 @@ class CellLevelQC(CellLevelAnalysisBase):
             outlier_min = np.zeros(n_ids, dtype='bool')
         else:
             outlier_min = sizes < min_size
-            print(outlier_min)
 
         is_outlier = np.logical_or(outlier_max, outlier_min).astype('uint8')
         outlier_types = ['too_large' if is_max else ('too_small' if is_min else 'none')
