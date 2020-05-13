@@ -8,10 +8,7 @@ import vigra
 from batchlib.util import read_image, write_image, write_table, open_file
 
 
-# BE AWARE, there are two types of images for the infected mask!
-# this is for the one based on the segmentation image,
-# need to also implement for the other case
-def get_infected_labels(seg, infected_mask):
+def get_infected_labels_seg_based(seg, infected_mask):
     unique_seg_ids = np.unique(seg)
     overlap = ngt.overlap(seg, infected_mask)
 
@@ -25,13 +22,33 @@ def get_infected_labels(seg, infected_mask):
     return new_infected_mask, cols, table
 
 
+def get_infected_labels_nuc_based(seg, infected_mask):
+    unique_seg_ids = np.unique(seg)
+    overlap = ngt.overlap(seg, infected_mask)
+
+    infected_overlaps = [overlap.overlapArrays(seg_id, True)[0] for seg_id in unique_seg_ids]
+    infected_overlaps = [ovlps[1] if (ovlps[0] == 0 and len(ovlps) > 1) else ovlps[0]
+                         for ovlps in infected_overlaps]
+    infected_overlaps[0] = 0
+    infected_overlaps = np.array(infected_overlaps, dtype='uint64')
+
+    new_infected_mask = nt.take(infected_overlaps, seg.astype('uint64'))
+
+    cols = ['label_id', 'infected_label']
+    table = np.concatenate([unique_seg_ids[:, None], infected_overlaps[:, None].astype('float32')], axis=1)
+    return new_infected_mask, cols, table
+
+
 def finalize_gt_volume(data_path, seg_gt_path, infected_gt_path, out_path,
                        plate_name, base_name, check):
+    assert os.path.exists(data_path), data_path
+    assert os.path.exists(seg_gt_path), seg_gt_path
+    assert os.path.exists(infected_gt_path), infected_gt_path
 
-    # TODO load all the raw data
+    print("Load raw data ...")
     with open_file(data_path, 'r') as f:
-        serum_igg = read_image(f, 'serum_IgG')
-        marker = read_image(f, 'marker')
+        serum_igg = read_image(f, 'serum_IgG_background_subtracted')
+        marker = read_image(f, 'marker_background_subtracted')
         nuclei = read_image(f, 'nuclei')
 
         serum_igg_raw = read_image(f, 'serum_IgG_raw')
@@ -49,23 +66,18 @@ def finalize_gt_volume(data_path, seg_gt_path, infected_gt_path, out_path,
         infected_mask = f['infected'][:]
     assert infected_mask.shape == shape
 
+    print("Map infected labels ...")
+    # TODO infer which one to use properly
     # map infected gt nucleus labels to cell segmentation
     (infected_mask,
      infected_labels_cols,
-     infected_labels_table) = get_infected_labels(seg, infected_mask)
-
-    # with napari.gui_qt():
-    #     viewer = napari.Viewer()
-    #     viewer.add_image(serum_igg, name='serum')
-    #     viewer.add_image(marker, name='marker')
-    #     viewer.add_labels(seg, name='segmentation')
-    #     viewer.add_labels(infected_mask, name='infected-mask')
-    # quit()
+     infected_labels_table) = get_infected_labels_nuc_based(seg, infected_mask)
 
     if check:
-        inspect()
+        print("Inspect volume ...")
+        inspect(serum_igg, marker, seg, infected_mask)
     else:
-        # TODO write everything
+        print("Write all data ...")
         with open_file(out_path, 'a') as f:
             write_image(f, 'serum_IgG', serum_igg)
             write_image(f, 'marker', marker)
@@ -84,8 +96,13 @@ def finalize_gt_volume(data_path, seg_gt_path, infected_gt_path, out_path,
             f.attrs['image'] = base_name
 
 
-def inspect():
-    pass
+def inspect(serum_igg, marker, seg, infected_mask):
+    with napari.gui_qt():
+        viewer = napari.Viewer()
+        viewer.add_image(serum_igg, name='serum')
+        viewer.add_image(marker, name='marker')
+        viewer.add_labels(seg, name='segmentation')
+        viewer.add_labels(infected_mask, name='infected-mask')
 
 
 def finalize_all(gt_root_path, gt_folder, data_root, check=False):
@@ -129,8 +146,30 @@ def test_single_gt():
                        plate_name, base_name, False)
 
 
+def finalize_initial():
+    root = '/home/pape/Work/covid/antibodies-nuclei/groundtruth'
+    data_root = os.path.join(root, 'data/20200405_test_images')
+    seg_root = os.path.join(root, 'segmentation/20200405_test_images')
+    infected_root = os.path.join(root, 'infection/20200405_test_images')
+
+    for im_name in os.listdir(data_root):
+        print(im_name)
+
+        name = os.path.splitext(im_name)[0]
+        finalize_gt_volume(os.path.join(data_root, im_name),
+                           os.path.join(seg_root, name + '_segmentation_done.h5'),
+                           os.path.join(infected_root, name + '_infected_nuclei.h5'),
+                           out_path=name + '.h5',
+                           plate_name='20200405_test_images',
+                           base_name=name,
+                           check=False)
+
+
 if __name__ == '__main__':
-    test_single_gt()
+    # test_single_gt()
+
+    finalize_initial()
+
     # gt_root_path = '/home/pape/Work/covid/antibodies-nuclei/groundtruth'
     # gt_folder = '/home/pape/Work/covid/antibodies-nuclei/groundtruth/merged'
     # data_root = ''
