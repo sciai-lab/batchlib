@@ -8,6 +8,7 @@ import configargparse
 from batchlib import run_workflow
 from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    DenoiseByGrayscaleOpening,
+                                                   DenoiseByWhiteTophat,
                                                    InstanceFeatureExtraction,
                                                    FindInfectedCells,
                                                    ExtractBackground)
@@ -104,38 +105,58 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
 
 def get_infected_detection_jobs(config, marker_ana_in_key, feature_identifier):
     erosion_radius = config.infected_erosion_radius
+    tophat_radius = config.infected_tophat_radius
     quantile = config.infected_quantile
 
     jobs = []
+    if tophat_radius > 0:
+        raise NotImplementedError
+        # FIXME we also need to compute the background for the new marker key.
+        marker_key_for_infected_classification = 'marker_for_infected_classification'
+        jobs.append((DenoiseByWhiteTophat, {
+            'build': {
+                'input_key': marker_ana_in_key,
+                'radius': tophat_radius,
+                'output_key': marker_key_for_infected_classification,
+            }
+        }))
+    else:
+        marker_key_for_infected_classification = marker_ana_in_key
+
     if erosion_radius > 0:
         seg_key_for_infected_classification = config.seg_key + '_for_infected_classification'
-        jobs.extend([
-            (ErodeSegmentation, {
-                     'build': {
-                         'input_key': config.seg_key,
-                         'output_key': seg_key_for_infected_classification,
-                         'radius': config.erosion_radius,  # default: 2
-                     }}),
-            (InstanceFeatureExtraction, {
-                'build': {
-                    'channel_keys': (marker_ana_in_key,),
-                    'nuc_seg_key_to_ignore': config.nuc_key,
-                    'cell_seg_key': seg_key_for_infected_classification,
-                    'identifier': None,
-                    'quantiles': [quantile]},
-                'run': {'gpu_id': config.gpu}})
-        ])
-        link_out_table = config.seg_key
-        this_feature_identifier = None
+        jobs.append((ErodeSegmentation, {
+            'build': {
+                 'input_key': config.seg_key,
+                 'output_key': seg_key_for_infected_classification,
+                 'radius': config.erosion_radius
+            }
+        }))
     else:
         seg_key_for_infected_classification = config.seg_key
-        link_out_table = config.seg_key
+
+    if erosion_radius > 0 \
+            or tophat_radius > 0 \
+            or config.ignore_nuclei_in_infected_classification != config.ignore_nuclei:
+        jobs.append((InstanceFeatureExtraction, {
+            'build': {
+                'channel_keys': (marker_key_for_infected_classification,),
+                'nuc_seg_key_to_ignore': config.nuc_key if config.ignore_nuclei_in_infected_classification else None,
+                'cell_seg_key': seg_key_for_infected_classification,
+                'identifier': None,
+                'quantiles': [quantile]},
+            'run': {'gpu_id': config.gpu}
+        }))
+        this_feature_identifier = None
+    else:
         this_feature_identifier = feature_identifier
+
+    link_out_table = config.seg_key
 
     jobs.append(
         (FindInfectedCells, {
          'build': {
-             'marker_key': marker_ana_in_key,
+             'marker_key': marker_key_for_infected_classification,
              'cell_seg_key': seg_key_for_infected_classification,
              'scale_with_mad': config.infected_scale_with_mad,  # default: True
              'infected_threshold': config.infected_threshold,  # default: 5.4
@@ -479,10 +500,12 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--ignore_nuclei", default=True)
 
     # parameter for the infected cell detection
-    parser.add("--infected_erosion_radius", default=0, type=int)
+    parser.add("--infected_erosion_radius", default=5, type=int)
+    parser.add("--infected_tophat_radius", default=0, type=int)
+    parser.add("--ignore_nuclei_in_infected_classification", default=False, type=bool)
     parser.add("--infected_scale_with_mad", default=True)
-    parser.add("--infected_threshold", type=float, default=6.5)
-    parser.add("--infected_quantile", type=float, default=0.96)
+    parser.add("--infected_threshold", type=float, default=5.6)
+    parser.add("--infected_quantile", type=float, default=0.97)
 
     # optional background subtraction values for the individual channels
     # if None, all backgrounds will be computed from the data and the plate background will be used
