@@ -81,7 +81,7 @@ def export_cell_tables(folder, output_path, table_name, output_format=None):
     export_table(columns, table, output_path, output_format)
 
 
-def export_tables_for_plate(folder, ext='.xlsx'):
+def export_tables_for_plate(folder, cell_table_name='cell_segmentation', ext='.xlsx'):
     """ Conveneince function to export all relevant tables for a plate
     into a more common format (by default excel).
     """
@@ -98,12 +98,12 @@ def export_tables_for_plate(folder, ext='.xlsx'):
 
     # export the cell segmentation tables
     im_file = glob(os.path.join(folder, '*.h5'))[0]
-    cell_tables_key = 'tables/cell_segmentation'
+    cell_tables_key = f'tables/{cell_table_name}'
     with open_file(im_file, 'r') as f:
         if cell_tables_key not in f:
             raise RuntimeError(f"Could not find {cell_tables_key} in {im_file}")
         g = f[cell_tables_key]
-        cell_table_names = ['cell_segmentation/' + name for name in g.keys()]
+        cell_table_names = [f'{cell_table_name}/' + name for name in g.keys()]
 
     for cell_table_name in cell_table_names:
         channel_name = cell_table_name.split('/')[-1]
