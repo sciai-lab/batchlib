@@ -176,6 +176,11 @@ class DenoiseByGrayscaleOpening(DenoiseChannel):
         return skimage.morphology.opening(img, selem=self.structuring_element)
 
 
+class DenoiseByWhiteTophat(DenoiseByGrayscaleOpening):
+    def denoise(self, img):
+        return skimage.morphology.white_tophat(img, selem=self.structuring_element)
+
+
 def _load_image_outliers(name, table_out_path, image_outlier_table, input_files):
     if image_outlier_table is None:
         logger.warning(f"{name}: load_image_outliers: "
