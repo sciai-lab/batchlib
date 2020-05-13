@@ -314,12 +314,13 @@ def core_workflow_tasks(config, name, feature_identifier):
     table_identifiers = serum_ana_in_keys if feature_identifier is None else [k + f'_{feature_identifier}'
                                                                               for k in serum_ana_in_keys]
     # NOTE currently the QC tasks will not be rerun if the feature identifier changes
+    print('asdf'*100, '/n', marker_ana_in_key)
     for serum_key, identifier in zip(serum_ana_in_keys, table_identifiers):
         job_list.append((CellLevelQC, {
             'build': {
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
-                'marker_key': marker_ana_in_key,
+                'marker_key': marker_key_for_infected_classification,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'feature_identifier': feature_identifier,
@@ -329,7 +330,7 @@ def core_workflow_tasks(config, name, feature_identifier):
             'build': {
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
-                'marker_key': marker_ana_in_key,
+                'marker_key': marker_key_for_infected_classification,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'outlier_predicate': outlier_predicate,
@@ -340,7 +341,7 @@ def core_workflow_tasks(config, name, feature_identifier):
             'build': {
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
-                'marker_key': marker_ana_in_key,
+                'marker_key': marker_key_for_infected_classification,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'feature_identifier': feature_identifier,
@@ -349,7 +350,7 @@ def core_workflow_tasks(config, name, feature_identifier):
         job_list.append((CellLevelAnalysis, {
             'build': {
                 'serum_key': serum_key,
-                'marker_key': marker_ana_in_key,
+                'marker_key': marker_key_for_infected_classification,
                 'cell_seg_key': config.seg_key,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
