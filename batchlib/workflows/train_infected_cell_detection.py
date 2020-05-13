@@ -14,7 +14,7 @@ from batchlib.segmentation.voronoi_ring_segmentation import VoronoiRingSegmentat
 from batchlib.segmentation.unet import UNet2D
 from batchlib import run_workflow
 from batchlib.analysis.cell_level_analysis import InstanceFeatureExtraction, FindInfectedCells, \
-    DenoiseByGrayscaleOpening, ExtractBackground
+    DenoiseByGrayscaleOpening, DenoiseByWhiteTophat, ExtractBackground
 
 from tqdm.auto import tqdm
 from glob import glob
@@ -191,7 +191,7 @@ def denoise_and_extract_backgrounds(config, SearchSpace):
         print('\ndenoising with radius', denoise_radius)
         if denoise_radius == 0:
             return
-        job_list = [(DenoiseByGrayscaleOpening, {
+        job_list = [(DenoiseByWhiteTophat, {
             'build': {
                 'key_to_denoise': 'marker_corrected',
                 'output_key': _marker_key(denoise_radius),
