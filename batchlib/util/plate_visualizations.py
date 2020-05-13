@@ -303,30 +303,18 @@ def get_colorbar_range(key):
 
 
 colorbar_threshold_dict = {
-    'serum_robust_z_score_means': {
-        'serum_IgA': (0.0, 1.8, 2.5, 5),
-        'serum_IgG': (0.0, 1.8, 2.5, 5),
-        'serum': (0.0, 1.8, 2.5, 10),
-    },
-    'serum_robust_z_score_sums': {
-        'serum_IgA': (0.0, 1.8, 2.5, 5),
-        'serum_IgG': (0.0, 1.8, 2.5, 5),
-        'serum': (0.0, 1.8, 2.5, 10),
-    },
-    'serum_ratio_of_q0.5_of_means': {
-        'serum_IgA': (0.9, 1.8, 2.5, 5),
-        'serum_IgG': (0.9, 1.25, 1.3, 2.0),
-        'serum': (0.9, 1.25, 1.3, 2.0),
-    },
-    'serum_ratio_of_q0.5_of_sums': {
-        'serum_IgA': (0.9, 1.8, 2.5, 5),
-        'serum_IgG': (0.9, 1.25, 1.3, 2.0),
-        'serum': (0.9, 1.25, 1.3, 2.0),
-    },
+    'IgA_robust_z_score_means':     (0.0, 1.8, 2.5, 5),
+    'IgG_robust_z_score_means':     (0.0, 1.8, 2.5, 5),
+    'IgA_robust_z_score_sums':      (0.0, 1.8, 2.5, 5),
+    'IgG_robust_z_score_sums':      (0.0, 1.8, 2.5, 5),
+    'IgA_ratio_of_q0.5_of_means':   (0.9, 1.8, 2.5, 5),
+    'IgG_ratio_of_q0.5_of_means':   (0.9, 1.25, 1.3, 2.0),
+    'IgA_ratio_of_q0.5_of_sums':    (0.9, 1.8, 2.5, 5),
+    'IgG_ratio_of_q0.5_of_sums':    (0.9, 1.25, 1.3, 2.0)
 }
 
 
-def all_plots(table_path, out_folder, table_key, stat_names, channel_name, identifier=None,
+def all_plots(table_path, out_folder, table_key, stat_names, identifier,
               outlier_table_key='wells/outliers', **well_plot_kwargs):
     if not isinstance(stat_names, (list, tuple)):
         raise ValueError(f"stat_names must be either list or tuple, got {type(stat_names)}")
@@ -354,27 +342,27 @@ def all_plots(table_path, out_folder, table_key, stat_names, channel_name, ident
                             for key, value in get_column_dict(outlier_column_names, outlier_table, 'is_outlier').items()
                             if value]
 
-    plate_name = os.path.split(table_path)[0]
+    plate_name = os.path.split(os.path.split(table_path)[0])[1]
 
     for name in tqdm(stat_names, desc='making plots'):
         try:
-            cmap, colorbar_range = make_colormap_absolute(colorbar_threshold_dict[name][channel_name])
+            cmap, colorbar_range = make_colormap_absolute(colorbar_threshold_dict[name])
         except KeyError:
-            print(f'Warning: No colorbar thresholds specified for stat {name} and channel {channel_name}')
+            print(f'Warning: No colorbar thresholds specified for stat {name}')
             cmap, colorbar_range = None, None
+
         # 0th column is the image / well name
         image_or_well_names = [str(im_name) for im_name in table[:, 0]]
         stat_id = column_names.index(name)
         stats_per_file = dict(zip(image_or_well_names, table[:, stat_id].astype('float')))
 
-        outfile = os.path.join(out_folder, f"plates_{name}.png") if identifier is None else \
-            os.path.join(out_folder, f"plates_{name}_{identifier}.png")
+        outfile = os.path.join(out_folder, f"{plate_name}_{name}_{identifier}.png")
         well_plot(stats_per_file,
                   infected_list=outlier_list,
                   print_medians=True,
                   outfile=outfile,
                   figsize=(11, 6),
-                  title=f'{plate_name}\n{identifier}\n{name}',
+                  title=f'{plate_name}\n{name}_{identifier}',
                   cmap=cmap,
                   colorbar_range=colorbar_range,
                   **well_plot_kwargs)

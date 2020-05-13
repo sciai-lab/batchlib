@@ -17,6 +17,16 @@ def is_processed(folder):
     return 'MergeAnalysisTables' in status
 
 
+def is_processed_mean_and_sums(folder):
+    status = os.path.join(folder, 'batchlib', 'MergeAnalysisTables.status')
+    if not os.path.exists(status):
+        return False
+
+    with open(status) as f:
+        status = json.load(f)
+    return status['state'] == 'processed'
+
+
 def fixed_pattern_plates(patterns):
     inputs = []
     for pattern in patterns:
@@ -69,7 +79,7 @@ def folders_for_manuscript(root_out, check_if_processed):
     if check_if_processed:
         to_process = [os.path.join(ROOT_IN, name)
                       for name, folder in zip(folder_names, to_process)
-                      if not is_processed(folder)]
+                      if not is_processed_mean_and_sums(folder)]
 
     print(len(to_process), "/", len(folder_names), "still need to be processed")
     return to_process

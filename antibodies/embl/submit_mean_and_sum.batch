@@ -1,0 +1,20 @@
+#!/bin/bash
+
+#SBATCH -N 1
+#SBATCH -t 05:00:00
+#SBATCH -p gpu
+#SBATCH --mem 64G
+#SBATCH -c 8
+#SBATCH --qos normal
+
+#SBATCH -C "gpu=2080Ti|gpu=1080Ti"
+#SBATCH --gres=gpu:1
+
+# need to load open-mpi compatible with stardist
+module purge
+module load OpenMPI/3.1.4-GCC-7.3.0-2.30 git
+
+PYTHON="/g/kreshuk/software/miniconda3/envs/antibodies-gpu/bin/python"
+SCRIPT="../mean_and_sum_cell_analysis_workflow.py"
+
+$PYTHON $SCRIPT -c $1 --input_folder $2 --gpu 0 --n_cpus 8 --on_cluster 1 --export_tables 1

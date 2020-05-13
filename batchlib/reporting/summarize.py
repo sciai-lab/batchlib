@@ -7,9 +7,10 @@ from .export_tables import export_scores
 
 
 def make_and_upload_summary(folder_list, experiment_name, token,
-                            channel='#latest-results', clean_up=True):
+                            channel='#latest-results', clean_up=True, ignore_incomplete=False):
     res_file = make_summary(folder_list, experiment_name,
-                            export_score_table=True, clean_up=clean_up)
+                            export_score_table=True, clean_up=clean_up,
+                            ignore_incomplete=ignore_incomplete)
     if token is not None:
         upload_summary_to_slack(res_file, token, channel, clean_up=clean_up)
 

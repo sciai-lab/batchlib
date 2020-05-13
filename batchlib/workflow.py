@@ -2,10 +2,9 @@ import json
 import logging
 import os
 from glob import glob
+from tqdm import tqdm
 
-from batchlib.util import add_file_handler, get_commit_id, get_file_lock, get_logger, open_file
-
-logger = get_logger('Workflow')
+from batchlib.util import add_file_handler, remove_file_handler, get_commit_id, get_file_lock, get_logger, open_file
 
 
 def write_commit_id(folder, commit_id):
@@ -42,7 +41,7 @@ def _update_run_kwargs(run_kwargs, force_recompute,
 
 def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None,
                  ignore_invalid_inputs=None, ignore_failed_outputs=None,
-                 lock_folder=True):
+                 lock_folder=True, enable_logging=True):
     """ Run workflow of consecutive batch jobs.
 
     The jobs to be run are specified in a dictionary, like
@@ -68,14 +67,23 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
         ignore_invalid_inputs - whether to continue processing with invalid inputs (default: None)
         ignore_failed_outputs - whether to continue processing with failed outputs (default: None)
         lock_folder - lock the folder so that no other workflow can act on it (default: True)
+        enable_logging - whether to log to stdout and a log file
     """
+    if enable_logging:
+        logger = get_logger('Workflow')
+    else:
+        logger = logging.getLogger('Workflow')
+        logger.addHandler(logging.NullHandler())
 
     work_dir = os.path.join(folder, 'batchlib')
     os.makedirs(work_dir, exist_ok=True)
-    # register file workflow's log file
-    fh = add_file_handler(logger, work_dir, name)
-    # add file handler to tensorboard logger
-    logging.getLogger('tensorflow').addHandler(fh)
+    # register workflow's log file
+    if enable_logging:
+        fh = add_file_handler(logger, work_dir, name)
+        # add file handler to tensorboard logger
+        logging.getLogger('tensorflow').addHandler(fh)
+    else:
+        logger.addHandler(logging.NullHandler())
 
     # lock the git commit
     commit_id = get_commit_id()
@@ -90,7 +98,9 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
 
         logger.info(f"Running workflow: '{name}'. Job spec: {job_dict}")
 
-        for job_id, (job_class, kwarg_dict) in enumerate(job_dict.items() if isinstance(job_dict, dict) else job_dict):
+        for job_id, (job_class, kwarg_dict) in tqdm(list(
+                enumerate(job_dict.items() if isinstance(job_dict, dict) else job_dict)),
+                desc=f"Running jobs of workflow '{name}'", disable=not enable_logging):
             build_kwargs = kwarg_dict.get('build', {})
             run_kwargs = kwarg_dict.get('run', {})
 
@@ -129,3 +139,6 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
             # write commit id to all processed files, so we know which batchlib version was used
             if commit_id is not None:
                 write_commit_id(folder, commit_id)
+
+    if enable_logging:
+        remove_file_handler(logger, work_dir)
