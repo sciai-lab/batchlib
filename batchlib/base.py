@@ -116,7 +116,10 @@ class BatchJob(ABC):
         state = status.get('state', 'processed')
 
         in_pattern = os.path.join(input_folder, self.input_pattern)
+        logger.info(f"{self.name}: searching for inputs with pattern {in_pattern}")
         input_files = glob(in_pattern)
+        logger.info(f"{self.name}: found {len(input_files)} input files in total")
+
         # check if we have invalid inputs
         invalid_inputs = self.get_invalid_inputs(input_files)
         if len(invalid_inputs) > 0:

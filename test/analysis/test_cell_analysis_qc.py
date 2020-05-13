@@ -1,16 +1,20 @@
 import os
 import unittest
+from glob import glob
 from shutil import rmtree
 
 import numpy as np
 import pandas as pd
-from batchlib.util.io import open_file, read_table, write_image
+from batchlib.util.io import open_file, read_image, read_table, write_image
 
 
 class TestCellLevelQC(unittest.TestCase):
+    input_folder = os.path.join(os.path.split(__file__)[0], '../../data/test_data/test')
+    misc_folder = os.path.join(os.path.split(__file__)[0], '../../misc')
+    n_cpus = 4
     folder = './out'
 
-    def setUp(self):
+    def make_toy_data(self):
         os.makedirs(self.folder, exist_ok=True)
 
         # make the segmentation
@@ -40,29 +44,28 @@ class TestCellLevelQC(unittest.TestCase):
         except OSError:
             pass
 
-    def run_wf(self, outlier_criteria):
-        from batchlib.analysis.cell_level_analysis import InstanceFeatureExtraction, FindInfectedCells
+    def run_wf1(self, outlier_criteria):
+        from batchlib.analysis.cell_level_analysis import (InstanceFeatureExtraction,
+                                                           FindInfectedCells,
+                                                           ExtractBackground)
         from batchlib.analysis.cell_analysis_qc import CellLevelQC
         from batchlib.workflow import run_workflow
 
         job_dict = {
             InstanceFeatureExtraction: {'build': {'cell_seg_key': self.cell_seg_key}},
+            ExtractBackground: {'build': {'cell_seg_key': self.cell_seg_key,
+                                          'serum_key': 'serum',
+                                          'actual_channels_to_use': ['serum', 'marker'],
+                                          'marker_key': 'marker'}},
             FindInfectedCells: {'build': {'cell_seg_key': self.cell_seg_key}},
             CellLevelQC: {'build': {'cell_seg_key': self.cell_seg_key,
                                     'outlier_criteria': outlier_criteria}}
         }
         run_workflow('test', self.folder, job_dict)
 
-    def test_size_thresholds(self):
-        min_size = 4
-        max_size = 7
-        outlier_criteria = {'min_size_threshold': min_size,
-                            'max_size_threshold': max_size}
-        self.run_wf(outlier_criteria)
-
-        # check the results
-        qc_table_name = 'seg/serum_outliers'
-        with open_file(self.path, 'r') as f:
+    def check_size_thresholds(self, path, seg_key, qc_table_name, min_size, max_size):
+        with open_file(path, 'r') as f:
+            seg = read_image(f, seg_key)
             col_names, table = read_table(f, qc_table_name)
 
         label_ids = table[:, col_names.index('label_id')]
@@ -72,7 +75,7 @@ class TestCellLevelQC(unittest.TestCase):
         outlier_values = {label: val for label, val in zip(label_ids, outlier_values)}
         outlier_type = {label: val for label, val in zip(label_ids, outlier_type)}
 
-        cell_ids, cell_sizes = np.unique(self.seg, return_counts=True)
+        cell_ids, cell_sizes = np.unique(seg, return_counts=True)
         self.assertTrue(np.array_equal(cell_ids, label_ids))
 
         for label, size in zip(cell_ids, cell_sizes):
@@ -86,6 +89,95 @@ class TestCellLevelQC(unittest.TestCase):
             else:
                 self.assertEqual(val, 0)
                 self.assertEqual(otype, 'none')
+
+    def test_size_thresholds_toy(self):
+        self.make_toy_data()
+
+        min_size = 4
+        max_size = 7
+        outlier_criteria = {'min_size_threshold': min_size,
+                            'max_size_threshold': max_size}
+        self.run_wf1(outlier_criteria)
+
+        # check the results
+        qc_table_name = 'seg/serum_outliers'
+        self.check_size_thresholds(self.path, self.cell_seg_key, qc_table_name,
+                                   min_size, max_size)
+
+    def run_wf2(self, outlier_criteria):
+        from batchlib.preprocessing import Preprocess
+        from batchlib.analysis.cell_level_analysis import (InstanceFeatureExtraction,
+                                                           FindInfectedCells,
+                                                           ExtractBackground)
+        from batchlib.analysis.cell_analysis_qc import CellLevelQC
+        from batchlib.segmentation import SeededWatershed
+        from batchlib.segmentation.stardist_prediction import StardistPrediction
+        from batchlib.segmentation.torch_prediction import TorchPrediction
+        from batchlib.segmentation.unet import UNet2D
+        from batchlib.workflow import run_workflow
+
+        model_root = os.path.join(self.misc_folder, 'models/stardist')
+        model_name = '2D_dsb2018'
+
+        torch_model_path = os.path.join(self.misc_folder, 'models/torch/fg_and_boundaries_V1.torch')
+        torch_model_class = UNet2D
+        torch_model_kwargs = {
+            'in_channels': 1,
+            'out_channels': 2,
+            'f_maps': [32, 64, 128, 256, 512],
+            'testing': True
+        }
+
+        job_dict = {
+            Preprocess.from_folder: {'build': {'input_folder': self.input_folder},
+                                     'run': {'n_jobs': self.n_cpus}},
+            TorchPrediction: {'build': {'input_key': 'serum_IgG',
+                                        'output_key': ['mask', 'boundaries'],
+                                        'model_path': torch_model_path,
+                                        'model_class': torch_model_class,
+                                        'model_kwargs': torch_model_kwargs},
+                              'run': {'gpu_id': None,
+                                      'batch_size': 1,
+                                      'threshold_channels': {0: 0.5}}},
+            StardistPrediction: {'build': {'model_root': model_root,
+                                           'model_name': model_name,
+                                           'input_key': 'nuclei',
+                                           'output_key': 'nucleus_segmentation'},
+                                 'run': {'gpu_id': None,
+                                         'n_jobs': self.n_cpus}},
+            SeededWatershed: {'build': {'pmap_key': 'boundaries',
+                                        'seed_key': 'nucleus_segmentation',
+                                        'output_key': 'segmentation',
+                                        'mask_key': 'mask'},
+                              'run': {'erode_mask': 20,
+                                      'dilate_seeds': 3,
+                                      'n_jobs': self.n_cpus}},
+            InstanceFeatureExtraction: {'build': {'cell_seg_key': 'segmentation',
+                                                  'channel_keys': ['serum_IgG', 'marker']}},
+            ExtractBackground: {'build': {'serum_key': 'serum_IgG',
+                                          'cell_seg_key': 'segmentation',
+                                          'actual_channels_to_use': ['serum_IgG', 'marker'],
+                                          'marker_key': 'marker'}},
+            FindInfectedCells: {'build': {'cell_seg_key': 'segmentation'}},
+            CellLevelQC: {'build': {'cell_seg_key': 'segmentation',
+                                    'serum_key': 'serum_IgG',
+                                    'outlier_criteria': outlier_criteria}}
+        }
+        run_workflow('test', self.folder, job_dict, input_folder=self.input_folder)
+
+    def test_size_thresholds(self):
+        # choose high low / low high thresholds to get sum hits
+        min_size = 400
+        max_size = 750
+        outlier_criteria = {'min_size_threshold': min_size,
+                            'max_size_threshold': max_size}
+        self.run_wf2(outlier_criteria)
+
+        # check the results
+        for path in glob(os.path.join(self.folder, '*.h5')):
+            qc_table_name = 'segmentation/serum_IgG_outliers'
+            self.check_size_thresholds(path, 'segmentation', qc_table_name,
+                                       min_size, max_size)
 
 
 class TestImageLevelQC(unittest.TestCase):
