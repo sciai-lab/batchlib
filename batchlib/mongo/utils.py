@@ -121,3 +121,14 @@ def create_plate_doc(plate_name, plate_dir):
     }
 
     return result
+
+
+def _get_table_names(f):
+    table_names = set()
+
+    def _visitor(name):
+        if name.endswith('cells'):
+            table_names.add(name[:-6])
+
+    f['tables'].visit(_visitor)
+    return list(table_names)

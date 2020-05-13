@@ -1,0 +1,51 @@
+# path to the checkpoint file containing the model
+model_path: '/g/kreshuk/wolny/workspace/antibodies-nuclei/unet_segmentation/sample_models/fg_boundaries_best_checkpoint.pytorch'
+model:
+  name: UNet2D
+  # number of input channels to the model
+  in_channels: 1
+  # number of output channels
+  out_channels: 2
+  # determines the order of operators in a single layer (crg - Conv3d+ReLU+GroupNorm)
+  layer_order: gcr
+  # initial number of feature maps
+  f_maps: [32, 64, 128, 256, 512]
+  # number of groups in the groupnorm
+  num_groups: 8
+  # apply element-wise nn.Sigmoid after the final 1x1x1 convolution, otherwise apply nn.Softmax
+  final_sigmoid: true
+  is_segmentation: true
+# predictor configuration
+predictor:
+  # standard in memory predictor
+  name: 'StandardPredictor'
+  # padding to be removed from each axis in order to avoid checkerboard artifacts
+  patch_halo: [0, 16, 16]
+# specify the test datasets
+loaders:
+  # batch dimension; if number of GPUs is N > 1, then a batch_size of N * batch_size will automatically be taken for DataParallel
+  batch_size: 32
+  # mirror pad the raw data for sharper prediction near the boundaries of the volume
+  mirror_padding: [0, 32, 32]
+  # path to the raw data within the H5
+  raw_internal_path: raw
+  # how many subprocesses to use for data loading
+  num_workers: 8
+  test:
+    # paths to the test datasets; if a given path is a directory all H5 files ('*.h5', '*.hdf', '*.hdf5', '*.hd5')
+    # inside this this directory will be included as well (non-recursively)
+    file_paths:
+      - '/g/kreshuk/wolny/Datasets/Covid19-Antibodies/WellC05_PointC05_0004_ChannelDAPI,WF_GFP,TRITC,WF_Cy5_Seq0256.h5'
+
+    # SliceBuilder configuration, i.e. how to iterate over the input volume patch-by-patch
+    slice_builder:
+      name: SliceBuilder
+      patch_shape: [1, 256, 256]
+      stride_shape: [1, 64, 64]
+      skip_shape_check: true
+
+    transformer:
+        raw:
+          - name: Standardize
+          - name: ToTensor
+            expand_dims: true
