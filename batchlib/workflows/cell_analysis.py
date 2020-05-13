@@ -24,7 +24,9 @@ from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
 from batchlib.segmentation.voronoi_ring_segmentation import ErodeSegmentation
-from batchlib.reporting import SlackSummaryWriter, export_tables_for_plate
+from batchlib.reporting import (SlackSummaryWriter,
+                                export_tables_for_plate,
+                                WriteBackgroundSubtractedImages)
 from batchlib.util import get_logger
 from batchlib.util.plate_visualizations import all_plots
 
@@ -269,12 +271,14 @@ def core_workflow_tasks(config, name, feature_identifier):
     # to the table holding these values.
     background_parameters = parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys)
 
+    table_path = CellLevelAnalysis.folder_to_table_path(config.folder)
     if config.write_background_images:
         job_list.append(
-            WriteBackgroundSubtractedImages, {
-                'build': {'background_dict': background_parameters},
-                'run': {'n_jobs': config.n_cpus}
-            }
+            (WriteBackgroundSubtractedImages, {
+                 'build': {'background_dict': background_parameters,
+                           'table_path': table_path},
+                 'run': {'n_jobs': config.n_cpus}
+            })
         )
 
     infected_detection_jobs = get_infected_detection_jobs(config, marker_ana_in_key, feature_identifier)

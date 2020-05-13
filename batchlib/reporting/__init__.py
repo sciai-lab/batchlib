@@ -1,4 +1,4 @@
 from .export_tables import export_tables_for_plate
 from .slack_summary import SlackSummaryWriter
 from .summarize import make_and_upload_summary
-from write_background_images import WriteBackgroundSubtractedImages
+from .write_background_subtracted_images import WriteBackgroundSubtractedImages
