@@ -12,8 +12,8 @@ logger = get_logger('Workflow.BatchJob.CellLevelAnalysis')
 # default size threshold provided by Vibor
 DEFAULT_CELL_OUTLIER_CRITERIA = {'max_cell_size': 12000,  # previous: 10000
                                  'min_cell_size': 750,  # previous: 1000
-                                 'min_nucleus_size': None,
-                                 'max_nucleus_size': None}
+                                 'min_nucleus_size': None,  # suggested by Vibor: 100
+                                 'max_nucleus_size': None}  # suggested by Vibor: 1000
 
 
 DEFAULT_IMAGE_OUTLIER_CRITERIA = {'max_number_cells': 1000,  # previous: 1000
