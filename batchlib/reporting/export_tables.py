@@ -8,6 +8,9 @@ from ..util import read_table, open_file, image_name_to_site_name, image_name_to
 SUPPORTED_TABLE_FORMATS = {'excel': '.xlsx',
                            'csv': '.csv',
                            'tsv': '.tsv'}
+# TODO more scores to report?
+DEFAULT_SCORE_PATTERNS = ['robust_z_score_of_means',
+                          'ratio_of_q0.5_of_means']
 
 
 def format_to_extension(format_):
@@ -120,12 +123,15 @@ def export_tables_for_plate(folder, cell_table_name='cell_segmentation', ext='.x
     export_cell_tables(folder, class_out, class_name)
 
 
-def export_scores(folder_list, output_path, table_name='wells/default'):
+# TODO also get values from the db
+def export_scores(folder_list, output_path,
+                  score_patterns=DEFAULT_SCORE_PATTERNS,
+                  table_name='wells/default'):
     columns = None
     table = []
 
     def name_matches_score(name):
-        return 'score' in name and ('robust' not in name)
+        return any(pattern in name for pattern in score_patterns)
 
     for folder in folder_list:
         plate_name = os.path.split(folder)[1]
