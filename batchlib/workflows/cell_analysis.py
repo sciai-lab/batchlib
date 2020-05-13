@@ -30,10 +30,10 @@ from batchlib.util.plate_visualizations import all_plots
 
 logger = get_logger('Workflow.CellAnalysis')
 
-DEFAULT_PLOT_NAMES = ['serum_ratio_of_q0.5_of_means',
-                      'serum_ratio_of_q0.5_of_sums',
-                      'serum_robust_z_score_sums',
-                      'serum_robust_z_score_means']
+DEFAULT_PLOT_NAMES = ['ratio_of_q0.5_of_means',
+                      'ratio_of_q0.5_of_sums',
+                      'robust_z_score_sums',
+                      'robust_z_score_means']
 
 
 def get_analysis_parameter(config, background_parameters):
@@ -342,7 +342,7 @@ def core_workflow_tasks(config, name, feature_identifier):
     return job_list, table_identifiers
 
 
-def workflow_summaries(name, config, t0, stat_names=DEFAULT_PLOT_NAMES):
+def workflow_summaries(name, config, t0, workflow_name, input_folder, stat_names):
     # run all plots on the output files
     plot_folder = os.path.join(config.folder, 'plots')
 
@@ -360,13 +360,15 @@ def workflow_summaries(name, config, t0, stat_names=DEFAULT_PLOT_NAMES):
               wedge_width=0)
 
     db_writer = DbResultWriter(
+        workflow_name=workflow_name,
+        plate_dir=input_folder,
         username=config.db_username,
         password=config.db_password,
         host=config.db_host,
         port=config.db_port,
         db_name=config.db_name
     )
-    db_writer(config.folder, config.folder)
+    db_writer(config.folder, config.folder, t0=t0)
 
     t0 = time.time() - t0
     summary_writer = SlackSummaryWriter(config.slack_token)
@@ -398,7 +400,9 @@ def run_cell_analysis(config):
 
     # only run the workflow summaries if we don't have the feature identifier
     if feature_identifier is None:
-        workflow_summaries(name, config, t0)
+        stat_names = [idf.replace('serum_', '') + '_' + name
+                      for name in DEFAULT_PLOT_NAMES for idf in table_identifiers]
+        workflow_summaries(name, config, t0, workflow_name=name, input_folder=config.input_folder, stat_names=stat_names)
 
     return table_identifiers
 
