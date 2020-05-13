@@ -14,7 +14,7 @@ from batchlib.segmentation.voronoi_ring_segmentation import VoronoiRingSegmentat
 from batchlib.segmentation.unet import UNet2D
 from batchlib import run_workflow
 from batchlib.analysis.cell_level_analysis import InstanceFeatureExtraction, FindInfectedCells, \
-    DenoiseByGrayscaleOpening, ExtractBackground
+    DenoiseByGrayscaleOpening, DenoiseByWhiteTophat, ExtractBackground
 
 from tqdm.auto import tqdm
 from glob import glob
@@ -97,11 +97,11 @@ def preprocess(config, ann_files, tiff_files):
 
         serum_keys = get_serum_keys(plate)
         try:
-            serum_seg_in_key = next(iter(filter(lambda key: key.endswith('IgG'), serum_keys))) + '_corrected'
+            serum_seg_in_key = next(iter(filter(lambda key: key.endswith('IgG'), serum_keys))) + ''
         except StopIteration:
-            serum_seg_in_key = serum_keys[0] + '_corrected'
-        if serum_seg_in_key != 'serum_corrected':
-            rename_serum_key = CopyImg(serum_seg_in_key, 'serum_corrected')
+            serum_seg_in_key = serum_keys[0] + ''
+        if serum_seg_in_key != 'serum':
+            rename_serum_key = CopyImg(serum_seg_in_key, 'serum')
             rename_serum_key.run(out_files, out_files)
 
     # copy the infected gt to the out_files
@@ -112,7 +112,7 @@ def preprocess(config, ann_files, tiff_files):
 
 
 def compute_segmentations(config, SubParamRanges):
-    nuc_seg_in_key = 'nuclei_corrected'
+    nuc_seg_in_key = 'nuclei'
 
     misc_folder = config.misc_folder
 
@@ -131,7 +131,7 @@ def compute_segmentations(config, SubParamRanges):
     job_list = [
         (TorchPrediction, {
             'build': {
-                'input_key': 'serum_corrected',
+                'input_key': 'serum',
                 'output_key': [config.mask_key, config.bd_key],
                 'model_path': torch_model_path,
                 'model_class': torch_model_class,
@@ -191,9 +191,9 @@ def denoise_and_extract_backgrounds(config, SearchSpace):
         print('\ndenoising with radius', denoise_radius)
         if denoise_radius == 0:
             return
-        job_list = [(DenoiseByGrayscaleOpening, {
+        job_list = [(DenoiseByWhiteTophat, {
             'build': {
-                'key_to_denoise': 'marker_corrected',
+                'key_to_denoise': 'marker',
                 'output_key': _marker_key(denoise_radius),
                 'radius': denoise_radius},
             }
@@ -231,7 +231,7 @@ def get_identifier(*args):
 
 
 def _marker_key(denoise_radius):
-    return 'marker_corrected' if denoise_radius == 0 else f'marker_corrected_denoised{denoise_radius}'
+    return 'marker' if denoise_radius == 0 else f'marker_denoised{denoise_radius}'
 
 
 def extract_feature_grid(config, SubParamRanges, SearchSpace):
@@ -241,7 +241,7 @@ def extract_feature_grid(config, SubParamRanges, SearchSpace):
         # if denoise_radius > 0:
         #     job_list = [(DenoiseByGrayscaleOpening, {
         #         'build': {
-        #             'key_to_denoise': 'marker_corrected',
+        #             'key_to_denoise': 'marker',
         #             'output_key': _marker_key(denoise_radius),
         #             'radius': denoise_radius},
         #         }
@@ -273,7 +273,7 @@ def extract_feature_grid(config, SubParamRanges, SearchSpace):
 
 class FindInfectedCellsParallel(FindInfectedCells):
     @staticmethod
-    def folder_to_table_path(folder, identifier):
+    def folder_to_table_path(folder):
         tables = glob(os.path.join(os.path.dirname(folder), '*.hdf5'))
         assert len(tables) == 1, f'{tables}, {folder}'
         return tables[0]
@@ -308,7 +308,7 @@ def get_plate_bg(
     table = tables[0]
     with open_file(table) as f:
         column_names, table = read_table(f, 'plate/backgrounds')
-    column_key = 'marker_corrected_median' if 'marker_corrected_median' in column_names else 'marker_median'
+    column_key = 'marker_median' if 'marker_median' in column_names else 'marker_median'
     return float(list(get_column_dict(column_names, table, column_key).values())[0])
 
 
