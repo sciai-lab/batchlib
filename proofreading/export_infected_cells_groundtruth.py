@@ -35,7 +35,24 @@ def export_from_bigcat(in_path, out_path):
         f.create_dataset('infected', data=seg, compression='gzip')
 
 
+def export_all():
+    import os
+    from glob import glob
+    out_folder = '/home/pape/Work/covid/antibodies-nuclei/groundtruth/infection/20200405_test_images'
+    names = glob('./old_gt/*.h5')
+    names.sort()
+    for ii, name in enumerate(names, 1):
+        name = os.path.splitext(os.path.split(name)[1])[0]
+        out_path = os.path.join(out_folder, name + '_infected_nuclei.h5')
+        in_path = './bkp%i.h5' % ii
+        print(in_path)
+        print(out_path)
+        print()
+        export_from_bigcat(in_path, out_path)
+
+
 if __name__ == '__main__':
+    # export_all()
     parser = argparse.ArgumentParser()
     parser.add_argument('input_path', type=str)
     parser.add_argument('output_path', type=str)
