@@ -159,7 +159,8 @@ class DenoiseChannel(BatchJobOnContainer):
         raise NotImplementedError
 
     def run(self, input_files, output_files, n_jobs=1):
-        def process_image(input_file, output_file):
+        def process_image(files):
+            input_file, output_file = files
             with open_file(input_file, 'r') as f:
                 img = self.read_image(f, self.input_key)
             img = self.denoise(img)
@@ -167,7 +168,7 @@ class DenoiseChannel(BatchJobOnContainer):
                 self.write_image(f, self.output_key, img)
 
         with futures.ThreadPoolExecutor(n_jobs) as tp:
-            list(tqdm(tp.starmap(process_image, zip(input_files, output_files)),
+            list(tqdm(tp.map(process_image, zip(input_files, output_files)),
                       desc=f'denoising {self.input_key} -> {self.output_key}',
                       total=len(output_files)))
 
