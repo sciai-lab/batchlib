@@ -314,7 +314,6 @@ def core_workflow_tasks(config, name, feature_identifier):
     table_identifiers = serum_ana_in_keys if feature_identifier is None else [k + f'_{feature_identifier}'
                                                                               for k in serum_ana_in_keys]
     # NOTE currently the QC tasks will not be rerun if the feature identifier changes
-    print('asdf'*100, '/n', marker_ana_in_key)
     for serum_key, identifier in zip(serum_ana_in_keys, table_identifiers):
         job_list.append((CellLevelQC, {
             'build': {
