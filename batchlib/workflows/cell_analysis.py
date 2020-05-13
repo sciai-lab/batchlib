@@ -24,7 +24,9 @@ from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
 from batchlib.segmentation.voronoi_ring_segmentation import ErodeSegmentation
-from batchlib.reporting import SlackSummaryWriter, export_tables_for_plate
+from batchlib.reporting import (SlackSummaryWriter,
+                                export_tables_for_plate,
+                                WriteBackgroundSubtractedImages)
 from batchlib.util import get_logger
 from batchlib.util.plate_visualizations import all_plots
 
@@ -263,14 +265,26 @@ def core_workflow_tasks(config, name, feature_identifier):
               'cell_seg_key': config.seg_key}})]
     )
 
-    infected_detection_jobs = get_infected_detection_jobs(config, marker_ana_in_key, feature_identifier)
-    job_list.extend(infected_detection_jobs)
-
     # for the background substraction, we can either use a fixed value per channel,
     # or compute it from the data. In the first case, we pass the value
     # as 'serum_bg_key' / 'marker_bg_key'. In the second case, we pass a key
     # to the table holding these values.
     background_parameters = parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys)
+
+    table_path = CellLevelAnalysis.folder_to_table_path(config.folder)
+    if config.write_background_images:
+        job_list.append(
+            (WriteBackgroundSubtractedImages, {
+                 'build': {'background_dict': background_parameters,
+                           'table_path': table_path,
+                           'scale_factors': config.scale_factors},
+                 'run': {'n_jobs': config.n_cpus,
+                         'force_recompute': None}
+            })
+        )
+
+    infected_detection_jobs = get_infected_detection_jobs(config, marker_ana_in_key, feature_identifier)
+    job_list.extend(infected_detection_jobs)
 
     table_identifiers = serum_ana_in_keys if feature_identifier is None else [k + f'_{feature_identifier}'
                                                                               for k in serum_ana_in_keys]
@@ -318,7 +332,7 @@ def core_workflow_tasks(config, name, feature_identifier):
                 'scale_factors': config.scale_factors,
                 'feature_identifier': feature_identifier,
                 'identifier': identifier},
-            'run': {'force_recompute': False}}))
+            'run': {'force_recompute': None}}))
 
     # get a dict with all relevant analysis parameters, so that we can write it as a table and log it
     analysis_parameter = get_analysis_parameter(config, background_parameters)
@@ -336,7 +350,8 @@ def core_workflow_tasks(config, name, feature_identifier):
         'build': {'input_table_names': table_identifiers,
                   'reference_table_name': reference_table_name,
                   'analysis_parameters': analysis_parameter,
-                  'identifier': feature_identifier}
+                  'identifier': feature_identifier},
+        'run': {'force_recompute': None}
     }))
 
     return job_list, table_identifiers
@@ -402,7 +417,8 @@ def run_cell_analysis(config):
     if feature_identifier is None:
         stat_names = [idf.replace('serum_', '') + '_' + name
                       for name in DEFAULT_PLOT_NAMES for idf in table_identifiers]
-        workflow_summaries(name, config, t0, workflow_name=name, input_folder=config.input_folder, stat_names=stat_names)
+        workflow_summaries(name, config, t0, workflow_name=name,
+                           input_folder=config.input_folder, stat_names=stat_names)
 
     return table_identifiers
 
@@ -481,7 +497,10 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--force_recompute", default=None)
     parser.add("--ignore_invalid_inputs", default=None)
     parser.add("--ignore_failed_outputs", default=None)
+
+    # additional image output
     parser.add("--write_summary_images", default=True)
+    parser.add("--write_background_images", default=True)
 
     # MongoDB client config
     parser.add("--db_username", type=str, default='covid19')

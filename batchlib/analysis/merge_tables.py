@@ -12,7 +12,8 @@ logger = get_logger('Workflow.BatchJob.MergeAnalysisTables')
 # - all tables: q0.5, robuse_z_score
 # - reference table:  score, number of cells and outliers
 # see also https://github.com/hci-unihd/batchlib/issues/91
-DEFAULT_COMMON_NAME_PATTERNS = ('ratio_of_q0.5', 'robust_z_score', 'mad', 'q0.5_of_cell')
+DEFAULT_COMMON_NAME_PATTERNS = ('ratio_of_q0.5', 'robust_z_score', 'mad', 'q0.5_of_cell',
+                                'ratio_of_mean', 'mean_of_cell')
 DEFAULT_REFERENCE_NAME_PATTERNS = ('score', 'n_cells', 'n_infected', 'n_control', 'n_outlier_cells',
                                    'fraction_infected', 'is_outlier', 'outlier_type')
 
@@ -124,7 +125,7 @@ class MergeAnalysisTables(BatchJobOnContainer):
                  common_name_patterns=DEFAULT_COMMON_NAME_PATTERNS,
                  reference_name_patterns=DEFAULT_REFERENCE_NAME_PATTERNS,
                  analysis_parameters=None, background_column_pattern='median',
-                 identifier=None, **super_kwargs):
+                 identifier=None, hide_sums=True, **super_kwargs):
 
         if reference_table_name not in input_table_names:
             raise ValueError(f"{reference_table_name} was not found in {input_table_names}")
@@ -138,6 +139,8 @@ class MergeAnalysisTables(BatchJobOnContainer):
         self.background_column_pattern = background_column_pattern
         self.image_background_table = 'images/backgrounds'
         self.well_background_table = 'wells/backgrounds'
+
+        self.hide_sums = hide_sums
 
         in_table_keys = ['images/' + in_key for in_key in input_table_names]
         in_table_keys += ['wells/' + in_key for in_key in input_table_names]
@@ -268,8 +271,16 @@ class MergeAnalysisTables(BatchJobOnContainer):
             im_col_id = column_names.index('image_name')
             visible[im_col_id] = 0
 
+        # hide the sum columns if specified
+        if self.hide_sums:
+            sum_cols = [ii for ii, name in enumerate(column_names) if 'sum' in name]
+            logger.info(f"{self.name}: hide {len(sum_cols)} columns that contain sum based scores")
+            visible[sum_cols] = 0
+
+        logger.info(f"{self.name}: write merged table with columns {column_names}")
+
         with open_file(out_file, 'a') as f:
-            self.write_table(f, out_name, column_names, table, visible)
+            self.write_table(f, out_name, column_names, table, visible, force_write=True)
 
     def merge_image_tables(self, in_file, out_file):
         self._merge_tables(in_file, out_file, 'images', self.image_table_name, is_image=True)

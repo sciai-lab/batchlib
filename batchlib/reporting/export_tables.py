@@ -3,7 +3,7 @@ from glob import glob
 
 import numpy as np
 import pandas as pd
-from ..util import read_table, open_file, image_name_to_site_name
+from ..util import read_table, open_file, image_name_to_site_name, image_name_to_well_name
 
 SUPPORTED_TABLE_FORMATS = {'excel': '.xlsx',
                            'csv': '.csv',
@@ -60,7 +60,7 @@ def export_cell_tables(folder, output_path, table_name, output_format=None):
     files.sort()
 
     plate_name = os.path.split(folder)[1]
-    initial_columns = ['plate_name', 'site_name']
+    initial_columns = ['plate_name', 'well_name', 'site_name']
     columns = None
     table = []
 
@@ -70,18 +70,21 @@ def export_cell_tables(folder, output_path, table_name, output_format=None):
         if columns is None:
             columns = initial_columns + this_columns
 
-        site_name = image_name_to_site_name(path)
+        image_name = os.path.splitext(os.path.split(path)[1])[0]
+        well_name = image_name_to_well_name(image_name)
+        site_name = image_name_to_site_name(image_name)
 
         plate_col = np.array([plate_name] * len(this_table))
+        well_col = np.array([well_name] * len(this_table))
         site_col = np.array([site_name] * len(this_table))
-        res_table = np.concatenate([plate_col[:, None], site_col[:, None], this_table], axis=1)
+        res_table = np.concatenate([plate_col[:, None], well_col[:, None], site_col[:, None], this_table], axis=1)
         table.append(res_table)
 
     table = np.concatenate(table, axis=0)
     export_table(columns, table, output_path, output_format)
 
 
-def export_tables_for_plate(folder, ext='.xlsx'):
+def export_tables_for_plate(folder, cell_table_name='cell_segmentation', ext='.xlsx'):
     """ Conveneince function to export all relevant tables for a plate
     into a more common format (by default excel).
     """
@@ -98,17 +101,23 @@ def export_tables_for_plate(folder, ext='.xlsx'):
 
     # export the cell segmentation tables
     im_file = glob(os.path.join(folder, '*.h5'))[0]
-    cell_tables_key = 'tables/cell_segmentation'
+    cell_tables_key = f'tables/{cell_table_name}'
     with open_file(im_file, 'r') as f:
         if cell_tables_key not in f:
             raise RuntimeError(f"Could not find {cell_tables_key} in {im_file}")
         g = f[cell_tables_key]
-        cell_table_names = ['cell_segmentation/' + name for name in g.keys()]
+        cell_table_names = [f'{cell_table_name}/' + name for name in g.keys()]
 
     for cell_table_name in cell_table_names:
         channel_name = cell_table_name.split('/')[-1]
         cell_out = os.path.join(folder, f'{plate_name}_cell_table_{channel_name}{ext}')
         export_cell_tables(folder, cell_out, cell_table_name)
+
+    # export the infected/non-infected classification
+    # cell_table_root = cell_table_name.split('/')[0]
+    class_name = f'cell_classification/cell_segmentation/marker'
+    class_out = os.path.join(folder, f'{plate_name}_cell_table_infected_clasification{ext}')
+    export_cell_tables(folder, class_out, class_name)
 
 
 def export_scores(folder_list, output_path, table_name='wells/default'):

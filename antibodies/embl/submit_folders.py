@@ -28,6 +28,7 @@ def submit_folders(folder_list, config_file=None, fixed_background=False, tischi
     assert all(os.path.exists(folder) for folder in folder_list), str(folder_list)
 
     if mean_and_sum:
+        assert False, "Currently not working !"
         slurm_file = 'submit_mean_and_sum.batch'
     else:
         slurm_file = 'submit_cell_analysis_var_conf.batch'
