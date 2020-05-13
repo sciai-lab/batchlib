@@ -3,7 +3,7 @@ from glob import glob
 
 import numpy as np
 import pandas as pd
-from ..util import read_table, open_file, image_name_to_site_name
+from ..util import read_table, open_file, image_name_to_site_name, image_name_to_well_name
 
 SUPPORTED_TABLE_FORMATS = {'excel': '.xlsx',
                            'csv': '.csv',
@@ -60,7 +60,7 @@ def export_cell_tables(folder, output_path, table_name, output_format=None):
     files.sort()
 
     plate_name = os.path.split(folder)[1]
-    initial_columns = ['plate_name', 'site_name']
+    initial_columns = ['plate_name', 'well_name', 'site_name']
     columns = None
     table = []
 
@@ -70,11 +70,14 @@ def export_cell_tables(folder, output_path, table_name, output_format=None):
         if columns is None:
             columns = initial_columns + this_columns
 
-        site_name = image_name_to_site_name(path)
+        image_name = os.path.splitext(os.path.split(path)[1])[0]
+        well_name = image_name_to_well_name(image_name)
+        site_name = image_name_to_site_name(image_name)
 
         plate_col = np.array([plate_name] * len(this_table))
+        well_col = np.array([well_name] * len(this_table))
         site_col = np.array([site_name] * len(this_table))
-        res_table = np.concatenate([plate_col[:, None], site_col[:, None], this_table], axis=1)
+        res_table = np.concatenate([plate_col[:, None], well_col[:, None], site_col[:, None], this_table], axis=1)
         table.append(res_table)
 
     table = np.concatenate(table, axis=0)
@@ -109,6 +112,12 @@ def export_tables_for_plate(folder, cell_table_name='cell_segmentation', ext='.x
         channel_name = cell_table_name.split('/')[-1]
         cell_out = os.path.join(folder, f'{plate_name}_cell_table_{channel_name}{ext}')
         export_cell_tables(folder, cell_out, cell_table_name)
+
+    # export the infected/non-infected classification
+    cell_table_root = cell_table_name.split('/')[0]
+    class_name = f'cell_classification/{cell_table_root}/marker'
+    class_out = os.path.join(folder, f'{plate_name}_cell_table_infected_clasification{ext}')
+    export_cell_tables(folder, class_out, class_name)
 
 
 def export_scores(folder_list, output_path, table_name='wells/default'):
