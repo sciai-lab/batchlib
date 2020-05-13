@@ -4,20 +4,24 @@ from tqdm import tqdm
 
 from .cell_level_analysis import (CellLevelAnalysisBase, CellLevelAnalysisWithTableBase,
                                   compute_ratios, load_cell_outlier_dict)
-from ..util.io import open_file, image_name_to_site_name
+from ..util import open_file, image_name_to_site_name, get_logger
+
+logger = get_logger('Workflow.BatchJob.CellLevelAnalysis')
 
 # TODO all values are still preliminary and need to be validated on actual data
 # default size threshold provided by Vibor
-DEFAULT_CELL_OUTLIER_CRITERIA = {'max_size_threshold': None,  # previous: 10000
-                                 'min_size_threshold': 10}  # previous: 1000
+DEFAULT_CELL_OUTLIER_CRITERIA = {'max_cell_size': 12000,  # previous: 10000
+                                 'min_cell_size': 750,  # previous: 1000
+                                 'min_nucleus_size': None,
+                                 'max_nucleus_size': None}
 
 
-DEFAULT_IMAGE_OUTLIER_CRITERIA = {'max_number_cells': None,  # previous: 1000
-                                  'min_number_cells': None}  # previous: 10
+DEFAULT_IMAGE_OUTLIER_CRITERIA = {'max_number_cells': 1000,  # previous: 1000
+                                  'min_number_cells': 10}  # previous: 10
 
-DEFAULT_WELL_OUTLIER_CRITERIA = {'max_number_cells_per_image': None,  # previous: 1000
-                                 'min_number_cells_per_image': None,  # previous: 10
-                                 'min_number_control_cells_per_image': None,  # previous: 5
+DEFAULT_WELL_OUTLIER_CRITERIA = {'max_number_cells_per_image': None,  # previous: 1000, but redundant!
+                                 'min_number_cells_per_image': None,  # previous: 10, but redundant
+                                 'min_number_control_cells_per_image': 5,  # previous: 5
                                  'min_fraction_of_control_cells': None,  # previous: 0.05
                                  'check_ratios': True}
 
@@ -35,6 +39,7 @@ class CellLevelQC(CellLevelAnalysisBase):
 
     def __init__(self,
                  cell_seg_key='cell_segmentation',
+                 nucleus_seg_key='nucleus_segmentation',
                  serum_key='serum',
                  marker_key='marker',
                  serum_bg_key='plate/backgrounds',
@@ -45,6 +50,8 @@ class CellLevelQC(CellLevelAnalysisBase):
                  **super_kwargs):
         self.validate_outlier_criteria(outlier_criteria)
         self.outlier_criteria = outlier_criteria
+
+        self.nucleus_seg_key = nucleus_seg_key
 
         output_group = cell_seg_key if identifier is None else cell_seg_key + '_' + identifier
         self.table_out_key = output_group + '/' + serum_key + '_' + table_out_name
@@ -58,41 +65,70 @@ class CellLevelQC(CellLevelAnalysisBase):
                          identifier=identifier,
                          **super_kwargs)
 
-    def cell_level_heuristics(self, cell_stats):
-        columns = ['label_id', 'is_outlier', 'outlier_type']
+    def check_size_thresholds(self, in_file, seg_key, min_size, max_size,
+                              skip_none=False):
 
-        max_size_threshold = self.outlier_criteria['max_size_threshold']
-        min_size_threshold = self.outlier_criteria['min_size_threshold']
+        if (min_size is None and max_size is None) and skip_none:
+            return None, None, None
 
-        label_ids = cell_stats['labels']
-        sizes = cell_stats[self.serum_key]['sizes']
+        with open_file(in_file, 'r') as f:
+            seg = self.read_image(f, seg_key)
 
-        n_cells = len(label_ids)
-        if n_cells != len(sizes):
-            raise RuntimeError(f"Labels and sizes are not same length: {n_cells}, {len(sizes)}")
+        label_ids, sizes = np.unique(seg, return_counts=True)
+        n_ids = len(label_ids)
 
-        if max_size_threshold is None:
-            outlier_max = np.zeros(n_cells, dtype='bool')
+        if max_size is None:
+            outlier_max = np.zeros(n_ids, dtype='bool')
         else:
-            outlier_max = sizes > max_size_threshold
+            outlier_max = sizes > max_size
 
-        if min_size_threshold is None:
-            outlier_min = np.zeros(n_cells, dtype='bool')
+        if min_size is None:
+            outlier_min = np.zeros(n_ids, dtype='bool')
         else:
-            outlier_min = sizes < min_size_threshold
+            outlier_min = sizes < min_size
+            print(outlier_min)
 
         is_outlier = np.logical_or(outlier_max, outlier_min).astype('uint8')
         outlier_types = ['too_large' if is_max else ('too_small' if is_min else 'none')
                          for is_min, is_max in zip(outlier_min, outlier_max)]
 
-        table = np.array([label_ids.tolist(),
+        return label_ids, is_outlier, outlier_types
+
+    def cell_level_heuristics(self, in_file):
+        columns = ['label_id', 'is_outlier', 'outlier_type']
+
+        max_cell_size = self.outlier_criteria['max_cell_size']
+        min_cell_size = self.outlier_criteria['min_cell_size']
+
+        max_nucleus_size = self.outlier_criteria['max_nucleus_size']
+        min_nucleus_size = self.outlier_criteria['min_nucleus_size']
+
+        ids_cells, outliers_cells, types_cells = self.check_size_thresholds(in_file, self.cell_seg_key,
+                                                                            min_cell_size, max_cell_size)
+
+        ids_nuclei, outliers_nuclei, types_nuclei = self.check_size_thresholds(in_file, self.nucleus_seg_key,
+                                                                               min_nucleus_size, max_nucleus_size,
+                                                                               skip_none=True)
+
+        if (ids_nuclei is not None) and not np.array_equal(ids_cells, ids_nuclei):
+            raise RuntimeError(f"{self.name}: cell and nucleus ids do not agree")
+
+        if ids_nuclei is None:
+            logger.info(f"{self.name}: Did not compute nucleus size thresholds.")
+            is_outlier = outliers_cells
+            outlier_types = types_cells
+        else:
+            is_outlier = np.logical_or(outliers_nuclei, outliers_cells)
+            outlier_types = np.array([f'cell:{ctype},nucleus:{ntype}'
+                                      for ctype, ntype in zip(types_cells, types_nuclei)])
+
+        table = np.array([ids_cells.tolist(),
                           is_outlier.tolist(),
                           outlier_types]).T
         return columns, table
 
     def outlier_heuristics(self, in_file, out_file):
-        cell_stats = self.load_per_cell_statistics(in_file, split_infected_and_control=False)
-        columns, table = self.cell_level_heuristics(cell_stats)
+        columns, table = self.cell_level_heuristics(in_file)
         with open_file(out_file, 'a') as f:
             self.write_table(f, self.table_out_key, columns, table)
 

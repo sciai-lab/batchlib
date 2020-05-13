@@ -18,7 +18,7 @@ class TestCellLevelQC(unittest.TestCase):
         os.makedirs(self.folder, exist_ok=True)
 
         # make the segmentation
-        self.seg = [[0, 0, 0, 0, 1,
+        self.seg = [[0, 0, 0, 0, 0,
                      1, 1, 1, 1, 1,
                      1, 1, 1, 1, 2,
                      3, 3, 3, 2, 2,
@@ -95,8 +95,10 @@ class TestCellLevelQC(unittest.TestCase):
 
         min_size = 4
         max_size = 7
-        outlier_criteria = {'min_size_threshold': min_size,
-                            'max_size_threshold': max_size}
+        outlier_criteria = {'min_cell_size': min_size,
+                            'max_cell_size': max_size,
+                            'min_nucleus_size': None,
+                            'max_nucleus_size': None}
         self.run_wf1(outlier_criteria)
 
         # check the results
@@ -169,8 +171,10 @@ class TestCellLevelQC(unittest.TestCase):
         # choose high low / low high thresholds to get sum hits
         min_size = 400
         max_size = 750
-        outlier_criteria = {'min_size_threshold': min_size,
-                            'max_size_threshold': max_size}
+        outlier_criteria = {'min_cell_size': min_size,
+                            'max_cell_size': max_size,
+                            'min_nucleus_size': None,
+                            'max_nucleus_size': None}
         self.run_wf2(outlier_criteria)
 
         # check the results
