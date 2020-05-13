@@ -997,25 +997,10 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         with open_file(in_path, 'r') as f:
             cell_seg = self.read_image(f, self.cell_seg_key)
 
+        label_ids = self.load_per_cell_statistics(in_path, False, False)['labels']
+
         # make the segmentation edge image
         seg_edges = seg_to_edges(cell_seg).astype('uint8')
-
-        # make a label mask for the infected cells
-        label_ids = self.load_per_cell_statistics(in_path, False, False)['labels']
-        infected_indicator, _ = self.load_infected_and_control_indicators(in_path, label_ids)
-        assert len(label_ids) == len(infected_indicator), f'{len(label_ids)} != {len(infected_indicator)}'
-        infected_label_ids = label_ids[infected_indicator.astype('bool')]  # cast to bool again to be sure
-        infected_mask = np.isin(cell_seg, infected_label_ids).astype(cell_seg.dtype)
-        # mark the seg edges in a different color
-        infected_mask[seg_edges == 1] = 2
-
-        # meak an image with the mean serum intensity
-        result = self.load_per_cell_statistics(in_path, subtract_background=True,
-                                               split_infected_and_control=False)
-        mean_serum_image = np.zeros_like(cell_seg, dtype=np.float32)
-        for label, intensity in zip(filter(lambda x: x != 0, label_ids),
-                                    result[self.serum_key]['means']):
-            mean_serum_image[cell_seg == label] = intensity
 
         # make a label mask for the cells detected as outliers
         cell_outlier_dict = self.load_cell_outliers(in_path)
@@ -1027,6 +1012,26 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         outlier_mask = np.isin(cell_seg, outlier_label_ids).astype(cell_seg.dtype)
         # mark the seg edges in a different color
         outlier_mask[seg_edges == 1] = 2
+
+        # make a label mask for the infected cells
+        infected_indicator, _ = self.load_infected_and_control_indicators(in_path, label_ids)
+        assert len(label_ids) == len(infected_indicator), f'{len(label_ids)} != {len(infected_indicator)}'
+        infected_label_ids = label_ids[infected_indicator.astype('bool')]  # cast to bool again to be sure
+
+        # TODO think about what is most intuitive here
+        infected_mask = np.isin(cell_seg, infected_label_ids).astype(cell_seg.dtype)
+        # mark the outliers in a different color
+        infected_mask[outlier_mask == 1] = 3
+        # mark the seg edges in a different color
+        infected_mask[seg_edges == 1] = 2
+
+        # meak an image with the mean serum intensity
+        result = self.load_per_cell_statistics(in_path, subtract_background=True,
+                                               split_infected_and_control=False)
+        mean_serum_image = np.zeros_like(cell_seg, dtype=np.float32)
+        for label, intensity in zip(filter(lambda x: x != 0, label_ids),
+                                    result[self.serum_key]['means']):
+            mean_serum_image[cell_seg == label] = intensity
 
         with open_file(out_path, 'a') as f:
             # we need to use nearest down-sampling for the mean serum images,
