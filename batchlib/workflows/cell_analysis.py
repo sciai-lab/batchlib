@@ -326,7 +326,7 @@ def core_workflow_tasks(config, name, feature_identifier):
                 'scale_factors': config.scale_factors,
                 'feature_identifier': feature_identifier,
                 'identifier': identifier},
-            'run': {'force_recompute': False}}))
+            'run': {'force_recompute': None}}))
 
     # get a dict with all relevant analysis parameters, so that we can write it as a table and log it
     analysis_parameter = get_analysis_parameter(config, background_parameters)
@@ -344,7 +344,8 @@ def core_workflow_tasks(config, name, feature_identifier):
         'build': {'input_table_names': table_identifiers,
                   'reference_table_name': reference_table_name,
                   'analysis_parameters': analysis_parameter,
-                  'identifier': feature_identifier}
+                  'identifier': feature_identifier},
+        'run': {'force_recompute': None}
     }))
 
     return job_list, table_identifiers

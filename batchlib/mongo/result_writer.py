@@ -15,16 +15,8 @@ from batchlib.util.io import read_table
 
 logger = get_logger('Workflow.BatchJob.DbResultWriter')
 
-
-def _get_table_names(f):
-    table_names = set()
-
-    def _visitor(name):
-        if name.endswith('cells'):
-            table_names.add(name[:-6])
-
-    f['tables'].visit(_visitor)
-    return list(table_names)
+# essential tables to be saved in DB
+TABLES_TO_SAVE = ['wells/default', 'images/default']
 
 
 def _table_object(column_names, table):
@@ -35,16 +27,10 @@ def _table_object(column_names, table):
     ]
 
 
-def _get_analysis_name(in_file):
-    filename = os.path.split(in_file)[1]
-    # remove .hdf5 extension
-    return os.path.splitext(filename)[0]
-
-
 def _get_analysis_tables(in_file):
     with h5py.File(in_file, 'r') as f:
         tables = []
-        for table_name in _get_table_names(f):
+        for table_name in TABLES_TO_SAVE:
             column_names, table = read_table(f, table_name)
             tables.append(
                 {
@@ -131,7 +117,7 @@ class DbResultWriter(BatchJobOnContainer):
         }
 
         # we've reached this point, so there is either no result document for a given
-        # (batchlib_versin, workflow_name, plate_name)
+        # (batchlib_version, workflow_name, plate_name)
         # or there is one and we want to replace it (i.e. force_recompute=True)
         _filter = {
             "workflow_name": result_object["workflow_name"],
