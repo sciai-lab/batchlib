@@ -103,25 +103,12 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
     return background_dict
 
 
-def get_infected_detection_jobs(config, marker_ana_in_key, feature_identifier):
+def get_infected_detection_jobs(config, marker_key_for_infected_classification, feature_identifier):
     erosion_radius = config.infected_erosion_radius
     tophat_radius = config.infected_tophat_radius
     quantile = config.infected_quantile
 
     jobs = []
-    if tophat_radius > 0:
-        raise NotImplementedError
-        # FIXME we also need to compute the background for the new marker key.
-        marker_key_for_infected_classification = 'marker_for_infected_classification'
-        jobs.append((DenoiseByWhiteTophat, {
-            'build': {
-                'input_key': marker_ana_in_key,
-                'radius': tophat_radius,
-                'output_key': marker_key_for_infected_classification,
-            }
-        }))
-    else:
-        marker_key_for_infected_classification = marker_ana_in_key
 
     if erosion_radius > 0:
         seg_key_for_infected_classification = config.seg_key + '_for_infected_classification'
@@ -129,7 +116,7 @@ def get_infected_detection_jobs(config, marker_ana_in_key, feature_identifier):
             'build': {
                  'input_key': config.seg_key,
                  'output_key': seg_key_for_infected_classification,
-                 'radius': config.erosion_radius
+                 'radius': erosion_radius
             }
         }))
     else:
@@ -257,6 +244,18 @@ def core_workflow_tasks(config, name, feature_identifier):
                 'radius': config.marker_denoise_radius}}))
         marker_ana_in_key = marker_ana_in_key + '_denoised'
 
+    if config.infected_tophat_radius > 0:
+        marker_key_for_infected_classification = 'marker_for_infected_classification'
+        job_list.append((DenoiseByWhiteTophat, {
+            'build': {
+                'key_to_denoise': marker_ana_in_key,
+                'radius': config.infected_tophat_radius,
+                'output_key': marker_key_for_infected_classification,
+            }
+        }))
+    else:
+        marker_key_for_infected_classification = marker_ana_in_key
+
     # add the tasks to extract the features from the cell instance segmentation,
     # do initial image level qc (necessary for the background extraction) and extract the quantiles
     job_list.extend(
@@ -281,10 +280,16 @@ def core_workflow_tasks(config, name, feature_identifier):
           'build': {
               'marker_key': marker_ana_in_key,  # is ignored
               'serum_key': serum_seg_in_key,    # is ignored
-              'actual_channels_to_use': (*serum_ana_in_keys, marker_ana_in_key),  # is actually used
+              'actual_channels_to_use': (*serum_ana_in_keys, marker_ana_in_key) +
+                                        ((marker_key_for_infected_classification,)
+                                         if marker_key_for_infected_classification != marker_ana_in_key else tuple()),
               'feature_identifier': feature_identifier,
               'cell_seg_key': config.seg_key}})]
     )
+
+    infected_detection_jobs = get_infected_detection_jobs(config, marker_key_for_infected_classification,
+                                                          feature_identifier)
+    job_list.extend(infected_detection_jobs)
 
     # for the background substraction, we can either use a fixed value per channel,
     # or compute it from the data. In the first case, we pass the value
@@ -303,9 +308,6 @@ def core_workflow_tasks(config, name, feature_identifier):
                          'force_recompute': None}
             })
         )
-
-    infected_detection_jobs = get_infected_detection_jobs(config, marker_ana_in_key, feature_identifier)
-    job_list.extend(infected_detection_jobs)
 
     table_identifiers = serum_ana_in_keys if feature_identifier is None else [k + f'_{feature_identifier}'
                                                                               for k in serum_ana_in_keys]
@@ -500,12 +502,12 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--ignore_nuclei", default=True)
 
     # parameter for the infected cell detection
-    parser.add("--infected_erosion_radius", default=5, type=int)
-    parser.add("--infected_tophat_radius", default=0, type=int)
+    parser.add("--infected_erosion_radius", default=0, type=int)
+    parser.add("--infected_tophat_radius", default=20, type=int)
     parser.add("--ignore_nuclei_in_infected_classification", default=False, type=bool)
     parser.add("--infected_scale_with_mad", default=True)
-    parser.add("--infected_threshold", type=float, default=5.6)
-    parser.add("--infected_quantile", type=float, default=0.97)
+    parser.add("--infected_threshold", type=float, default=4.8)
+    parser.add("--infected_quantile", type=float, default=0.95)
 
     # optional background subtraction values for the individual channels
     # if None, all backgrounds will be computed from the data and the plate background will be used
