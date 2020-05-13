@@ -39,11 +39,11 @@ if __name__ == '__main__':
     #     marker_denoise_radii = [0, 5]
 
     class config:  # TODO make an argument parser for this
-        scale_with_mad = False
+        scale_with_mad = True
 
         ann_dir = '/home_sdc/rremme_tmp/src/antibodies-nuclei/groundtruth'
         data_dir = '/home_sdc/rremme_tmp/DatasetsHCIHome/antibodies/covid-data-vibor/'
-        out_dir = '/home_sdc/rremme_tmp/Datasets/covid_antibodies/grid_search_20200513_00_tophat'
+        out_dir = '/home_sdc/rremme_tmp/Datasets/covid_antibodies/grid_search_20200513_01_moreGT'
 
         misc_folder = '/home_sdc/rremme_tmp/src/batchlib/misc'
 
