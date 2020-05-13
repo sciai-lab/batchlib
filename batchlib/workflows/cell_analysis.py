@@ -241,7 +241,9 @@ def core_workflow_tasks(config, name, feature_identifier):
         job_list.append((DenoiseByGrayscaleOpening, {
             'build': {
                 'key_to_denoise': marker_ana_in_key,
-                'radius': config.marker_denoise_radius}}))
+                'radius': config.marker_denoise_radius},
+            'run': {'n_jobs': config.n_cpus}
+        }))
         marker_ana_in_key = marker_ana_in_key + '_denoised'
 
     if config.infected_tophat_radius > 0:
@@ -250,8 +252,8 @@ def core_workflow_tasks(config, name, feature_identifier):
             'build': {
                 'key_to_denoise': marker_ana_in_key,
                 'radius': config.infected_tophat_radius,
-                'output_key': marker_key_for_infected_classification,
-            }
+                'output_key': marker_key_for_infected_classification},
+            'run': {'n_jobs': config.n_cpus}
         }))
     else:
         marker_key_for_infected_classification = marker_ana_in_key

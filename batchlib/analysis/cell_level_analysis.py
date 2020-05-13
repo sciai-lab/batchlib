@@ -2,6 +2,7 @@ import os
 from copy import copy, deepcopy
 from functools import partial
 from collections import defaultdict
+from concurrent import futures
 
 import numpy as np
 import skimage.morphology
@@ -157,14 +158,19 @@ class DenoiseChannel(BatchJobOnContainer):
     def denoise(self, img):
         raise NotImplementedError
 
-    def run(self, input_files, output_files):
-        for input_file, output_file in zip(tqdm(input_files, f'denoising {self.input_key} -> {self.output_key}'),
-                                           output_files):
+    def run(self, input_files, output_files, n_jobs=1):
+        def process_image(input_file, output_file):
             with open_file(input_file, 'r') as f:
                 img = self.read_image(f, self.input_key)
             img = self.denoise(img)
             with open_file(output_file, 'a') as f:
                 self.write_image(f, self.output_key, img)
+
+        with futures.ThreadPoolExecutor(n_jobs) as tp:
+            list(tqdm(tp.starmap(process_image, zip(input_files, output_files)),
+                      desc=f'denoising {self.input_key} -> {self.output_key}',
+                      total=len(output_files)))
+
 
 
 class DenoiseByGrayscaleOpening(DenoiseChannel):
