@@ -4,39 +4,33 @@ import urllib.parse
 from pymongo import MongoClient
 
 from batchlib.mongo.utils import ASSAY_METADATA
+from batchlib.outliers.outlier import OutlierPredicate, DEFAULT_OUTLIER_DIR
 from batchlib.util import get_logger
-from batchlib.util.elisa_results_parser import ElisaResultsParser
 
-logger = get_logger('ElisaImporter')
+logger = get_logger('OutlierImporter')
 
 
-def import_elisa_results(db):
-    # create elisa results
-    elisa_results_parser = ElisaResultsParser()
+def import_outliers(db):
     # get metadata collection
     assay_metadata = db[ASSAY_METADATA]
 
     # iterate over all plates
     for plate_doc in assay_metadata.find({}):
         plate_name = plate_doc['name']
+        outlier_predicate = OutlierPredicate(DEFAULT_OUTLIER_DIR, plate_name)
 
         should_replace = False
-        for well in plate_doc["wells"]:
-            cohort_id = well.get("cohort_id", None)
-            if cohort_id is None:
-                continue
-            # make sure cohort_id matching is not case sensitive
-            cohort_id = cohort_id.lower()
-
-            if cohort_id in elisa_results_parser.elisa_results:
-                logger.info(
-                    f"Saving elisa results for plate: {plate_name}, well: {well['name']}, cohort_id: {cohort_id}")
-                # mark doc to be replaced
-                should_replace = True
-                # add elisa results to the well
-                IgG_value, IgA_value = elisa_results_parser.elisa_results[cohort_id]
-                well['elisa_IgG'] = IgG_value
-                well['elisa_IgA'] = IgA_value
+        for well in plate_doc['wells']:
+            for im in well['images']:
+                im_file = im['name']
+                outlier_current = outlier_predicate(im_file)
+                outlier_previous = im['outlier']
+                if outlier_current != outlier_previous:
+                    # outlier status changed -> update and replace
+                    logger.info(
+                        f"Updating outlier status of {plate_name}/{im_file}: {outlier_previous} -> {outlier_current}")
+                    im['outlier'] = outlier_current
+                    should_replace = True
 
         if should_replace:
             assay_metadata.replace_one({"name": plate_name}, plate_doc)
@@ -67,4 +61,4 @@ if __name__ == '__main__':
 
     logger.info(f'Getting database: {args.db}')
 
-    import_elisa_results(client[args.db])
+    import_outliers(client[args.db])

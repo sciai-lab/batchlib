@@ -129,29 +129,19 @@ Schema of a single document:
   "plate_name": "name of the plate",
   "batchlib_version": "version of batchlib the that produced the result",
   "analysis_parameters": "parameters/values the analysis was run with",
-  "result_tables": [
+  "result_tables": [[
     {
-      "analysis_name": "analysis1_table",
-      "tables": [
-        {
-          "table_name": "wells/default",
-          "results": [
-          
-          ]
-        }, 
-        {
-          "table_name": "images/default",
-          "results": [
-          
-          ]
-        },
-        {
-          "table_name": "cells/default",
-          "results": [
-          
-          ]
-        }
+      "table_name": "wells/default",
+      "results": [
+      
       ]
+    }, 
+    {
+      "table_name": "images/default",
+      "results": [
+      
+      ]
+    }
     }
   ]
 }
@@ -166,6 +156,22 @@ Schema of a single document:
   "description": "STRING"
 }
 ```
+
+## Import metadata manually
+Attributes such as cohort ids and Elise test results for the wells as well as outlier status for images are provided externally
+via excel sheets and CSV files. Those attributes are updated automatically via the [DbResultWriter](result_writer.py) job
+which is run at the end of the analysis workflow. Those metadata may change however (e.g. outliers were redone manually,
+or new elisa excel sheets were added to the repo). In this case we might want to update the metadata manually, instead
+of re-running the analysis workflow on all of the plates.
+
+The following scripts can be run to update the metadata at any time against the dev and production DB:
+```bash
+python import_outliers.py --host DBHOST --port 27017 --db covid --user covid19 --password PASSWD
+python import_cohort_ids.py --host DBHOST --port 27017 --db covid --user covid19 --password PASSWD
+python import_elisa_results.py --host DBHOST --port 27017 --db covid --user covid19 --password PASSWD
+```
+
+Bear in mind that cohort ids have to be imported before elisa test results, cause the latter rely on the former to be in DB.
 
 ## Backup & restore
 

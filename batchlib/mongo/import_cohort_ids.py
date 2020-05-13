@@ -7,7 +7,7 @@ from batchlib.mongo.utils import ASSAY_METADATA
 from batchlib.util import get_logger
 from batchlib.util.cohort_parser import CohortIdParser
 
-logger = get_logger('Workflow.BatchJob.DbResultWriter')
+logger = get_logger('CohortImporter')
 
 
 def import_cohort_ids(db):
