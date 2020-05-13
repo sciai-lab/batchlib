@@ -318,7 +318,7 @@ def core_workflow_tasks(config, name, feature_identifier):
                 'scale_factors': config.scale_factors,
                 'feature_identifier': feature_identifier,
                 'identifier': identifier},
-            'run': {'force_recompute': False}}))
+            'run': {'force_recompute': None}}))
 
     # get a dict with all relevant analysis parameters, so that we can write it as a table and log it
     analysis_parameter = get_analysis_parameter(config, background_parameters)
@@ -336,7 +336,8 @@ def core_workflow_tasks(config, name, feature_identifier):
         'build': {'input_table_names': table_identifiers,
                   'reference_table_name': reference_table_name,
                   'analysis_parameters': analysis_parameter,
-                  'identifier': feature_identifier}
+                  'identifier': feature_identifier},
+        'run': {'force_recompute': None}
     }))
 
     return job_list, table_identifiers
@@ -402,7 +403,8 @@ def run_cell_analysis(config):
     if feature_identifier is None:
         stat_names = [idf.replace('serum_', '') + '_' + name
                       for name in DEFAULT_PLOT_NAMES for idf in table_identifiers]
-        workflow_summaries(name, config, t0, workflow_name=name, input_folder=config.input_folder, stat_names=stat_names)
+        workflow_summaries(name, config, t0, workflow_name=name,
+                           input_folder=config.input_folder, stat_names=stat_names)
 
     return table_identifiers
 
