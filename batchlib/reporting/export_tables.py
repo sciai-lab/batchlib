@@ -114,8 +114,8 @@ def export_tables_for_plate(folder, cell_table_name='cell_segmentation', ext='.x
         export_cell_tables(folder, cell_out, cell_table_name)
 
     # export the infected/non-infected classification
-    cell_table_root = cell_table_name.split('/')[0]
-    class_name = f'cell_classification/{cell_table_root}/marker'
+    # cell_table_root = cell_table_name.split('/')[0]
+    class_name = f'cell_classification/cell_segmentation/marker'
     class_out = os.path.join(folder, f'{plate_name}_cell_table_infected_clasification{ext}')
     export_cell_tables(folder, class_out, class_name)
 
