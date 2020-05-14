@@ -2,8 +2,9 @@ import h5py
 import numpy as np
 import skimage.color as skc
 import imageio
+import vigra
 
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 # import napari
 
 from glob import glob
@@ -44,6 +45,23 @@ def erode_seg(seg, iters):
     return new_seg
 
 
+def size_filter(seg, infected_labels, min_size=100):
+    seg_ids, counts = np.unique(seg, return_counts=True)
+    filter_ = counts < min_size
+    filter_ids = seg_ids[filter_]
+
+    bg = seg == 0
+    seg[np.isin(seg, filter_ids)] = 0
+    hmap = np.random.rand(*seg.shape).astype('float32')
+    seg, _ = vigra.analysis.watershedsNew(hmap, seeds=seg.astype('uint32'))
+    seg[bg] = 0
+
+    seg_ids = np.unique(seg)
+    infected_labels = infected_labels[~filter_]
+    assert len(infected_labels) == len(seg_ids), f"{len(infected_labels), len(seg_ids)}"
+    return seg, seg_ids, infected_labels
+
+
 def export_proofreadng_image(path):
     with h5py.File(path, 'r') as f:
         serum = normalize(read_image(f, 'serum_IgG'))
@@ -55,7 +73,7 @@ def export_proofreadng_image(path):
         _, infected_labels = read_table(f, 'infected_cell_labels')
 
     infected_labels = infected_labels[:, 1]
-    seg_ids = np.unique(seg)
+    seg, seg_ids, infected_labels = size_filter(seg, infected_labels)
     pos_mask = np.isin(seg, seg_ids[infected_labels == 1])
     neg_mask = np.isin(seg, seg_ids[infected_labels == 2])
 
@@ -75,14 +93,24 @@ def export_proofreadng_image(path):
     raw2[..., 1] *= 2
     raw2 = skc.hsv2rgb(raw2).clip(0, 1)
 
-    # TODO also export the non-enhanced
+    imageio.imwrite(path.replace('.h5', '_enhanced.png'), raw2)
+
     raw2[pos_edges, :] = [1, 0.6, 0]  # orange
     raw2[neg_edges, :] = [0, 1, 1]  # cyan
-    imageio.imwrite(path.replace('h5', 'png'), raw2)
+    imageio.imwrite(path.replace('.h5', '_enhanced_edges.png'), raw2)
+
+    imageio.imwrite(path.replace('.h5', '_raw.png'), raw)
+
+    raw[pos_edges, :] = [1, 0.6, 0]  # orange
+    raw[neg_edges, :] = [0, 1, 1]  # cyan
+    imageio.imwrite(path.replace('.h5', '_raw_edges.png'), raw)
+
+    imageio.imwrite(path.replace('.h5', '_pos_edges.png'), pos_edges.astype('float32'))
+    imageio.imwrite(path.replace('.h5', '_neg_edges.png'), neg_edges.astype('float32'))
 
     # plt.imshow(raw2)
-    # plt.savefig(path.replace('h5', 'png'), frameon=False)
     # plt.show()
+    # quit()
 
     # with napari.gui_qt():
     #     viewer = napari.Viewer()
