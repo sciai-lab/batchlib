@@ -197,7 +197,7 @@ def export_scores(folder_list, output_path,
         score_table = np.concatenate([plate_col[:, None], this_table[:, col_ids]], axis=1)
         # extend table with the values from DB
         if metadata_repository is not None:
-            score_table = _extend_with_db_metadata(score_table, metadata_repository, plate_name, db_metadata)
+            score_table = _extend_with_db_metadata(score_table, metadata_repository, plate_name)
 
         table.append(score_table)
 

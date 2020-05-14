@@ -81,7 +81,7 @@ class PlateMetadataRepository:
         """
         wells = self._get_wells(plate_name)
         if wells is None:
-            return None
+            return {}
         result = {}
         for well in wells:
             if 'cohort_id' in well:
@@ -102,7 +102,7 @@ class PlateMetadataRepository:
         """
         wells = self._get_wells(plate_name)
         if wells is None:
-            return None
+            return {}
         result = {}
         for well in wells:
             if 'elisa_IgG' in well:
