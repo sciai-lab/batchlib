@@ -155,14 +155,13 @@ def get_infected_detection_jobs(config, marker_key_for_infected_classification, 
     return jobs
 
 
-# TODO maybe add bg extraction + infected cell detection on voronois
 def get_voronoi_jobs(config, marker_ana_in_key, serum_ana_in_keys):
-    width_dict = config.voronoi_width_dict
-    if isinstance(width_dict, str):
-        width_dict = json.loads(width_dict.replace('\'', '\"'))
+    voronoi_param_dict = config.voronoi_param_dict
+    if isinstance(voronoi_param_dict, str):
+        voronoi_param_dict = json.loads(voronoi_param_dict.replace('\'', '\"'))
 
     jobs = []
-    for identifier, width in width_dict.items():
+    for identifier, (width, remove_nucleus) in voronoi_param_dict.items():
         voronoi_key = config.nuc_key + f'_voronoi_{identifier}'
         jobs.extend([
             (VoronoiRingSegmentation, {
@@ -170,18 +169,16 @@ def get_voronoi_jobs(config, marker_ana_in_key, serum_ana_in_keys):
                           'output_key': voronoi_key,
                           'identifier': identifier,
                           'ring_width': width,
+                          'remove_nucleus': remove_nucleus,
                           'scale_factors': config.scale_factors},
-                'run': {'n_jobs': config.n_cpus,
-                        'ignore_failed_outputs': True}}),
+                'run': {'n_jobs': config.n_cpus}}),
             (InstanceFeatureExtraction, {
                 'build': {
                     'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
                     'nuc_seg_key_to_ignore': None,
                     'cell_seg_key': voronoi_key
                 },
-                'run': {'gpu_id': config.gpu,
-                        'ignore_failed_outputs': True,
-                        'ignore_invalid_inputs': True}
+                'run': {'gpu_id': config.gpu}
             })
         ])
     return jobs
@@ -290,7 +287,7 @@ def core_workflow_tasks(config, name, feature_identifier):
     else:
         marker_key_for_infected_classification = marker_ana_in_key
 
-    if config.voronoi_width_dict is not None:
+    if config.voronoi_param_dict is not None:
         job_list.extend(get_voronoi_jobs(config, marker_ana_in_key, serum_ana_in_keys))
 
     # add the tasks to extract the features from the cell instance segmentation,
@@ -555,7 +552,7 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--background_dict", default=None)
 
     # do we run voronoi segmentation?
-    parser.add("--voronoi_width_dict", default=None)
+    parser.add("--voronoi_param_dict", default=None)
 
     #
     # more options
