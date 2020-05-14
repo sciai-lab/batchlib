@@ -181,7 +181,7 @@ def get_voronoi_jobs(config, marker_ana_in_key, serum_ana_in_keys):
                 },
                 'run': {'gpu_id': config.gpu,
                         'ignore_failed_outputs': True,
-                        'ignore_failed_inputs': True}
+                        'ignore_invalid_inputs': True}
             })
         ])
     return jobs

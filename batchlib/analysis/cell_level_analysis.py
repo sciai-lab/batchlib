@@ -173,7 +173,6 @@ class DenoiseChannel(BatchJobOnContainer):
                       total=len(output_files)))
 
 
-
 class DenoiseByGrayscaleOpening(DenoiseChannel):
     def __init__(self, radius=5, **super_kwargs):
         super(DenoiseByGrayscaleOpening, self).__init__(**super_kwargs)
@@ -1061,7 +1060,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
                                               well_table, well_columns)
 
         if self.write_summary_images:
-            # TODO parallelize
-            for input_file, output_file in tqdm(list(zip(input_files, output_files)),
-                                                desc='write cell level analysis summary images'):
-                self.write_summary_image(input_file, output_file)
+            with futures.ThreadPoolExecutor(n_jobs) as tp:
+                list(tqdm(tp.map(self.write_summary_image, input_files, output_files),
+                          desc='write cell level analysis summary images',
+                          total=len(input_files)))
