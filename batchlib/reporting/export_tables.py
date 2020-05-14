@@ -102,7 +102,8 @@ def export_voronoi_tables(folder, ext='.xlsx'):
         export_cell_tables(folder, out_path, table_name)
 
 
-def export_tables_for_plate(folder, cell_table_name='cell_segmentation', marker_name='marker', ext='.xlsx'):
+def export_tables_for_plate(folder, cell_table_name='cell_segmentation',
+                            marker_name='marker', export_voronoi=True, ext='.xlsx'):
     """ Conveneince function to export all relevant tables for a plate
     into a more common format (by default excel).
     """
@@ -137,6 +138,10 @@ def export_tables_for_plate(folder, cell_table_name='cell_segmentation', marker_
     class_name = f'cell_classification/cell_segmentation/{marker_name}'
     class_out = os.path.join(folder, f'{plate_name}_cell_table_infected_clasification{ext}')
     export_cell_tables(folder, class_out, class_name)
+
+    # export voronoi tables
+    if export_voronoi:
+        export_voronoi_tables(folder, ext)
 
 
 # TODO also get values from the db

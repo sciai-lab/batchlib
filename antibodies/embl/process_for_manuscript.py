@@ -80,6 +80,8 @@ def folders_for_manuscript(root_out, check_if_processed):
         to_process = [os.path.join(ROOT_IN, name)
                       for name, folder in zip(folder_names, to_process)
                       if not is_processed_mean_and_sums(folder)]
+    else:
+        to_process = [os.path.join(ROOT_IN, name) for name in folder_names]
 
     print(len(to_process), "/", len(folder_names), "still need to be processed")
     return to_process
