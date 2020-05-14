@@ -17,7 +17,8 @@ ROOT_OUT = '/g/kreshuk/data/covid/data-processed'
 
 
 def summarize_manuscript_experiment(token, clean_up, ignore_incomplete, metadata_repository):
-    plate_names = all_manuscript_plates()
+    # plate_names = all_manuscript_plates()
+    plate_names = os.listdir(ROOT_OUT)
     folders = [os.path.join(ROOT_OUT, name) for name in plate_names]
 
     today = date.today().strftime('%Y%m%d')
@@ -103,7 +104,6 @@ if __name__ == '__main__':
     client = MongoClient(mongodb_uri)
     db = client[args.db]
     metadata_repository = PlateMetadataRepository(db)
-
 
     if redo:
         redo_summary()

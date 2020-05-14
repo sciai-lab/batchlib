@@ -155,14 +155,13 @@ def export_tables_for_plate(folder,
         export_voronoi_tables(folder, ext, skip_existing=skip_existing)
 
 
-def _extend_with_db_metadata(score_table, metadata_repository, plate_name):
+def _get_db_metadata(well_names, metadata_repository, plate_name):
     """
     Args
-        score_table: table to be extended
         metadata_repository: instance of PlateMetadataRepository
         plate_name: name of the plate
     Returns:
-        score table updated the values from DB
+        additional metadata DB
     """
 
     def _get_cohort_type(c_id):
@@ -182,27 +181,29 @@ def _extend_with_db_metadata(score_table, metadata_repository, plate_name):
     elisa_results = metadata_repository.get_elisa_results(plate_name)
 
     additional_values = []
-    for row in score_table:
-        well_name = row[1]
+    for well_name in well_names:
         cohort_id = cohort_ids.get(well_name, None)
         cohort_type = _get_cohort_type(cohort_id)
         elisa_IgG, elisa_IgA = elisa_results.get(well_name, (None, None))
-        additional_values.append([cohort_type, cohort_id, elisa_IgG, elisa_IgA])
+        additional_values.append([cohort_id, cohort_id, elisa_IgG, elisa_IgA, cohort_type])
 
-    score_table = np.concatenate([score_table, additional_values], axis=1)
-    return score_table
+    return np.array(additional_values)
 
 
+# FIXME all metadata is blank
+# FIXME the name matching triggers for unwanted scores,
+# we only want IgG and IgM
+# FIXME make score names more succinct
 def export_scores(folder_list, output_path,
                   score_patterns=DEFAULT_SCORE_PATTERNS,
                   table_name='wells/default',
                   metadata_repository=None):
-    columns = None
-    table = []
 
     def name_matches_score(name):
         return any(pattern in name for pattern in score_patterns)
 
+    # first pass: find all column names that match the pattern
+    result_columns = []
     for folder in folder_list:
         plate_name = os.path.split(folder)[1]
         table_path = os.path.join(folder, plate_name + '_table.hdf5')
@@ -210,28 +211,43 @@ def export_scores(folder_list, output_path,
             raise RuntimeError(f"Did not find a result table @ {table_path}")
 
         with open_file(table_path, 'r') as f:
-            col_names, this_table = read_table(f, table_name)
+            col_names, _ = read_table(f, table_name)
+        assert 'well_name' in col_names
+        col_names = [col_name for col_name in col_names if name_matches_score(col_name)]
+        result_columns.extend(col_names)
 
-        if columns is None:
-            assert 'well_name' in col_names
-            columns = ['well_name'] + [col_name for col_name in col_names if name_matches_score(col_name)]
-            all_columns = ['plate_name'] + columns
-            # append cohort_type (positive/control/unknow), cohort_id and elisa results
-            db_metadata = ['cohort_type', 'cohort_id', 'elisa_IgG', 'elisa_IgA']
-            if metadata_repository is not None:
-                all_columns = all_columns + db_metadata
+    result_columns = ['well_name'] + list(set(result_columns))
+    columns = ['plate_name'] + result_columns
 
-        if len(set(columns) - set(col_names)) > 0:
-            raise RuntimeError("Columns don't match")
+    # append cohort_id, elisa results and cohort_type (positive/control/unknow) if we have db
+    if metadata_repository is not None:
+        db_metadata = ['cohort_id', 'elisa_IgG', 'elisa_IgA', 'cohort_type']
+        columns += db_metadata
 
-        col_ids = [col_names.index(col_name) for col_name in columns]
-        plate_col = np.array([plate_name] * len(this_table))
-        score_table = np.concatenate([plate_col[:, None], this_table[:, col_ids]], axis=1)
+    # second pass: load the tables
+    table = []
+    for folder in folder_list:
+        plate_name = os.path.split(folder)[1]
+        table_path = os.path.join(folder, plate_name + '_table.hdf5')
+        with open_file(table_path, 'r') as f:
+            this_result_columns, this_result_table = read_table(f, table_name)
+
+        this_len = len(this_result_table)
+        plate_col = np.array([plate_name] * this_len)
+
+        col_ids = [this_result_columns.index(name) if name in this_result_columns else -1
+                   for name in result_columns[1:]]
+        this_table = [np.array([None] * this_len)[:, None] if col_id == -1 else
+                      this_result_table[:, col_id:col_id+1] for col_id in col_ids]
+        this_table = np.concatenate([plate_col[:, None]] + this_table, axis=1)
+
         # extend table with the values from DB
         if metadata_repository is not None:
-            score_table = _extend_with_db_metadata(score_table, metadata_repository, plate_name)
+            metadata = _get_db_metadata(this_table[:, 1], metadata_repository, plate_name)
+            assert len(metadata) == len(this_table)
+            this_table = np.concatenate([this_table, metadata], axis=1)
 
-        table.append(score_table)
+        table.append(this_table)
 
     table = np.concatenate(table, axis=0)
-    export_table(all_columns, table, output_path)
+    export_table(columns, table, output_path)
