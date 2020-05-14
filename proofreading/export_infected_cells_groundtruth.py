@@ -1,34 +1,32 @@
 import argparse
 import numpy as np
 import h5py
-import nifty.ground_truth as ngt
 
 
-def check(raw, seg, mask):
+def check(raw, seg):
     import napari
     with napari.gui_qt():
         viewer = napari.Viewer()
         viewer.add_image(raw)
         viewer.add_labels(seg)
-        viewer.add_labels(mask)
 
 
 def export_from_bigcat(in_path, out_path):
     with h5py.File(in_path, 'r') as f:
         raw = f['volumes/raw'][:]
         seg = f['volumes/labels/merged_ids'][0].astype('int64')
-        mask = f['volumes/infected_mask'][:]
-    assert seg.shape == mask.shape
 
-    seg_ids = np.unique(seg)
-    overlaps = ngt.overlap(seg, mask)
-    overlaps = {sid: overlaps.overlapArrays(sid, True)[0][0] for sid in seg_ids}
+    seg_ids, counts = np.unique(seg, return_counts=True)
 
-    for seg_id in seg_ids:
-        seg[seg == seg_id] = overlaps[seg_id]
+    # use that size of bg > size infected > size control
+    size_sorted = np.argsort(counts)[::-1]
+    vals = [0, 2, 1]
+
+    for seg_id, val in zip(seg_ids[size_sorted], vals):
+        seg[seg == seg_id] = val
 
     assert set(np.unique(seg)) == {0, 1, 2}
-    # check(raw, seg, mask)
+    # check(raw, seg)
 
     with h5py.File(out_path, 'a') as f:
         f.create_dataset('raw', data=raw, compression='gzip')
