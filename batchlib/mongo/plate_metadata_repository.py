@@ -69,7 +69,6 @@ class PlateMetadataRepository:
 
         return self._filter_wells(plate_name, _filter)
 
-    #####################################################################
     def get_cohort_ids(self, plate_name):
         """
         Returns a dict:
