@@ -7,7 +7,9 @@ from skimage.segmentation import watershed  # for now, just use skimage
 from tqdm.auto import tqdm
 
 from batchlib.base import BatchJobOnContainer
-from batchlib.util import open_file, seg_to_edges
+from batchlib.util import open_file, seg_to_edges, get_logger
+
+logger = get_logger('Workflow.BatchJob.VoronoiRingSegmentation')
 
 
 class VoronoiRingSegmentation(BatchJobOnContainer):
@@ -29,8 +31,12 @@ class VoronoiRingSegmentation(BatchJobOnContainer):
     def segment_image(self, in_path):
         with open_file(in_path, 'r') as f:
             input_seg = self.read_image(f, self.input_key)
+
         input_mask = input_seg > 0
-        assert np.mean(input_mask) > 0
+        if input_mask.sum() == 0:
+            logger.warning(f"{self.name}: input segmentation for {in_path}/{self.input_key}")
+            return np.zeros_like(input_seg)
+
         distance = ndi.distance_transform_edt(input_mask == 0)
         ring_mask = morph.dilation(input_mask, morph.disk(self.ring_width))
         if self.remove_nucleus:
@@ -57,7 +63,8 @@ class ErodeSegmentation(BatchJobOnContainer):
     """
     def __init__(self, radius, bg_label=0, **super_kwargs):
         super().__init__(input_ndim=2, output_ndim=2, **super_kwargs)
-        assert isinstance(radius, int), f'Raidus {radius} should be int, got {type(radius)}'
+        if not isinstance(radius, int):
+            raise ValueError(f'Raidus {radius} should be int, got {type(radius)}')
         self.radius = radius
         if bg_label != 0:
             raise NotImplementedError
