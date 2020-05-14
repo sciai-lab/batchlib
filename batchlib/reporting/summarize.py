@@ -7,10 +7,12 @@ from .export_tables import export_scores
 
 
 def make_and_upload_summary(folder_list, experiment_name, token,
-                            channel='#latest-results', clean_up=True, ignore_incomplete=False):
+                            channel='#latest-results', clean_up=True, ignore_incomplete=False,
+                            metadata_repository=None):
     res_file = make_summary(folder_list, experiment_name,
                             export_score_table=True, clean_up=clean_up,
-                            ignore_incomplete=ignore_incomplete)
+                            ignore_incomplete=ignore_incomplete,
+                            metadata_repository=metadata_repository)
     if token is not None:
         upload_summary_to_slack(res_file, token, channel, clean_up=clean_up)
 
@@ -30,7 +32,8 @@ def upload_summary_to_slack(summary_file, token,
 
 
 def make_summary(folder_list, experiment_name,
-                 export_score_table=True, ignore_incomplete=False, clean_up=True):
+                 export_score_table=True, ignore_incomplete=False, clean_up=True,
+                 metadata_repository=None):
     """ Write all experiments to zip.
     """
 
@@ -79,7 +82,7 @@ def make_summary(folder_list, experiment_name,
 
     if export_score_table:
         score_table_path = os.path.join(experiment_name, f'{experiment_name}_scores.xlsx')
-        export_scores(folder_list, score_table_path)
+        export_scores(folder_list, score_table_path, metadata_repository=metadata_repository)
 
     # zip the folder
     res_zip = f'{experiment_name}.zip'

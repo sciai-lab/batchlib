@@ -2,10 +2,13 @@ import argparse
 import os
 from datetime import date
 from glob import glob
+import urllib.parse
 
+from pymongo import MongoClient
 from tqdm import tqdm
 
 from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
+from batchlib.mongo.plate_metadata_repository import PlateMetadataRepository
 from batchlib.reporting import make_and_upload_summary, SlackSummaryWriter
 from batchlib.util.plate_visualizations import all_plots
 from process_for_manuscript import all_kinder_plates, all_manuscript_plates
@@ -13,24 +16,26 @@ from process_for_manuscript import all_kinder_plates, all_manuscript_plates
 ROOT_OUT = '/g/kreshuk/data/covid/data-processed'
 
 
-def summarize_manuscript_experiment(token, clean_up, ignore_incomplete):
+def summarize_manuscript_experiment(token, clean_up, ignore_incomplete, metadata_repository):
     plate_names = all_manuscript_plates()
     folders = [os.path.join(ROOT_OUT, name) for name in plate_names]
 
     today = date.today().strftime('%Y%m%d')
     experiment = f'manuscript_plates_{today}'
     make_and_upload_summary(folders, experiment, token=token, clean_up=clean_up,
-                            ignore_incomplete=ignore_incomplete)
+                            ignore_incomplete=ignore_incomplete,
+                            metadata_repository=metadata_repository)
 
 
-def summarize_kinder_experiment(token, clean_up, ignore_incomplete):
+def summarize_kinder_experiment(token, clean_up, ignore_incomplete, metadata_repository):
     plate_names = all_kinder_plates()
     folders = [os.path.join(ROOT_OUT, name) for name in plate_names]
 
     today = date.today().strftime('%Y%m%d')
     experiment = f'kinder_study_plates_{today}'
     make_and_upload_summary(folders, experiment, token=token, clean_up=clean_up,
-                            ignore_incomplete=ignore_incomplete)
+                            ignore_incomplete=ignore_incomplete,
+                            metadata_repository=metadata_repository)
 
 
 def redo_summary():
@@ -79,13 +84,31 @@ if __name__ == '__main__':
     parser.add_argument('--redo', type=int, default=0)
     parser.add_argument('--ignore_incomplete', type=int, default=0)
 
+    # configure db connection
+    parser.add_argument('--host', type=str, help='IP of the MongoDB primary DB')
+    parser.add_argument('--port', type=int, help='MongoDB port', default=27017)
+    parser.add_argument('--user', type=str, help='MongoDB user')
+    parser.add_argument('--password', type=str, help='MongoDB password')
+    parser.add_argument('--db', type=str, help='Default database', default='covid')
+
     args = parser.parse_args()
     token = args.token
     redo = bool(args.redo)
+
+    # escape username and password to be URL friendly
+    username = urllib.parse.quote_plus(args.user)
+    password = urllib.parse.quote_plus(args.password)
+
+    mongodb_uri = f'mongodb://{username}:{password}@{args.host}:{args.port}/?authSource={args.db}'
+    client = MongoClient(mongodb_uri)
+    db = client[args.db]
+    metadata_repository = PlateMetadataRepository(db)
+
 
     if redo:
         redo_summary()
     else:
         clean_up = token is not None
         # summarize_kinder_experiment(token, clean_up, bool(args.ignore_incomplete))
-        summarize_manuscript_experiment(token, clean_up, bool(args.ignore_incomplete))
+        summarize_manuscript_experiment(token, clean_up, bool(args.ignore_incomplete),
+                                        metadata_repository=metadata_repository)

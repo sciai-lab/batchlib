@@ -11,9 +11,10 @@ logger = get_logger('PlateMetadataRepository')
 
 class PlateMetadataRepository:
     """
-    Simple Monogo API used to get the positive and control wells for a given plate.
-    For more information about the different patient types and their meanings see `cohort-descriptions` collection
-    in the DB.
+    Simple Monogo API used to get the positive (cohort: C) and control (cohort: B) wells for a given plate
+    as well as Elisa test results if available.
+
+    TODO: we're currently using only cohort B as control, we could potentially include A and X... to be discussed with Vibor
     """
 
     def __init__(self, db):
@@ -32,7 +33,7 @@ class PlateMetadataRepository:
         if wells is None:
             return None
 
-        return list(
+        return set(
             map(
                 # get only the well name
                 lambda w: w['name'],
@@ -48,23 +49,10 @@ class PlateMetadataRepository:
         Args:
             plate_name (str): name of the plate
         Returns:
-            list of control wells
+            set of control wells
         """
 
         _filter = lambda w: w.get('patient_type', None) == 'B'
-
-        return self._filter_wells(plate_name, _filter)
-
-    def get_control_including_A_and_X(self, plate_name):
-        """
-        Get wells corresponding to the control cases (patient_type: B, also including  A and X) for a given plate.
-
-        Args:
-            plate_name (str): name of the plate
-        Returns:
-            list of control wells
-        """
-        _filter = lambda w: w.get('patient_type', None) in ['B', 'A', 'X']
 
         return self._filter_wells(plate_name, _filter)
 
@@ -75,11 +63,51 @@ class PlateMetadataRepository:
         Args:
             plate_name (str): name of the plate
         Returns:
-            list of positive wells
+            set of positive wells
         """
         _filter = lambda w: w.get('patient_type', None) == 'C'
 
         return self._filter_wells(plate_name, _filter)
+
+    def get_cohort_ids(self, plate_name):
+        """
+        Returns a dict:
+        {
+            well1: cohort_id1,
+            well2: cohort_id2,
+            ...
+        }
+        """
+        wells = self._get_wells(plate_name)
+        if wells is None:
+            return {}
+        result = {}
+        for well in wells:
+            if 'cohort_id' in well:
+                result[well['name']] = well['cohort_id']
+
+        return result
+
+    def get_elisa_results(self, plate_name):
+        """
+        Returns a dict
+        {
+            well1: (elisa_IgG1, elisa_IgA1),
+            well2: (elisa_IgG2, elisa_IgA2),
+            ....
+        }
+        where `well*` is a well name and `elisa_IgG*`, `elisa_IgA*` are values of Elisa test for IgG and IgA
+        serum respectively
+        """
+        wells = self._get_wells(plate_name)
+        if wells is None:
+            return {}
+        result = {}
+        for well in wells:
+            if 'elisa_IgG' in well:
+                result[well['name']] = (well['elisa_IgG'], well['elisa_IgA'])
+
+        return result
 
 
 if __name__ == '__main__':
