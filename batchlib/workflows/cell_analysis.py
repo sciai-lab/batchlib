@@ -171,14 +171,17 @@ def get_voronoi_jobs(config, marker_ana_in_key, serum_ana_in_keys):
                           'identifier': identifier,
                           'ring_width': width,
                           'scale_factors': config.scale_factors},
-                'run': {'n_jobs': config.n_cpus}}),
+                'run': {'n_jobs': config.n_cpus,
+                        'ignore_failed_outputs': True}}),
             (InstanceFeatureExtraction, {
                 'build': {
                     'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
                     'nuc_seg_key_to_ignore': None,
                     'cell_seg_key': voronoi_key
                 },
-                'run': {'gpu_id': config.gpu}
+                'run': {'gpu_id': config.gpu,
+                        'ignore_failed_outputs': True,
+                        'ignore_failed_inputs': True}
             })
         ])
     return jobs
@@ -333,9 +336,11 @@ def core_workflow_tasks(config, name, feature_identifier):
 
     table_path = CellLevelAnalysis.folder_to_table_path(config.folder)
     if config.write_background_images:
+        background_params = {chan_name: background_parameters[chan_name]
+                             for chan_name in serum_ana_in_keys + [marker_ana_in_key]}
         job_list.append(
             (WriteBackgroundSubtractedImages, {
-                 'build': {'background_dict': background_parameters,
+                 'build': {'background_dict': background_params,
                            'table_path': table_path,
                            'scale_factors': config.scale_factors},
                  'run': {'n_jobs': config.n_cpus,

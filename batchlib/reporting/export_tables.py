@@ -87,11 +87,12 @@ def export_cell_tables(folder, output_path, table_name, output_format=None):
     export_table(columns, table, output_path, output_format)
 
 
-def export_tables_for_plate(folder, cell_table_name='cell_segmentation', ext='.xlsx'):
+def export_tables_for_plate(folder, cell_table_name='cell_segmentation', marker_name='marker', ext='.xlsx'):
     """ Conveneince function to export all relevant tables for a plate
     into a more common format (by default excel).
     """
     plate_name = os.path.split(folder)[1]
+    print("Making summary tables for", plate_name)
     table_file = os.path.join(folder, plate_name + '_table.hdf5')
 
     # export the images default table
@@ -118,7 +119,7 @@ def export_tables_for_plate(folder, cell_table_name='cell_segmentation', ext='.x
 
     # export the infected/non-infected classification
     # cell_table_root = cell_table_name.split('/')[0]
-    class_name = f'cell_classification/cell_segmentation/marker'
+    class_name = f'cell_classification/cell_segmentation/{marker_name}'
     class_out = os.path.join(folder, f'{plate_name}_cell_table_infected_clasification{ext}')
     export_cell_tables(folder, class_out, class_name)
 
