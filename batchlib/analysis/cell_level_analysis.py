@@ -897,7 +897,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         visible[0] = False
 
         with open_file(self.table_out_path, 'a') as f:
-            self.write_table(f, self.image_table_key, column_names, table, visible)
+            self.write_table(f, self.image_table_key, column_names, table, visible, force_write=True)
 
         return table, column_names
 
@@ -981,7 +981,7 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         assert n_cols == table.shape[1]
 
         with open_file(self.table_out_path, 'a') as f:
-            self.write_table(f, self.well_table_key, column_names, table)
+            self.write_table(f, self.well_table_key, column_names, table, force_write=True)
 
         return table, column_names
 

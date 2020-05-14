@@ -350,6 +350,7 @@ def core_workflow_tasks(config, name, feature_identifier):
 
     table_identifiers = serum_ana_in_keys if feature_identifier is None else [k + f'_{feature_identifier}'
                                                                               for k in serum_ana_in_keys]
+    write_summary_images = config.write_summary_images
     # NOTE currently the QC tasks will not be rerun if the feature identifier changes
     for serum_key, identifier in zip(serum_ana_in_keys, table_identifiers):
         job_list.append((CellLevelQC, {
@@ -390,11 +391,12 @@ def core_workflow_tasks(config, name, feature_identifier):
                 'cell_seg_key': config.seg_key,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
-                'write_summary_images': config.write_summary_images,
+                'write_summary_images': write_summary_images,
                 'scale_factors': config.scale_factors,
                 'feature_identifier': feature_identifier,
                 'identifier': identifier},
-            'run': {'force_recompute': None}}))
+            'run': {'force_recompute': True}}))
+        write_summary_images = False
 
     # get a dict with all relevant analysis parameters, so that we can write it as a table and log it
     analysis_parameter = get_analysis_parameter(config, background_parameters)

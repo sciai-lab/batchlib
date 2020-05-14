@@ -48,7 +48,11 @@ def export_table(columns, table, output_path, output_format=None):
         df.to_csv(output_path, index=False, sep='\t')
 
 
-def export_default_table(table_file, table_name, output_path, output_format=None):
+def export_default_table(table_file, table_name, output_path, output_format=None, skip_existing=True):
+
+    if os.path.exists(output_path) and skip_existing:
+        return
+
     # table file can be a file path or an opened file object
     if isinstance(table_file, str):
         with open_file(table_file, 'r') as f:
@@ -58,7 +62,10 @@ def export_default_table(table_file, table_name, output_path, output_format=None
     export_table(columns, table, output_path, output_format)
 
 
-def export_cell_tables(folder, output_path, table_name, output_format=None):
+def export_cell_tables(folder, output_path, table_name, output_format=None, skip_existing=True):
+    if os.path.exists(output_path) and skip_existing:
+        return
+
     files = glob(os.path.join(folder, '*.h5'))
     files.sort()
 
@@ -87,7 +94,7 @@ def export_cell_tables(folder, output_path, table_name, output_format=None):
     export_table(columns, table, output_path, output_format)
 
 
-def export_voronoi_tables(folder, ext='.xlsx'):
+def export_voronoi_tables(folder, ext='.xlsx', skip_existing=True):
     plate_name = os.path.split(folder)[1]
     in_file = glob(os.path.join(folder, '*.h5'))[0]
     with open_file(in_file, 'r') as f:
@@ -99,11 +106,15 @@ def export_voronoi_tables(folder, ext='.xlsx'):
     for table_name in voronoi_tables:
         out_name = f'{plate_name}_cell_table_{table_name}{ext}'.replace('/', '_')
         out_path = os.path.join(folder, out_name)
-        export_cell_tables(folder, out_path, table_name)
+        export_cell_tables(folder, out_path, table_name, skip_existing=skip_existing)
 
 
-def export_tables_for_plate(folder, cell_table_name='cell_segmentation',
-                            marker_name='marker', export_voronoi=True, ext='.xlsx'):
+def export_tables_for_plate(folder,
+                            cell_table_name='cell_segmentation',
+                            marker_name='marker',
+                            skip_existing=True,
+                            export_voronoi=True,
+                            ext='.xlsx'):
     """ Conveneince function to export all relevant tables for a plate
     into a more common format (by default excel).
     """
@@ -113,11 +124,11 @@ def export_tables_for_plate(folder, cell_table_name='cell_segmentation',
 
     # export the images default table
     im_out = os.path.join(folder, f'{plate_name}_image_table{ext}')
-    export_default_table(table_file, 'images/default', im_out)
+    export_default_table(table_file, 'images/default', im_out, skip_existing=skip_existing)
 
     # export the wells default table
     well_out = os.path.join(folder, f'{plate_name}_well_table{ext}')
-    export_default_table(table_file, 'wells/default', well_out)
+    export_default_table(table_file, 'wells/default', well_out, skip_existing=skip_existing)
 
     # export the cell segmentation tables
     im_file = glob(os.path.join(folder, '*.h5'))[0]
@@ -131,17 +142,17 @@ def export_tables_for_plate(folder, cell_table_name='cell_segmentation',
     for cell_table_name in cell_table_names:
         channel_name = cell_table_name.split('/')[-1]
         cell_out = os.path.join(folder, f'{plate_name}_cell_table_{channel_name}{ext}')
-        export_cell_tables(folder, cell_out, cell_table_name)
+        export_cell_tables(folder, cell_out, cell_table_name, skip_existing=skip_existing)
 
     # export the infected/non-infected classification
     # cell_table_root = cell_table_name.split('/')[0]
     class_name = f'cell_classification/cell_segmentation/{marker_name}'
     class_out = os.path.join(folder, f'{plate_name}_cell_table_infected_clasification{ext}')
-    export_cell_tables(folder, class_out, class_name)
+    export_cell_tables(folder, class_out, class_name, skip_existing=skip_existing)
 
     # export voronoi tables
     if export_voronoi:
-        export_voronoi_tables(folder, ext)
+        export_voronoi_tables(folder, ext, skip_existing=skip_existing)
 
 
 def _extend_with_db_metadata(score_table, metadata_repository, plate_name):

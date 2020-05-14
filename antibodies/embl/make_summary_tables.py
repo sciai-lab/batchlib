@@ -7,12 +7,11 @@ from batchlib.reporting.export_tables import export_tables_for_plate
 
 
 _export = partial(export_tables_for_plate, cell_table_name='cell_segmentation_mean',
-                  marker_name='marker_for_infected_classification')
+                  marker_name='marker_for_infected_classification',
+                  skip_existing=False)
 
 
 folders = glob(os.path.join('/g/kreshuk/data/covid/data-processed/*'))
-folders = [folder for folder in folders if (not 'plateT' in folder and not 'plateK' in folder)]
-
 # print(folders[0])
 # _export(folders[0])
 
