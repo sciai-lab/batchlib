@@ -87,6 +87,21 @@ def export_cell_tables(folder, output_path, table_name, output_format=None):
     export_table(columns, table, output_path, output_format)
 
 
+def export_voronoi_tables(folder, ext='.xlsx'):
+    plate_name = os.path.split(folder)[1]
+    in_file = glob(os.path.join(folder, '*.h5'))[0]
+    with open_file(in_file, 'r') as f:
+        assert 'tables' in f
+        table_names = list(f['tables'].keys())
+        voronoi_tables = [name for name in table_names if 'voronoi' in name]
+        voronoi_tables = [f'{name}/{channel}' for name in voronoi_tables for channel in f['tables'][name].keys()]
+
+    for table_name in voronoi_tables:
+        out_name = f'{plate_name}_cell_table_{table_name}{ext}'.replace('/', '_')
+        out_path = os.path.join(folder, out_name)
+        export_cell_tables(folder, out_path, table_name)
+
+
 def export_tables_for_plate(folder, cell_table_name='cell_segmentation', marker_name='marker', ext='.xlsx'):
     """ Conveneince function to export all relevant tables for a plate
     into a more common format (by default excel).
