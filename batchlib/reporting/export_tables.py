@@ -48,7 +48,11 @@ def export_table(columns, table, output_path, output_format=None):
         df.to_csv(output_path, index=False, sep='\t')
 
 
-def export_default_table(table_file, table_name, output_path, output_format=None):
+def export_default_table(table_file, table_name, output_path, output_format=None, skip_existing=True):
+
+    if os.path.exists(output_path) and skip_existing:
+        return
+
     # table file can be a file path or an opened file object
     if isinstance(table_file, str):
         with open_file(table_file, 'r') as f:
@@ -58,7 +62,10 @@ def export_default_table(table_file, table_name, output_path, output_format=None
     export_table(columns, table, output_path, output_format)
 
 
-def export_cell_tables(folder, output_path, table_name, output_format=None):
+def export_cell_tables(folder, output_path, table_name, output_format=None, skip_existing=True):
+    if os.path.exists(output_path) and skip_existing:
+        return
+
     files = glob(os.path.join(folder, '*.h5'))
     files.sort()
 
@@ -87,7 +94,7 @@ def export_cell_tables(folder, output_path, table_name, output_format=None):
     export_table(columns, table, output_path, output_format)
 
 
-def export_voronoi_tables(folder, ext='.xlsx'):
+def export_voronoi_tables(folder, ext='.xlsx', skip_existing=True):
     plate_name = os.path.split(folder)[1]
     in_file = glob(os.path.join(folder, '*.h5'))[0]
     with open_file(in_file, 'r') as f:
@@ -99,11 +106,15 @@ def export_voronoi_tables(folder, ext='.xlsx'):
     for table_name in voronoi_tables:
         out_name = f'{plate_name}_cell_table_{table_name}{ext}'.replace('/', '_')
         out_path = os.path.join(folder, out_name)
-        export_cell_tables(folder, out_path, table_name)
+        export_cell_tables(folder, out_path, table_name, skip_existing=skip_existing)
 
 
-def export_tables_for_plate(folder, cell_table_name='cell_segmentation',
-                            marker_name='marker', export_voronoi=True, ext='.xlsx'):
+def export_tables_for_plate(folder,
+                            cell_table_name='cell_segmentation',
+                            marker_name='marker',
+                            skip_existing=True,
+                            export_voronoi=True,
+                            ext='.xlsx'):
     """ Conveneince function to export all relevant tables for a plate
     into a more common format (by default excel).
     """
@@ -113,11 +124,11 @@ def export_tables_for_plate(folder, cell_table_name='cell_segmentation',
 
     # export the images default table
     im_out = os.path.join(folder, f'{plate_name}_image_table{ext}')
-    export_default_table(table_file, 'images/default', im_out)
+    export_default_table(table_file, 'images/default', im_out, skip_existing=skip_existing)
 
     # export the wells default table
     well_out = os.path.join(folder, f'{plate_name}_well_table{ext}')
-    export_default_table(table_file, 'wells/default', well_out)
+    export_default_table(table_file, 'wells/default', well_out, skip_existing=skip_existing)
 
     # export the cell segmentation tables
     im_file = glob(os.path.join(folder, '*.h5'))[0]
@@ -131,29 +142,68 @@ def export_tables_for_plate(folder, cell_table_name='cell_segmentation',
     for cell_table_name in cell_table_names:
         channel_name = cell_table_name.split('/')[-1]
         cell_out = os.path.join(folder, f'{plate_name}_cell_table_{channel_name}{ext}')
-        export_cell_tables(folder, cell_out, cell_table_name)
+        export_cell_tables(folder, cell_out, cell_table_name, skip_existing=skip_existing)
 
     # export the infected/non-infected classification
     # cell_table_root = cell_table_name.split('/')[0]
     class_name = f'cell_classification/cell_segmentation/{marker_name}'
     class_out = os.path.join(folder, f'{plate_name}_cell_table_infected_clasification{ext}')
-    export_cell_tables(folder, class_out, class_name)
+    export_cell_tables(folder, class_out, class_name, skip_existing=skip_existing)
 
     # export voronoi tables
     if export_voronoi:
-        export_voronoi_tables(folder, ext)
+        export_voronoi_tables(folder, ext, skip_existing=skip_existing)
 
 
-# TODO also get values from the db
+def _get_db_metadata(well_names, metadata_repository, plate_name):
+    """
+    Args
+        metadata_repository: instance of PlateMetadataRepository
+        plate_name: name of the plate
+    Returns:
+        additional metadata DB
+    """
+
+    def _get_cohort_type(c_id):
+        if c_id is None:
+            return None
+        assert isinstance(c_id, str)
+        patient_type = c_id[0].lower()
+
+        if patient_type == 'c':
+            return 'positive'
+        elif patient_type == 'b':
+            return 'control'
+        else:
+            return 'unknown'
+
+    cohort_ids = metadata_repository.get_cohort_ids(plate_name)
+    elisa_results = metadata_repository.get_elisa_results(plate_name)
+
+    additional_values = []
+    for well_name in well_names:
+        cohort_id = cohort_ids.get(well_name, None)
+        cohort_type = _get_cohort_type(cohort_id)
+        elisa_IgG, elisa_IgA = elisa_results.get(well_name, (None, None))
+        additional_values.append([cohort_id, cohort_id, elisa_IgG, elisa_IgA, cohort_type])
+
+    return np.array(additional_values)
+
+
+# FIXME all metadata is blank
+# FIXME the name matching triggers for unwanted scores,
+# we only want IgG and IgM
+# FIXME make score names more succinct
 def export_scores(folder_list, output_path,
                   score_patterns=DEFAULT_SCORE_PATTERNS,
-                  table_name='wells/default'):
-    columns = None
-    table = []
+                  table_name='wells/default',
+                  metadata_repository=None):
 
     def name_matches_score(name):
         return any(pattern in name for pattern in score_patterns)
 
+    # first pass: find all column names that match the pattern
+    result_columns = []
     for folder in folder_list:
         plate_name = os.path.split(folder)[1]
         table_path = os.path.join(folder, plate_name + '_table.hdf5')
@@ -161,20 +211,43 @@ def export_scores(folder_list, output_path,
             raise RuntimeError(f"Did not find a result table @ {table_path}")
 
         with open_file(table_path, 'r') as f:
-            col_names, this_table = read_table(f, table_name)
+            col_names, _ = read_table(f, table_name)
+        assert 'well_name' in col_names
+        col_names = [col_name for col_name in col_names if name_matches_score(col_name)]
+        result_columns.extend(col_names)
 
-        if columns is None:
-            assert 'well_name' in col_names
-            columns = ['well_name'] + [col_name for col_name in col_names if name_matches_score(col_name)]
-            all_columns = ['plate_name'] + columns
+    result_columns = ['well_name'] + list(set(result_columns))
+    columns = ['plate_name'] + result_columns
 
-        if len(set(columns) - set(col_names)) > 0:
-            raise RuntimeError("Columns don't match")
+    # append cohort_id, elisa results and cohort_type (positive/control/unknow) if we have db
+    if metadata_repository is not None:
+        db_metadata = ['cohort_id', 'elisa_IgG', 'elisa_IgA', 'cohort_type']
+        columns += db_metadata
 
-        col_ids = [col_names.index(col_name) for col_name in columns]
-        plate_col = np.array([plate_name] * len(this_table))
-        score_table = np.concatenate([plate_col[:, None], this_table[:, col_ids]], axis=1)
-        table.append(score_table)
+    # second pass: load the tables
+    table = []
+    for folder in folder_list:
+        plate_name = os.path.split(folder)[1]
+        table_path = os.path.join(folder, plate_name + '_table.hdf5')
+        with open_file(table_path, 'r') as f:
+            this_result_columns, this_result_table = read_table(f, table_name)
+
+        this_len = len(this_result_table)
+        plate_col = np.array([plate_name] * this_len)
+
+        col_ids = [this_result_columns.index(name) if name in this_result_columns else -1
+                   for name in result_columns[1:]]
+        this_table = [np.array([None] * this_len)[:, None] if col_id == -1 else
+                      this_result_table[:, col_id:col_id+1] for col_id in col_ids]
+        this_table = np.concatenate([plate_col[:, None]] + this_table, axis=1)
+
+        # extend table with the values from DB
+        if metadata_repository is not None:
+            metadata = _get_db_metadata(this_table[:, 1], metadata_repository, plate_name)
+            assert len(metadata) == len(this_table)
+            this_table = np.concatenate([this_table, metadata], axis=1)
+
+        table.append(this_table)
 
     table = np.concatenate(table, axis=0)
-    export_table(all_columns, table, output_path)
+    export_table(columns, table, output_path)

@@ -124,7 +124,7 @@ class MergeAnalysisTables(BatchJobOnContainer):
     def __init__(self, input_table_names, reference_table_name,
                  common_name_patterns=DEFAULT_COMMON_NAME_PATTERNS,
                  reference_name_patterns=DEFAULT_REFERENCE_NAME_PATTERNS,
-                 analysis_parameters=None, background_column_pattern='median',
+                 analysis_parameters=None, background_column_patterns=('median', 'mad'),
                  identifier=None, hide_sums=True, **super_kwargs):
 
         if reference_table_name not in input_table_names:
@@ -136,7 +136,7 @@ class MergeAnalysisTables(BatchJobOnContainer):
         self.common_name_patterns = common_name_patterns
         self.reference_name_patterns = reference_name_patterns
 
-        self.background_column_pattern = background_column_pattern
+        self.background_column_patterns = background_column_patterns
         self.image_background_table = 'images/backgrounds'
         self.well_background_table = 'wells/backgrounds'
 
@@ -154,7 +154,9 @@ class MergeAnalysisTables(BatchJobOnContainer):
 
         out_keys = [self.image_table_name, self.well_table_name]
         out_format = ['table', 'table']
-        if analysis_parameters is not None:
+        if analysis_parameters is None:
+            self.analysis_parameters = None
+        else:
             self.analysis_parameters = analysis_parameters
             self.parameter_table_name = 'plate/analysis_parameter'
             out_keys.append(self.parameter_table_name)
@@ -248,7 +250,10 @@ class MergeAnalysisTables(BatchJobOnContainer):
             if len(table) != len(bg_table):
                 raise RuntimeError(f"Invalid number of rows {len(table)}, {len(bg_table)}")
 
-            bg_col_names = [name for name in bg_columns if self.background_column_pattern in name]
+            bg_col_names = [name for name in bg_columns
+                            if any(pattern in name for pattern in self.background_column_patterns)]
+
+            logger.info(f'{self.name}: add background columns {bg_col_names}')
             bg_col_ids = [bg_columns.index(name) for name in bg_col_names]
             bg_values = bg_table[:, bg_col_ids]
 
