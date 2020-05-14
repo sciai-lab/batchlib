@@ -123,10 +123,48 @@ def export_tables_for_plate(folder, cell_table_name='cell_segmentation', ext='.x
     export_cell_tables(folder, class_out, class_name)
 
 
-# TODO also get values from the db
+def _extend_with_db_metadata(score_table, metadata_repository, plate_name):
+    """
+    Args
+        score_table: table to be extended
+        metadata_repository: instance of PlateMetadataRepository
+        plate_name: name of the plate
+    Returns:
+        score table updated the values from DB
+    """
+
+    def _get_cohort_type(c_id):
+        if c_id is None:
+            return None
+        assert isinstance(c_id, str)
+        patient_type = c_id[0].lower()
+
+        if patient_type == 'c':
+            return 'positive'
+        elif patient_type == 'b':
+            return 'control'
+        else:
+            return 'unknown'
+
+    cohort_ids = metadata_repository.get_cohort_ids(plate_name)
+    elisa_results = metadata_repository.get_elisa_results(plate_name)
+
+    additional_values = []
+    for row in score_table:
+        well_name = row[1]
+        cohort_id = cohort_ids.get(well_name, None)
+        cohort_type = _get_cohort_type(cohort_id)
+        elisa_IgG, elisa_IgA = elisa_results.get(well_name, (None, None))
+        additional_values.append([cohort_type, cohort_id, elisa_IgG, elisa_IgA])
+
+    score_table = np.concatenate([score_table, additional_values], axis=1)
+    return score_table
+
+
 def export_scores(folder_list, output_path,
                   score_patterns=DEFAULT_SCORE_PATTERNS,
-                  table_name='wells/default'):
+                  table_name='wells/default',
+                  metadata_repository=None):
     columns = None
     table = []
 
@@ -146,6 +184,10 @@ def export_scores(folder_list, output_path,
             assert 'well_name' in col_names
             columns = ['well_name'] + [col_name for col_name in col_names if name_matches_score(col_name)]
             all_columns = ['plate_name'] + columns
+            # append cohort_type (positive/control/unknow), cohort_id and elisa results
+            db_metadata = ['cohort_type', 'cohort_id', 'elisa_IgG', 'elisa_IgA']
+            if metadata_repository is not None:
+                all_columns = all_columns + db_metadata
 
         if len(set(columns) - set(col_names)) > 0:
             raise RuntimeError("Columns don't match")
@@ -153,6 +195,10 @@ def export_scores(folder_list, output_path,
         col_ids = [col_names.index(col_name) for col_name in columns]
         plate_col = np.array([plate_name] * len(this_table))
         score_table = np.concatenate([plate_col[:, None], this_table[:, col_ids]], axis=1)
+        # extend table with the values from DB
+        if metadata_repository is not None:
+            score_table = _extend_with_db_metadata(score_table, metadata_repository, plate_name, db_metadata)
+
         table.append(score_table)
 
     table = np.concatenate(table, axis=0)
