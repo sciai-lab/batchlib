@@ -50,11 +50,12 @@ class VoronoiRingSegmentation(BatchJobOnContainer):
 
         median_size = np.median(sizes)
 
-        # logging this to determine the nucleus radii for more data
+        # logging this to determine the nucleus sizes to estimate the nucleus radius for data
         im_name = in_file_to_image_name(im_path)
         logger.debug(f"{self.name}: median nucleus size for {im_name} is {median_size}")
 
-        return int(self.radius_factor * np.sqrt(median_size / np.pi))
+        # we don't divide by pi here on purpose!
+        return int(self.radius_factor * np.sqrt(median_size))
 
     def segment_image(self, in_path):
         with open_file(in_path, 'r') as f:
