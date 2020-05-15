@@ -472,7 +472,8 @@ def run_cell_analysis(config):
                  input_folder=config.input_folder,
                  force_recompute=config.force_recompute,
                  ignore_invalid_inputs=config.ignore_invalid_inputs,
-                 ignore_failed_outputs=config.ignore_failed_outputs)
+                 ignore_failed_outputs=config.ignore_failed_outputs,
+                 skip_processed=bool(config.skip_processed))
 
     # only run the workflow summaries if we don't have the feature identifier
     if feature_identifier is None:
@@ -563,6 +564,7 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--force_recompute", default=None)
     parser.add("--ignore_invalid_inputs", default=None)
     parser.add("--ignore_failed_outputs", default=None)
+    parser.ad("--skip_processed", default=0, type=int)
 
     # additional image output
     parser.add("--write_summary_images", default=True)

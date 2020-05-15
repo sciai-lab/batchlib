@@ -41,7 +41,7 @@ def _update_run_kwargs(run_kwargs, force_recompute,
 
 def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None,
                  ignore_invalid_inputs=None, ignore_failed_outputs=None,
-                 lock_folder=True, enable_logging=True):
+                 lock_folder=True, enable_logging=True, skip_processed=False):
     """ Run workflow of consecutive batch jobs.
 
     The jobs to be run are specified in a dictionary, like
@@ -67,7 +67,8 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
         ignore_invalid_inputs - whether to continue processing with invalid inputs (default: None)
         ignore_failed_outputs - whether to continue processing with failed outputs (default: None)
         lock_folder - lock the folder so that no other workflow can act on it (default: True)
-        enable_logging - whether to log to stdout and a log file
+        enable_logging - whether to log to stdout and a log file (default: True)
+        skip_processed - whether to check if we need to recompute anything for processed jobs (default: False)
     """
     if enable_logging:
         logger = get_logger('Workflow')
@@ -111,6 +112,12 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
                 run_kwargs.update(dict(input_folder=input_folder))
 
             job = job_class(**build_kwargs)
+            job_state = job.status_file(folder)
+            if skip_processed and os.path.exists(job_state):
+                with open(job_state) as f:
+                    job_stat = json.load(f)
+                if job_stat.get('state', '') == 'processed':
+                    continue
 
             # jobs can be given an identifier, in order to run a job with
             # the same class (but different parameters) twice
@@ -136,9 +143,9 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
             status[job_name] = state
             _dump_status(status_file, status)
 
-            # write commit id to all processed files, so we know which batchlib version was used
-            if commit_id is not None:
-                write_commit_id(folder, commit_id)
+        # write commit id to all processed files, so we know which batchlib version was used
+        if commit_id is not None:
+            write_commit_id(folder, commit_id)
 
     if enable_logging:
         remove_file_handler(logger, work_dir)
