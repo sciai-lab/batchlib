@@ -14,6 +14,8 @@ from ..util.io import (open_file, image_name_to_well_name,
 logger = get_logger('Workflow.BatchJob.ExtractBackground')
 
 
+# TODO we need to make sure that we are robust against completely empty wells
+# (these should have no cells at all, so we can use this)
 class BackgroundFromMinWell(BatchJobOnContainer):
     def __init__(self, bg_table, output_table,
                  channel_names, min_background_fraction):
