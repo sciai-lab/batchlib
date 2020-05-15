@@ -4,9 +4,11 @@ from collections import defaultdict
 
 import numpy as np
 from tqdm import tqdm
-from batchlib.util.io import open_file
+import math
+from batchlib.util.io import open_file, read_table, get_column_dict
 
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import matplotlib
 matplotlib.use("Agg")
 from matplotlib.collections import PatchCollection
@@ -15,10 +17,60 @@ from matplotlib.patches import Circle, Wedge
 row_letters = np.array(list('ABCDEFGH'))
 letter_to_row = {letter: i for i, letter in enumerate(row_letters)}
 
+to_rgb = mcolors.ColorConverter().to_rgb
+
+
+def make_colormap(seq):
+    """
+    From https://stackoverflow.com/a/16836182.
+    Return a LinearSegmentedColormap
+    seq: a sequence of floats and RGB-tuples. The floats should be increasing
+    and in the interval (0,1).
+    """
+    seq = [(None,) * 3, 0.0] + list(seq) + [1.0, (None,) * 3]
+    cdict = {'red': [], 'green': [], 'blue': []}
+    for i, item in enumerate(seq):
+        if isinstance(item, float):
+            r1, g1, b1 = seq[i - 1]
+            r2, g2, b2 = seq[i + 1]
+            cdict['red'].append([item, r1, r2])
+            cdict['green'].append([item, g1, g2])
+            cdict['blue'].append([item, b1, b2])
+    return mcolors.LinearSegmentedColormap('CustomMap', cdict)
+
+
+CATEGORICAL_COLORS = (
+    to_rgb('blue'), to_rgb('blue'),
+    (0, 0.8, 0), (0, 0.8, 0),
+    to_rgb('yellow'), to_rgb('yellow')
+)
+CONTINUOUS_COLORS = (
+    to_rgb('blue'), to_rgb('lightblue'),
+    (0, 0.8, 0), (0, 0.8, 0),
+    to_rgb('lightyellow'), to_rgb('yellow')
+)
+
+
+def make_colormap_absolute(
+    thresholds=(0.0, 0.33, 0.66, 1.0),
+    colors=CONTINUOUS_COLORS,
+):
+    thresholds = np.array(thresholds)
+    vmin = thresholds[0]
+    vmax = thresholds[-1]
+    thresholds = (thresholds[1:-1] - vmin) / (vmax - vmin)
+    seq = [x for i in range(len(thresholds))
+           for x in (colors[2*i], colors[2*i+1], thresholds[i])] + list(colors[-2:])
+    cmap = make_colormap(seq)
+    return cmap, (vmin, vmax)
+
 
 def get_well(filename, to_numeric=True):
     # gets well coordinates. starting at 0
-    match = re.search('Well([A-H])(\d\d)', filename)
+    if len(filename) == 3:  # if well is given as e.g. "A04"
+        match = re.match('([A-H])(\d\d)', filename)
+    else:
+        match = re.search('Well([A-H])(\d\d)', filename)
     if not match:
         assert False, f'could not find well name in filename {filename}'
     x, y = match.groups()
@@ -42,7 +94,7 @@ def make_per_well_dict(data_dict, min_samples_per_well=None):
 
 def well_plot(data_dict, infected_list=None,
               fig=None, ax=None, title=None, outfile=None,
-              sort=False, print_medians=False, figsize=(7.1, 4), colorbar_range=None,
+              sort=False, print_medians=False, figsize=(7.1, 4), colorbar_range=None, cmap=None,
               radius=0.45, wedge_width=0.2, infected_marker_width=0.05, angular_gap=0.0,
               min_samples_per_well=None):
     """
@@ -92,7 +144,7 @@ def well_plot(data_dict, infected_list=None,
         # central circle is showing the median
         central_circle = Circle(center, radius - wedge_width)
         median = np.median(values)
-        if median is not np.nan:
+        if not math.isnan(median):
             patches.append(central_circle)
             patch_values.append(median)
         else:
@@ -106,7 +158,7 @@ def well_plot(data_dict, infected_list=None,
                           (360 / n_samples * (i + angular_gap)),
                           360 / n_samples * (i + 1 - angular_gap),
                           width=wedge_width)
-            if value is not np.nan:
+            if not math.isnan(value):
                 patches.append(wedge)
                 patch_values.append(value)
             else:
@@ -120,6 +172,8 @@ def well_plot(data_dict, infected_list=None,
     coll.set_array(np.array(patch_values))
     if colorbar_range is not None:
         coll.set_clim(*colorbar_range)
+        if cmap is not None:
+            coll.set_cmap(cmap)
 
     ax.add_collection(coll)
     fig.colorbar(coll, ax=ax)
@@ -132,7 +186,7 @@ def well_plot(data_dict, infected_list=None,
         for well in infected_list:
             well_position = get_well(well)
             center = well_position[1], 7 - well_position[0]
-            infected_marker_patches.append(Wedge(center, radius + wedge_width,
+            infected_marker_patches.append(Wedge(center, radius,
                                                  0, 360,
                                                  width=infected_marker_width))
 
@@ -248,19 +302,27 @@ def get_colorbar_range(key):
     return colorbar_range
 
 
-# TODO this function should be refactored into two functions:
-# 1 that accepts a well table and one that accepts an image table
-def all_plots(table_path, out_folder, table_key, stat_names, identifier=None, **well_plot_kwargs):
+colorbar_threshold_dict = {
+    'IgA_robust_z_score_means':     (0.0, 1.8, 2.5, 5),
+    'IgG_robust_z_score_means':     (0.0, 1.8, 2.5, 5),
+    'IgA_robust_z_score_sums':      (0.0, 1.8, 2.5, 5),
+    'IgG_robust_z_score_sums':      (0.0, 1.8, 2.5, 5),
+    'IgA_ratio_of_q0.5_of_means':   (0.9, 1.8, 2.5, 5),
+    'IgG_ratio_of_q0.5_of_means':   (0.9, 1.25, 1.3, 2.0),
+    'IgA_ratio_of_q0.5_of_sums':    (0.9, 1.8, 2.5, 5),
+    'IgG_ratio_of_q0.5_of_sums':    (0.9, 1.25, 1.3, 2.0)
+}
+
+
+def all_plots(table_path, out_folder, table_key, stat_names, identifier,
+              outlier_table_key='wells/outliers', **well_plot_kwargs):
     if not isinstance(stat_names, (list, tuple)):
         raise ValueError(f"stat_names must be either list or tuple, got {type(stat_names)}")
     os.makedirs(out_folder, exist_ok=True)
 
     # load first file to get all the column names
     with open_file(table_path, 'r') as f:
-        g = f[table_key]
-        column_names = g['columns'][:]
-        table = g['cells'][:]
-    column_names = [name.decode('utf8') for name in column_names]
+        column_names, table = read_table(f, table_key)
 
     if column_names[0] not in ['image_name', 'well_name']:
         raise ValueError("all_plots can only be called on a table that contains the image or well statistics")
@@ -272,24 +334,37 @@ def all_plots(table_path, out_folder, table_key, stat_names, identifier=None, **
         unknown_stats = ", ".join(unknown_stats)
         raise ValueError(f"Did not find the names {unknown_stats} in the table columns")
 
-    plate_name = os.path.split(table_path)[0]
+    # get outliers. for now, only well-wise outliers are supported
+    if outlier_table_key is not None:
+        with open_file(table_path, 'r') as f:
+            outlier_column_names, outlier_table = read_table(f, outlier_table_key)
+            outlier_list = [key
+                            for key, value in get_column_dict(outlier_column_names, outlier_table, 'is_outlier').items()
+                            if value]
+
+    plate_name = os.path.split(os.path.split(table_path)[0])[1]
 
     for name in tqdm(stat_names, desc='making plots'):
+        try:
+            cmap, colorbar_range = make_colormap_absolute(colorbar_threshold_dict[name])
+        except KeyError:
+            print(f'Warning: No colorbar thresholds specified for stat {name}')
+            cmap, colorbar_range = None, None
 
         # 0th column is the image / well name
         image_or_well_names = [str(im_name) for im_name in table[:, 0]]
-        # Hack for Wells
-        image_or_well_names = ['Well' + name[2:] if len(name) == 6 else name for name in image_or_well_names]
         stat_id = column_names.index(name)
         stats_per_file = dict(zip(image_or_well_names, table[:, stat_id].astype('float')))
 
-        outfile = os.path.join(out_folder, f"plates_{name}.png") if identifier is None else \
-            os.path.join(out_folder, f"plates_{name}_{identifier}.png")
+        outfile = os.path.join(out_folder, f"{plate_name}_{name}_{identifier}.png")
         well_plot(stats_per_file,
+                  infected_list=outlier_list,
                   print_medians=True,
                   outfile=outfile,
                   figsize=(11, 6),
-                  title=plate_name + "\n" + name,
+                  title=f'{plate_name}\n{name}_{identifier}',
+                  cmap=cmap,
+                  colorbar_range=colorbar_range,
                   **well_plot_kwargs)
 
 

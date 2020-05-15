@@ -33,7 +33,7 @@ def plate_name_from_input_folder(input_folder):
         plate_name = os.path.split(csv_file)[1]
         plate_name = plate_name[:plate_name.find('_tagger')]
 
-        if plate_name in input_folder:
+        if plate_name == input_folder:
             return plate_name
     return None
 
@@ -87,6 +87,10 @@ class OutlierPredicate:
 
         if self.outlier_tags is None:
             # outliers info not available
+            return -1
+
+        if img_file not in self.outlier_tags:
+            logger.warning(f'File: {img_file} not found in the outliers CSV file')
             return -1
 
         label = self.outlier_tags[img_file]

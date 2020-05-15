@@ -23,8 +23,9 @@ class SeededSegmentation(BatchJobOnContainer):
         if mask_key is not None:
             input_keys.append(mask_key)
 
-        super().__init__(input_key=input_keys, output_key=output_key,
-                         input_ndim=2, output_ndim=2, **super_kwargs)
+        super().__init__(input_key=input_keys, input_format=['image']*len(input_keys),
+                         output_key=output_key, output_format=['image'],
+                         **super_kwargs)
 
         self.pmap_key = pmap_key
         self.seed_key = seed_key

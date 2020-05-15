@@ -56,7 +56,7 @@ Start mongo shell and authenticate as admin
 
 ```
 use admin // switch to admin db
-db.auth("myUserAdmin", passwordPrompt()) // or cleartext password
+db.auth("admin", passwordPrompt()) // or cleartext password
 ```
 
 Create create `covid` db and `covid19` user
@@ -82,9 +82,6 @@ mongo --port 27017 -u "covid19" --authenticationDatabase "covid" -p
 use covid
 db.foo.insert( { x: 1, y: 1 } )
 ```
-
-## Replication
-TBD
 
 ## Schema description
 The following collections are present in the `covid` database:
@@ -131,27 +128,65 @@ Schema of a single document:
   "workflow_name": "name of the workflow",
   "plate_name": "name of the plate",
   "batchlib_version": "version of batchlib the that produced the result",
-  "status": "success/failed",
-  "result_table": {
-    "plate_results": {
+  "analysis_parameters": "parameters/values the analysis was run with",
+  "result_tables": [[
+    {
+      "table_name": "wells/default",
+      "results": [
       
-    },
-    "per_well_results": [
-      {
-        
-      }
-    ],
-    "per_image_results": [
-      {
+      ]
+    }, 
+    {
+      "table_name": "images/default",
+      "results": [
       
-      }
-    ],
-    "per_cell_results": [
-      {
-      
-      }
-    ]
-  }
+      ]
+    }
+    }
+  ]
 }
 ```
 
+- `cohort-descriptions` - cohort types together with their short descriptions
+
+Schema of a single document:
+```json
+{
+  "patient_type": "STRING",
+  "description": "STRING"
+}
+```
+
+## Import metadata manually
+Attributes such as cohort ids and Elise test results for the wells as well as outlier status for images are provided externally
+via excel sheets and CSV files. Those attributes are updated automatically via the [DbResultWriter](result_writer.py) job
+which is run at the end of the analysis workflow. Those metadata may change however (e.g. outliers were redone manually,
+or new elisa excel sheets were added to the repo). In this case we might want to update the metadata manually, instead
+of re-running the analysis workflow on all of the plates.
+
+The following scripts can be run to update the metadata at any time against the dev and production DB:
+```bash
+python import_outliers.py --host DBHOST --port 27017 --db covid --user covid19 --password PASSWD
+python import_cohort_ids.py --host DBHOST --port 27017 --db covid --user covid19 --password PASSWD
+python import_elisa_results.py --host DBHOST --port 27017 --db covid --user covid19 --password PASSWD
+```
+
+Bear in mind that cohort ids have to be imported before elisa test results, cause the latter rely on the former to be in DB.
+
+## Backup & restore
+
+In order to do periodic backups or backup data from the development database and restore it in the production database 
+use `mongodump`/`mongorestore` functionality.
+
+### Dump development database and restore into the production database
+
+Dump development db into the `dump` folder in the current directory:
+```bash
+mongodump --host=vm-kreshuk08.embl.de --port=27017 --db=covid --username=covid19 --password=PASSWD
+```
+
+
+Restore the dump to the production mongod instance:
+```bash
+mongorestore --host=vm-kreshuk-11.embl.de --port=27017 --username=covid19  --password=PASSWD --authenticationDatabase=covid dump
+```

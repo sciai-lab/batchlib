@@ -1,22 +1,18 @@
-import argparse
-import json
-from datetime import datetime
 import glob
-
-import pymongo
-from pymongo import MongoClient
+import json
+import os
+from datetime import datetime
 
 from batchlib.outliers.outlier import OutlierPredicate, DEFAULT_OUTLIER_DIR
 from batchlib.util import get_logger
-import urllib.parse
-import os
+from batchlib.util.io import image_name_to_site_name
 
 ASSAY_METADATA = 'immuno-assay-metadata'
 ASSAY_ANALYSIS_RESULTS = 'immuno-assay-analysis-results'
 
-SUPPORTED_FORMATS = ['*.tif', '*.tiff']
+SUPPORTED_FORMATS = ['*.h5', '*.tif', '*.tiff']
 
-logger = get_logger('MongoDB Migrator')
+logger = get_logger('Workflow.BatchJob.DbResultWriter.Utils')
 
 default_channel_mapping = {
     "DAPI": "nuclei",
@@ -68,10 +64,13 @@ def _load_channel_mapping(plate_dir):
 def _create_images(well_name, well_files, outlier_predicate):
     images = []
     for im_file in well_files:
+        # take only image name without file extension
+        im_file = os.path.splitext(im_file)[0]
         images.append(
             {
                 "name": im_file,
                 "well_name": well_name,
+                "site_name": image_name_to_site_name(im_file),
                 "outlier": outlier_predicate(im_file),
                 "outlier_type": "manual"
             }
@@ -102,7 +101,6 @@ def _create_wells(plate_name, plate_dir):
                 # assume all wells are valid for now
                 "outlier": 0,
                 "outlier_type": "manual",
-                "manual_assessment": "unknown",
                 "images": _create_images(well_name, well_files, outlier_predicate)
             }
         )
@@ -110,7 +108,7 @@ def _create_wells(plate_name, plate_dir):
     return wells
 
 
-def _create_plate_doc(plate_name, plate_dir):
+def create_plate_doc(plate_name, plate_dir):
     logger.info(f'Creating plate object for: {plate_name}')
     result = {
         "name": plate_name,
@@ -125,58 +123,12 @@ def _create_plate_doc(plate_name, plate_dir):
     return result
 
 
-def migrate(input_folder, db):
-    logger.info(f'Migrating plates from: {input_folder}...')
-    # get assay metadata collection
-    assay_metadata = db[ASSAY_METADATA]
-    # create necessary indexes
-    assay_metadata.create_index([('name', pymongo.ASCENDING)], unique=True)
+def _get_table_names(f):
+    table_names = set()
 
-    plate_docs = []
-    for filename in os.listdir(input_folder):
-        plate_name = filename
-        plate_dir = os.path.join(input_folder, plate_name)
-        if os.path.isdir(plate_dir):
-            plate_doc = _create_plate_doc(plate_name, plate_dir)
-            if plate_doc is not None:
-                plate_docs.append(plate_doc)
+    def _visitor(name):
+        if name.endswith('cells'):
+            table_names.add(name[:-6])
 
-    # import plates
-    logger.info(f'Importing {len(plate_docs)} plates')
-    assay_metadata.insert_many(plate_docs)
-
-
-def update_well_assessment(plate_name, well_assessments):
-    # TODO: implement when we have this info in parseable format
-    pass
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='MongoDB migrator')
-    parser.add_argument('--input_folder', type=str, help='Path to the directory containing all the plates',
-                        required=True)
-
-    parser.add_argument('--host', type=str, help='IP of the MongoDB primary DB', required=True)
-    parser.add_argument('--port', type=int, help='MongoDB port', default=27017)
-
-    parser.add_argument('--user', type=str, help='MongoDB user', required=True)
-    parser.add_argument('--password', type=str, help='MongoDB password', required=True)
-
-    parser.add_argument('--db', type=str, help='Default database', default='covid')
-    args = parser.parse_args()
-
-    # escape username and password to be URL friendly
-    username = urllib.parse.quote_plus(args.user)
-    password = urllib.parse.quote_plus(args.password)
-
-    mongodb_uri = f'mongodb://{username}:{password}@{args.host}:{args.port}/?authSource={args.db}'
-
-    logger.info(f'Connecting to MongoDB instance: {args.host}:{args.port}, user: {args.user}, authSource: {args.db}')
-
-    client = MongoClient(mongodb_uri)
-
-    logger.info(f'Getting database: {args.db}')
-
-    db = client[args.db]
-
-    migrate(args.input_folder, db)
+    f['tables'].visit(_visitor)
+    return list(table_names)

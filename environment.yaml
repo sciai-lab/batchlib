@@ -17,6 +17,9 @@ dependencies:
     - torchvision
     - tqdm
     - vigra
+    - pymongo
+    - xlrd
+    - slackclient
+    - openpyxl
     - pip:
         - stardist
-        - pymongo

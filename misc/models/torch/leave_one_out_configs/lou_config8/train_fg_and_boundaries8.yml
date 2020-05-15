@@ -1,0 +1,165 @@
+# use a fixed random seed to guarantee that when you run the code twice you will get the same outcome
+manual_seed: 0
+model:
+  name: UNet2D
+  # number of input channels to the model
+  in_channels: 1
+  # number of output channels
+  out_channels: 2
+  # determines the order of operators in a single layer (crg - Conv3d+ReLU+GroupNorm)
+  layer_order: gcr
+  # initial number of feature maps
+  f_maps: [32, 64, 128, 256, 512]
+  # number of groups in the groupnorm
+  num_groups: 8
+  # apply element-wise nn.Sigmoid after the final 1x1x1 convolution, otherwise apply nn.Softmax
+  final_sigmoid: true
+  is_segmentation: true
+# loss function to be used during training
+loss:
+  # the combination of binary cross-entropy and Dice loss
+  name: BCEDiceLoss
+  # skip the last channel in the target (i.e. when last channel contains data not relevant for the loss)
+  skip_last_target: true
+optimizer:
+  # initial learning rate
+  learning_rate: 0.0001
+  # weight decay
+  weight_decay: 0.00001
+# evaluation metric
+eval_metric:
+  # use AdaptedRandError metric
+  name: BoundaryAdaptedRandError
+  # probability maps threshold
+  thresholds: [0.4]
+  # use the last target channel to compute the metric
+  use_last_target: true
+  # use 2nd input channel for validation
+  input_channel: 1
+lr_scheduler:
+  name: ReduceLROnPlateau
+  # make sure to use the 'min' mode cause lower AdaptedRandError is better
+  mode: min
+  factor: 0.2
+  patience: 10
+trainer:
+  # model with lower eval score is considered better
+  eval_score_higher_is_better: False
+  # path to the checkpoint directory
+  checkpoint_dir: '/g/kreshuk/software/antibodies-nuclei/unet_segmentation/lou_config8'
+  # path to latest checkpoint; if provided the training will be resumed from that checkpoint
+  resume: null
+  # how many iterations between validations
+  validate_after_iters: 500
+  # how many iterations between tensorboard logging
+  log_after_iters: 250
+  # max number of epochs
+  epochs: 1000
+  # max number of iterations
+  iters: 150000
+  # tensorboard formatter
+  tensorboard_formatter:
+    name: DefaultTensorboardFormatter
+    skip_last_target: true
+# Configure training and validation loaders
+loaders:
+  batch_size: 24
+  # how many subprocesses to use for data loading
+  num_workers: 8
+  # path to the raw data within the H5
+  raw_internal_path: /raw
+  # path to the the label data withtin the H5
+  label_internal_path: /cells
+  # configuration of the train loader
+  train:
+    # paths to the training datasets
+    file_paths:
+      - '/g/kreshuk/software/antibodies-nuclei/groundtruth/segmentation/20200405_test_images/WellC01_PointC01_0000_ChannelDAPI,WF_GFP,TRITC,WF_Cy5_Seq0216_segmentation_done.h5'
+      - '/g/kreshuk/software/antibodies-nuclei/groundtruth/segmentation/20200405_test_images/WellC05_PointC05_0004_ChannelDAPI,WF_GFP,TRITC,WF_Cy5_Seq0256_segmentation_done.h5'
+      - '/g/kreshuk/software/antibodies-nuclei/groundtruth/segmentation/20200405_test_images/WellC07_PointC07_0007_ChannelDAPI,WF_GFP,TRITC,WF_Cy5_Seq0277_segmentation_done.h5'
+      - '/g/kreshuk/software/antibodies-nuclei/groundtruth/segmentation/20200417_172611_193_IgG/WellA04_PointA04_0007_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0025_segmentation_done.h5'
+      - '/g/kreshuk/software/antibodies-nuclei/groundtruth/segmentation/20200417_203228_156_IgG/WellC06_PointC06_0003_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0219_segmentation_done.h5'
+      - '/g/kreshuk/software/antibodies-nuclei/groundtruth/segmentation/20200420_164920_764_IgG/WellD11_PointD11_0000_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0270_segmentation_done.h5'
+      - '/g/kreshuk/software/antibodies-nuclei/groundtruth/segmentation/plate7rep1_20200426_103425_693_IgG/WellA09_PointA09_0008_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0080_segmentation_done.h5'
+      - '/g/kreshuk/software/antibodies-nuclei/groundtruth/segmentation/plateK10rep1_20200429_122048_065_IgG/WellE05_PointE05_0004_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0454_segmentation_done.h5'
+      - '/g/kreshuk/software/antibodies-nuclei/groundtruth/segmentation/plateK12rep1_20200430_155932_313_IgG/WellG02_PointG02_0001_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0658_segmentation_done.h5'
+
+
+    # SliceBuilder configuration, i.e. how to iterate over the input volume patch-by-patch
+    slice_builder:
+      name: SliceBuilder
+      # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
+      patch_shape: [1, 256, 256]
+      # train stride between patches
+      stride_shape: [1, 32, 32]
+      skip_shape_check: true
+
+    transformer:
+      raw:
+        - name: Standardize
+        - name: RandomFlip
+        - name: RandomRotate90
+        - name: RandomRotate
+          # rotate only in ZY plane due to anisotropy
+          axes: [[2, 1]]
+          angle_spectrum: 30
+          mode: reflect
+        - name: ElasticDeformation
+          spline_order: 3
+          execution_probability: 0.2
+        - name: AdditiveGaussianNoise
+        - name: AdditivePoissonNoise
+        - name: ToTensor
+          expand_dims: true
+      label:
+        - name: RandomFlip
+        - name: RandomRotate90
+        - name: RandomRotate
+          # rotate only in ZY plane due to anisotropy
+          axes: [[2, 1]]
+          angle_spectrum: 30
+          mode: reflect
+        - name: ElasticDeformation
+          spline_order: 0
+          execution_probability: 0.2
+        - name: StandardLabelToBoundary
+          # append original ground truth labels to the last channel (to be able to compute the eval metric)
+          append_label: true
+          # guassian blur and threshold the boundary map in order to help with overfitting
+          blur: true
+          # stddev of Gaussian kernel
+          sigma: 1.0
+          # foreground in the 1st channel
+          foreground: true
+        - name: ToTensor
+          expand_dims: false
+
+  # configuration of the val loader
+  val:
+    # paths to the val datasets
+    file_paths:
+      - '/g/kreshuk/software/antibodies-nuclei/groundtruth/segmentation/20200405_test_images/WellC06_PointC06_0000_ChannelDAPI,WF_GFP,TRITC,WF_Cy5_Seq0261_segmentation_done.h5'
+
+    # SliceBuilder configuration, i.e. how to iterate over the input volume patch-by-patch
+    slice_builder:
+      name: SliceBuilder
+      # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
+      patch_shape: [1, 256, 256]
+      # train stride between patches
+      stride_shape: [1, 256, 256]
+      skip_shape_check: true
+
+    # data augmentation
+    transformer:
+      raw:
+        - name: Standardize
+        - name: ToTensor
+          expand_dims: true
+      label:
+        - name: StandardLabelToBoundary
+          append_label: true
+          blur: true
+          sigma: 1.0
+          foreground: true
+        - name: ToTensor
+          expand_dims: false

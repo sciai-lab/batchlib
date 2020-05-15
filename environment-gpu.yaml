@@ -16,7 +16,10 @@ dependencies:
     - torchvision
     - tqdm
     - vigra
+    - pymongo
+    - xlrd
+    - slackclient
+    - openpyxl
     - pip:
         - tensorflow==1.15
         - stardist
-        - pymongo

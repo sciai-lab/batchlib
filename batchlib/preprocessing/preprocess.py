@@ -129,8 +129,7 @@ class Preprocess(BatchJobOnContainer):
 
         channel_out_names = list(viewer_settings.keys())
         if self.barrel_corrector_path is not None:
-            channel_out_names += [chan_name + '_corrected' for chan_name in channel_out_names]
-        channel_out_dims = [2] * len(channel_out_names)
+            channel_out_names += [name + '_raw' for name in channel_out_names]
 
         # add the channel information to the viewer settings, so
         # we can keep track of the original channel names later
@@ -140,7 +139,8 @@ class Preprocess(BatchJobOnContainer):
             viewer_settings[semantic_name].update({'channel_information': name})
 
         super().__init__(input_pattern='*.tiff', output_ext=output_ext,
-                         output_key=channel_out_names, output_ndim=channel_out_dims,
+                         output_key=channel_out_names,
+                         output_format=['image'] * len(channel_out_names),
                          viewer_settings=viewer_settings, **super_kwargs)
 
     def preprocess_image(self, in_path, out_path, barrel_corrector):
@@ -151,6 +151,7 @@ class Preprocess(BatchJobOnContainer):
         # is usually not executed in the main thread
         with open_file(out_path, 'a') as f:
 
+            raw_is_visible = barrel_corrector is None
             for chan_id, name in enumerate(self.channel_names):
 
                 semantic_name = self.channel_mapping[name]
@@ -158,23 +159,24 @@ class Preprocess(BatchJobOnContainer):
                     continue
 
                 this_settings = self.viewer_settings[semantic_name].copy()
-                if barrel_corrector is not None:
-                    this_settings.update({'visible': False})
+                run_correction = barrel_corrector is not None
+                if run_correction:
+                    this_settings.update({'visible': raw_is_visible})
 
                 # save the raw image channel
                 chan = im[chan_id]
-                self.write_image(f, semantic_name, chan, settings=this_settings)
+                self.write_image(f, semantic_name + '_raw' if run_correction else semantic_name,
+                                 chan, settings=this_settings)
 
                 # apply and save the barrel corrected channel,
                 # if we have a barrel corrector
-                if barrel_corrector is not None:
+                if run_correction:
                     this_corrector = barrel_corrector[name]
                     this_settings.update({'visible': True})
                     chan = barrel_correction(chan, *this_corrector)
 
                     # get the settings for this image channel
-                    self.write_image(f, semantic_name + '_corrected', chan,
-                                     settings=this_settings)
+                    self.write_image(f, semantic_name, chan, settings=this_settings)
 
     def load_barrel_corrector(self):
         if self.barrel_corrector_path is None:

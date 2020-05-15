@@ -1,5 +1,6 @@
 import os
 import json
+import time
 
 from abc import ABC
 from glob import glob
@@ -55,7 +56,7 @@ class BatchJob(ABC):
         is_none = identifier is None
         is_str = isinstance(identifier, str)
         if not (is_none or is_str):
-            raise ValueError("Expect identifier to  be None or string, not %s" % type(identifier))
+            raise ValueError(f"Expect identifier to  be None or string, not {identifier}")
         self.identifier = identifier
 
     @property
@@ -115,7 +116,10 @@ class BatchJob(ABC):
         state = status.get('state', 'processed')
 
         in_pattern = os.path.join(input_folder, self.input_pattern)
+        logger.info(f"{self.name}: searching for inputs with pattern {in_pattern}")
         input_files = glob(in_pattern)
+        logger.info(f"{self.name}: found {len(input_files)} input files in total")
+
         # check if we have invalid inputs
         invalid_inputs = self.get_invalid_inputs(input_files)
         if len(invalid_inputs) > 0:
@@ -139,7 +143,7 @@ class BatchJob(ABC):
             return input_files
 
         # get the output files corresponding to the inputs and filter for
-        # otuputs that are NOT present yet
+        # outputs that are NOT present yet
         output_files = self.to_outputs(input_files, folder)
         output_files = [path for path in output_files if not self.check_output(path)]
 
@@ -179,8 +183,12 @@ class BatchJob(ABC):
 
     def __call__(self, folder, input_folder=None, force_recompute=False,
                  ignore_invalid_inputs=False, ignore_failed_outputs=False,
-                 executable=None, **kwargs):
+                 **kwargs):
         logger.info(f'{self.name}: called on the folder {folder}')
+        logger.debug(f"""{self.name}: got the following rutime options:
+                     force_recompute: {force_recompute}
+                     ignore_invalid_inputs: {ignore_invalid_inputs}
+                     ignore_failed_outputs: {ignore_failed_outputs}""")
 
         # make the work dir, that stores all batchlib status and log files
         work_dir = os.path.join(folder, 'batchlib')
@@ -199,8 +207,10 @@ class BatchJob(ABC):
             input_folder_ = folder if input_folder is None else input_folder
             logger.info(f'{self.name}: input folder is {input_folder_}')
 
-            # monkey patch the folder, so that we can get this in the run and input / output validation methods
+            # monkey patch the folder and input_folder,
+            # so that we can get this in the run and input / output validation methods
             self.folder = folder
+            self.input_folder = input_folder if input_folder is not None else self.folder
 
             # validate and get the input files to be processed
             input_files = self.get_inputs(folder, input_folder_, status,
@@ -216,8 +226,11 @@ class BatchJob(ABC):
             logger.info(f'{self.name}: call run method with {len(input_files)} inputs.')
             logger.debug(f'{self.name}: with the following inputs:\n {input_files}')
             logger.debug(f'{self.name}: and the following outputs:\n {output_files}')
+
             # run the actual computation
+            t0 = time.time()
             self.run(input_files, output_files, **kwargs)
+            logger.info(f"{self.name}: runtime: {time.time() - t0} s")
 
             # validate if all outputs were computed properly
             self.validate_outputs(output_files, folder, status, ignore_failed_outputs)
@@ -226,18 +239,18 @@ class BatchJob(ABC):
             status = self.update_status(folder, status, processed=True)
             return status['state']
 
-    def check_output(self, path):
+    def check_output(self, path, **kwargs):
         return os.path.exists(path)
 
-    def validate_input(self, path):
+    def validate_input(self, path, **kwargs):
         return os.path.exists(path)
 
     # in the default implementation, validate_output just calls
     # check_output. This is a separate function though to allow
     # more expensive checks, that are only computed once after
     # the calculation is finished
-    def validate_output(self, path):
-        return self.check_output(path)
+    def validate_output(self, path, **kwargs):
+        return self.check_output(path, **kwargs)
 
     def get_invalid_inputs(self, inputs):
         return [path for path in inputs if not self.validate_input(path)]
@@ -251,12 +264,15 @@ class BatchJobOnContainer(BatchJob, ABC):
     container file (= h5/n5/zarr file).
     """
     supported_container_extensions = {'.h5', '.hdf5', '.zarr', '.zr', '.n5'}
+    supported_data_formats = {'image', 'table', 'custom'}
+
     table_string_type = 'U100'  # TODO try varlen
     internal_table_string_type = 'S100'  # TODO try varlen
 
     def __init__(self, input_pattern=None, output_ext=None, identifier=None,
                  input_key=None, output_key=None,
                  input_ndim=None, output_ndim=None,
+                 input_format=None, output_format=None,
                  viewer_settings={}, scale_factors=None):
 
         input_pattern = '*' + get_default_extension() if input_pattern is None else input_pattern
@@ -274,6 +290,10 @@ class BatchJobOnContainer(BatchJob, ABC):
         self.input_ndim, self._input_exp_ndim = self.check_ndim(input_ndim, self._input_exp_key)
         self.output_ndim, self._output_exp_ndim = self.check_ndim(output_ndim,
                                                                   self._output_exp_key)
+
+        # the input and output formats
+        self.input_format = self.check_format(input_format, self._input_exp_key)
+        self.output_format = self.check_format(output_format, self._output_exp_key)
 
         self.check_scale_factors(scale_factors)
         self.scale_factors = scale_factors
@@ -327,6 +347,38 @@ class BatchJobOnContainer(BatchJob, ABC):
             raise ValueError("First scale factor must be 1, got %i" % scale_factors[0])
 
     @staticmethod
+    def check_format(formats, key):
+        # if we don't have a key, the format must be custom
+        if key is None:
+            if formats is not None and formats not in ('custom', ['custom'], ('custom')):
+                raise ValueError(f"Incompatible format {format} for non-present key")
+            return ['custom']
+
+        # just making sure that key is tuple or list (this should always be the case, because
+        # it's initialized like this in the constructor)
+        assert isinstance(key, (tuple, list))
+        n_objects = len(key)
+        # if we have key(s) -> assume image
+        if formats is None:
+            return ['image'] * n_objects
+
+        if isinstance(formats, str):
+            formats_ = [formats]
+        elif isinstance(formats, (list, tuple)):
+            formats_ = formats
+        else:
+            raise ValueError(f"Formats must be of type str, list or tuple (or None), not {type(formats)}")
+
+        if len(formats_) != n_objects:
+            raise ValueError(f"Expected {n_objects} data formats to be passed, got {len(formats_)}")
+
+        supported_formats = BatchJobOnContainer.supported_data_formats
+        if any(format_ not in supported_formats for format_ in formats_):
+            raise ValueError("Unsupported format")
+
+        return formats_
+
+    @staticmethod
     def check_keys(keys, ext):
         if keys is None:
             return None, None
@@ -361,31 +413,89 @@ class BatchJobOnContainer(BatchJob, ABC):
         return ndim, exp_ndim
 
     @staticmethod
-    def _check_impl(path, exp_keys, exp_ndims):
+    def _check_image(f, name, log_on_fail):
+        ndim = 2
+        if name not in f:
+            log_on_fail(f'BatchJobOnContainer: check failed: could not find {name} in {f.filename}')
+            return False
+        g = f[name]
+        if not is_group(g):
+            log_on_fail(f'BatchJobOnContainer: check failed: {name} is not a group')
+            return False
+        if 's0' not in g:
+            log_on_fail(f'BatchJobOnContainer: check failed: {name} does not contain an image dataset')
+            return False
+        ds = g['s0']
+        if ds.ndim != ndim:
+            log_on_fail(f'BatchJobOnContainer: check failed: {ds.ndim} != {ndim} for {name}')
+            return False
+        return True
+
+    @staticmethod
+    def _check_table(f, name, log_on_fail):
+        actual_name = f'tables/{name}'
+        if actual_name not in f:
+            log_on_fail(f'BatchJobOnContainer: check failed: could not find table {name} in {f.filename}')
+            return False
+        g = f[actual_name]
+        if not is_group(g):
+            log_on_fail(f'BatchJobOnContainer: check failed: {actual_name} is not a group')
+            return False
+        if ('cells' not in g) or ('columns' not in g):
+            cls = BatchJobOnContainer
+            msg = f"{cls}: check failed: could not find 'cells' or 'columns' in {f.fileactual_name}:{actual_name}"
+            log_on_fail(msg)
+            return False
+        return True
+
+    @staticmethod
+    def _check_custom(f, name, ndim, log_on_fail):
+        if name not in f:
+            log_on_fail(f'BatchJobOnContainer: check failed: could not find {name} in {f.filename}')
+            return False
+        if ndim is None:
+            return True
+        ds = f[name]
+        if ds.ndim != ndim:
+            log_on_fail(f'BatchJobOnContainer: check failed: {ds.ndim} != {ndim} for {name}')
+            return False
+        return True
+
+    @staticmethod
+    def _check_impl(path, exp_formats, exp_keys, exp_ndims, log_on_fail):
         if not os.path.exists(path):
+            log_on_fail(f'BatchJobOnContainer: check failed: {path} does not exist')
             return False
 
         if exp_keys is None:
             return True
 
+        cls = BatchJobOnContainer
         with io.open_file(path, 'r') as f:
-            for key, ndim in zip(exp_keys, exp_ndims):
-                if key not in f:
-                    return False
-                if ndim is None:
-                    continue
-                ds = f[key]
-                if is_group(ds):
-                    ds = ds['s0']
-                if ds.ndim != ndim:
+            for format_, key, ndim in zip(exp_formats, exp_keys, exp_ndims):
+                if format_ == 'image':
+                    check = cls._check_image(f, key, log_on_fail)
+                elif format_ == 'table':
+                    check = cls._check_table(f, key, log_on_fail)
+                elif format_ == 'custom':
+                    check = cls._check_custom(f, key, ndim, log_on_fail)
+                else:
+                    raise RuntimeError(f"Invalid format {format_}")
+                if check is False:
                     return False
         return True
 
-    def check_output(self, path):
-        return self._check_impl(path, self._output_exp_key, self._output_exp_ndim)
+    def check_output(self, path, log_on_fail=logger.debug):
+        return self._check_impl(path, self.output_format, self._output_exp_key,
+                                self._output_exp_ndim, log_on_fail)
 
     def validate_input(self, path):
-        return self._check_impl(path, self._input_exp_key, self._input_exp_ndim)
+        return self._check_impl(path, self.input_format,
+                                self._input_exp_key, self._input_exp_ndim, logger.warning)
+
+    def get_invalid_outputs(self, outputs):
+        return [path for path in outputs if not self.validate_output(path,
+                                                                     log_on_fail=logger.warning)]
 
 
 class BatchJobWithSubfolder(BatchJobOnContainer, ABC):

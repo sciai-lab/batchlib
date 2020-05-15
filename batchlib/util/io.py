@@ -2,6 +2,7 @@ import os
 import signal
 from glob import glob
 from time import sleep
+from functools import partial
 
 import h5py
 import numpy as np
@@ -85,12 +86,114 @@ def image_name_to_site_name(image_name):
     return site_name
 
 
+def in_file_to_image_name(in_file):
+    name = os.path.split(in_file)[1]
+    name = os.path.splitext(name)[0]
+    return name
+
+
+def in_file_to_plate_name(in_file):
+    return os.path.basename(os.path.dirname(in_file))
+
+
 def get_image_and_site_names(folder, pattern):
-    im_names = glob(os.path.join(folder, pattern))
-    im_names = [os.path.split(name)[1] for name in im_names]
-    im_names = [os.path.splitext(name)[0] for name in im_names]
+    im_names = [in_file_to_image_name(name) for name in glob(os.path.join(folder, pattern))]
     site_names = [image_name_to_site_name(name) for name in im_names]
     return im_names, site_names
+
+
+def add_site_name_to_image_table(column_names, table):
+    assert column_names[0] == 'image_name'
+    column_names = list(column_names)
+    column_names.insert(1, 'site_name')
+    table = np.array(table).tolist()
+    for row in table:
+        row.insert(1, image_name_to_site_name(row[0]))
+    return column_names, np.array(table)
+
+
+def get_column_dict(column_names, table, column_name):
+    assert column_name in column_names, \
+        f'Could not find column name "{column_name}" in available column names {column_names}'
+    return dict(zip(table[:, 0], table[:, list(column_names).index(column_name)]))
+
+
+def table_to_row_dict(table):
+    return dict(zip(table[:, 0], table[:, 1:]))
+
+
+def row_dict_to_table(row_dict):
+    return np.stack([np.concatenate([[key], row]) for key, row in row_dict.items()], axis=0)
+
+
+def plate_table_to_well_table(column_names, table, well_names):
+    # table is np.ndarray, column_names a list
+    assert column_names[0] == 'plate_name', \
+        f'Plate tables need to have "plate_name" as their first column, bug got "{column_names[0]}".'
+    assert table.shape[0] == 1, f'Plate tables should have one row only, but got {table.shape[0]}.'
+
+    well_column_names = ['well_name'] + column_names[1:]
+
+    plate_name = table[0, 0]
+    row_dict = table_to_row_dict(table)
+    well_row_dict = {well: row_dict[plate_name] for well in well_names}
+    well_table = row_dict_to_table(well_row_dict)
+    return well_column_names, well_table
+
+
+def well_table_to_image_table(column_names, table, image_names):
+    # table is np.ndarray, column_names a list
+    assert column_names[0] == 'well_name', \
+        f'Well tables need to have "well_name" as their first column, bug got "{column_names[0]}".'
+
+    image_column_names = ['image_name'] + column_names[1:]
+
+    row_dict = table_to_row_dict(table)
+    image_row_dict = {image_name: row_dict[image_name_to_well_name(image_name)] for image_name in image_names}
+    image_table = row_dict_to_table(image_row_dict)
+    return add_site_name_to_image_table(image_column_names, image_table)
+
+
+def is_table_with_specific_first_columns(first_column_names, obj):
+    if isinstance(first_column_names, str):
+        first_column_names = [first_column_names]
+    if not isinstance(obj, (list, tuple)) and len(obj) == 2 and isinstance(obj, np.ndarray):
+        return False
+    try:
+        first_columns = obj[0][:len(first_column_names)]
+        return first_columns == list(first_column_names)
+    except Exception:
+        return False
+
+
+is_image_table = partial(is_table_with_specific_first_columns, ('image_name', 'site_name'))
+is_well_table = partial(is_table_with_specific_first_columns, 'well_name')
+is_plate_table = partial(is_table_with_specific_first_columns, 'plate_name')
+
+
+def to_plate_table(obj):
+    if is_plate_table(obj):
+        return obj
+    else:
+        assert False, f'not a plate table: {obj}'
+
+
+def to_well_table(obj, well_names):
+    if is_well_table(obj):
+        assert set(obj[1][:, 0]) == set(well_names), f'{set(obj[1][:, 0])}, {set(well_names)}'
+        return obj
+    else:
+        return plate_table_to_well_table(*to_plate_table(obj), well_names)
+
+
+def to_image_table(obj, image_names):
+    if is_image_table(obj):
+        # TODO: filter table if there are more images than requested
+        assert not (set(image_names) - set(obj[1][:, 0])), f'{set(obj[1][:, 0])}, {set(image_names)}'
+        return obj
+    else:
+        return well_table_to_image_table(*to_well_table(obj, list(map(image_name_to_well_name, image_names))),
+                                         image_names)
 
 
 def sample_shape(shape, scale_factor, add_incomplete_blocks=False):
@@ -244,6 +347,23 @@ def write_viewer_settings(ds, image, color=None, alpha=1., visible=False, skip=N
     ds.attrs.update(attrs)
 
 
+def read_viewer_settings(f, key):
+    attrs = f[key].attrs
+
+    # TODO use proper CamelCase replace regex
+    def _modify_key(k):
+        if k == 'ChannelInformation':
+            return 'channel_information'
+        if k == 'ScaleFactors':
+            return 'scale_factors'
+        return k.lower()
+
+    def _filter_key(k):
+        return k in ('ContrastLimits')
+
+    return {_modify_key(k): v for k, v in attrs.items() if not _filter_key(k)}
+
+
 # read/write images
 def read_image(f, key, scale=0, channel=None):
     ds = f[key]
@@ -281,7 +401,7 @@ def _write_multi_scale(f, out_key, image, use_nearest, scale_factors):
     return g
 
 
-def write_image(f, name, image, viewer_settings, scale_factors=None):
+def write_image(f, name, image, viewer_settings={}, scale_factors=None):
     # dimensionality is not to
     # -> this is not in image format and we just writ the data
     if image.ndim != 2:
@@ -341,7 +461,7 @@ def read_table(f, name, table_string_type='U100'):
 def write_table(f, name, column_names, table,
                 visible=None, force_write=False, table_string_type='S100'):
     if len(column_names) != table.shape[1]:
-        raise ValueError("Number of columns does not match")
+        raise ValueError(f"Number of columns does not match: {len(column_names)}, {table.shape[1]}")
 
     # set None to np.nan
     table[np.equal(table, None)] = np.nan

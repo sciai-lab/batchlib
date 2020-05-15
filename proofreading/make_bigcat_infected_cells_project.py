@@ -103,13 +103,13 @@ def convert_to_bigcat(in_path, out_path, use_corrected, order,
                       infected_mask_key='infected_cell_mask'):
 
     if use_corrected:
-        serum_key = 'serum_corrected'
+        serum_key = 'serum_IgG_corrected'
         marker_key = 'marker_corrected'
         nuclei_key = 'nuclei_corrected'
     else:
-        serum_key = 'serum'
+        serum_key = 'serum_IgG'
         marker_key = 'marker'
-        nuclei_key = 'nuclei_corrected'
+        nuclei_key = 'nuclei'
 
     with h5py.File(in_path, 'r') as f:
         serum = f[serum_key]['s0'][:]
@@ -139,3 +139,4 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     convert_to_bigcat(args.input_path, args.output_path, args.use_corrected, args.order)
+    convert_to_bigcat(args.input_path, args.output_path, bool(args.use_corrected))
