@@ -38,7 +38,8 @@ class WriteCellSizeMasks(BatchJobOnContainer):
             raise RuntimeError(f"Cell sizes dont match for image {in_file}")
 
         small = label_ids[sizes < self.min_threshold]
-        large = label_ids[sizes > self.max_threshold]
+        # don't include the background!
+        large = label_ids[sizes > self.max_threshold][1:]
 
         size_mask = np.zeros_like(seg)
         size_mask[np.isin(seg, small)] = 1

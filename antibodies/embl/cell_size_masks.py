@@ -12,7 +12,7 @@ def write_mask(folder, n_jobs):
                              cell_seg_key=seg_key,
                              scale_factors=scale_factors)
     print("Start for folder", folder)
-    job(folder, n_jobs=n_jobs)
+    job(folder, n_jobs=n_jobs, force_recompute=True)
 
 
 def write_all_masks():
