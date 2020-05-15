@@ -89,7 +89,9 @@ class OutlierPredicate:
             # outliers info not available
             return -1
 
-        label = self.outlier_tags[img_file]
+        # FIXME this is causing issues if the tagger state doesn't exist
+        # (I think something in the check whether we have outlier_tags is going wrong)
+        label = self.outlier_tags.get(img_file, -1)
         if label not in (-1, 0, 1):
             raise ValueError(f'Unsupported outlier label value: {label}')
         return label
