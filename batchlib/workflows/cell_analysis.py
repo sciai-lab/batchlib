@@ -564,7 +564,7 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--force_recompute", default=None)
     parser.add("--ignore_invalid_inputs", default=None)
     parser.add("--ignore_failed_outputs", default=None)
-    parser.ad("--skip_processed", default=0, type=int)
+    parser.add("--skip_processed", default=0, type=int)
 
     # additional image output
     parser.add("--write_summary_images", default=True)
