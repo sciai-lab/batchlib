@@ -33,7 +33,7 @@ def plate_name_from_input_folder(input_folder):
         plate_name = os.path.split(csv_file)[1]
         plate_name = plate_name[:plate_name.find('_tagger')]
 
-        if plate_name in input_folder:
+        if plate_name == input_folder:
             return plate_name
     return None
 
@@ -89,9 +89,11 @@ class OutlierPredicate:
             # outliers info not available
             return -1
 
-        # FIXME this is causing issues if the tagger state doesn't exist
-        # (I think something in the check whether we have outlier_tags is going wrong)
-        label = self.outlier_tags.get(img_file, -1)
+        if img_file not in self.outlier_tags:
+            logger.warning(f'File: {img_file} not found in the outliers CSV file')
+            return -1
+
+        label = self.outlier_tags[img_file]
         if label not in (-1, 0, 1):
             raise ValueError(f'Unsupported outlier label value: {label}')
         return label
