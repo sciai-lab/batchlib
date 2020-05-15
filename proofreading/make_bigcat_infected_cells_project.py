@@ -37,7 +37,7 @@ def make_infected_mask(segmentation, labels):
     return infected_mask
 
 
-def to_bigcat(serum, marker, nuclei, segmentation, infected_labels, out_path):
+def to_bigcat(serum, marker, nuclei, segmentation, infected_labels, out_path, order):
     lut = fragment_segment_lut(segmentation, infected_labels)
     next_id = int(lut.max()) + 1
 
@@ -54,7 +54,8 @@ def to_bigcat(serum, marker, nuclei, segmentation, infected_labels, out_path):
         marker = to_uint8(marker)
         nuclei = to_uint8(nuclei)
 
-        raw = np.concatenate([marker[None], nuclei[None], serum[None]], axis=0)
+        raw = {"s": serum[None], "m": marker[None], "n": nuclei[None]}
+        raw = np.concatenate([raw[order[0]], raw[order[1]], raw[order[2]]], axis=0)
         ds = f.create_dataset('volumes/raw', data=raw.astype('uint8'), compression='gzip')
         attrs = ds.attrs
         attrs['resolution'] = res
@@ -96,7 +97,7 @@ def infected_labels_from_mask(f, infected_mask_key, seg):
 
 
 # TODO get keys via argparse too
-def convert_to_bigcat(in_path, out_path, use_corrected,
+def convert_to_bigcat(in_path, out_path, use_corrected, order,
                       infected_label_key='tables/cell_classification/cell_segmentation/marker_corrected',
                       infected_mask_key='infected_cell_mask'):
 
@@ -124,14 +125,16 @@ def convert_to_bigcat(in_path, out_path, use_corrected,
         else:
             raise ValueError(f"Could neither find the table @{infected_label_key} or the mask @{infected_mask_key}")
 
-    to_bigcat(serum, marker, nuclei, seg, infected_labels, out_path)
+    to_bigcat(serum, marker, nuclei, seg, infected_labels, out_path, order)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('input_path', type=str)
     parser.add_argument('output_path', type=str)
+    parser.add_argument('--order', type=str, default="mns",
+                        help="example oder: smn (serum, marker, nuclei) or mns")
     parser.add_argument('--use_corrected', type=int, default=0)
     args = parser.parse_args()
 
-    convert_to_bigcat(args.input_path, args.output_path, bool(args.use_corrected))
+    convert_to_bigcat(args.input_path, args.output_path, bool(args.use_corrected), args.order)
