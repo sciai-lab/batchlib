@@ -8,21 +8,24 @@ from ..util import open_file, image_name_to_site_name, get_logger
 
 logger = get_logger('Workflow.BatchJob.CellLevelAnalysis')
 
-# TODO all values are still preliminary and need to be validated on actual data
-# default size threshold provided by Vibor
-DEFAULT_CELL_OUTLIER_CRITERIA = {'max_cell_size': 12000,  # previous: 10000
-                                 'min_cell_size': 750,  # previous: 1000
+# cell size is final (for the pre-print)
+# (I went a bit more conservative then the values proposed by Vibor now)
+# nucleus size still needs to be determined from the data by looking at median radius
+# and choosing a min / max based on fraction / factor of it
+DEFAULT_CELL_OUTLIER_CRITERIA = {'max_cell_size': 12500,
+                                 'min_cell_size': 250,
                                  'min_nucleus_size': None,  # suggested by Vibor: 100
                                  'max_nucleus_size': None}  # suggested by Vibor: 1000
 
 
-DEFAULT_IMAGE_OUTLIER_CRITERIA = {'max_number_cells': 1000,  # previous: 1000
-                                  'min_number_cells': 10}  # previous: 10
+# the cell numbers are final (for the pre-print)
+DEFAULT_IMAGE_OUTLIER_CRITERIA = {'max_number_cells': 1000,
+                                  'min_number_cells': 10}
 
-DEFAULT_WELL_OUTLIER_CRITERIA = {'max_number_cells_per_image': None,  # previous: 1000, but redundant!
-                                 'min_number_cells_per_image': None,  # previous: 10, but redundant
-                                 'min_number_control_cells_per_image': 5,  # previous: 5
-                                 'min_fraction_of_control_cells': None,  # previous: 0.05
+DEFAULT_WELL_OUTLIER_CRITERIA = {'max_number_cells_per_image': None,  # redundant with imlevel
+                                 'min_number_cells_per_image': None,  # redundant with imlevel
+                                 'min_number_control_cells': 100,  # preprint final
+                                 'min_fraction_of_control_cells': None,  # redundant
                                  'check_ratios': True}
 
 
@@ -303,8 +306,8 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
             is_outlier = 1
             outlier_type += 'too many cells;'
 
-        min_control_per_im = self.outlier_criteria['min_number_control_cells_per_image']
-        if min_control_per_im is not None and n_control < min_control_per_im * n_images:
+        min_control = self.outlier_criteria['min_number_control_cells']
+        if min_control is not None and n_control < min_control:
             is_outlier = 1
             outlier_type += 'too few control cells;'
 
