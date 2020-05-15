@@ -6,17 +6,21 @@ from numbers import Number
 import configargparse
 
 from batchlib import run_workflow
+
 from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    DenoiseByGrayscaleOpening,
                                                    DenoiseByWhiteTophat,
-                                                   InstanceFeatureExtraction,
-                                                   FindInfectedCells,
-                                                   ExtractBackground)
+                                                   FindInfectedCells)
+from batchlib.analysis.background_extraction import (ExtractBackground,
+                                                     BackgroundFromMinWell)
 from batchlib.analysis.cell_analysis_qc import (CellLevelQC, ImageLevelQC, WellLevelQC,
                                                 DEFAULT_CELL_OUTLIER_CRITERIA,
                                                 DEFAULT_IMAGE_OUTLIER_CRITERIA,
                                                 DEFAULT_WELL_OUTLIER_CRITERIA)
+from batchlib.analysis.feature_extraction import (InstanceFeatureExtraction,
+                                                  SegmentationProperties)
 from batchlib.analysis.merge_tables import MergeAnalysisTables
+
 from batchlib.mongo.result_writer import DbResultWriter
 from batchlib.outliers.outlier import get_outlier_predicate
 from batchlib.preprocessing import get_barrel_corrector, get_serum_keys, Preprocess
@@ -80,7 +84,7 @@ def validate_bg_dict(bg_dict):
     excepted_vals = ('images/backgrounds',
                      'wells/backgrounds',
                      'plate/backgrounds',
-                     'measure_on_well')
+                     'plate/backgrounds_from_min_well')
     for key, val in bg_dict.items():
         if not isinstance(val, Number) and val not in excepted_vals:
             raise ValueError(f"Invalid background value {val} for {key}")
@@ -91,7 +95,7 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
     background_dict = config.background_dict
     if background_dict is None:
         logger.info("Compute background from data and use the background measured on the dimmest well")
-        return {key: "measure_on_well" for key in keys}
+        return {key: "plate/backgrounds_from_min_well" for key in keys}
 
     if isinstance(background_dict, str):
         background_dict = json.loads(background_dict.replace('\'', '\"'))
@@ -104,7 +108,7 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
     return background_dict
 
 
-def get_infected_detection_jobs(config, marker_key_for_infected_classification, feature_identifier):
+def get_infected_detection_jobs(config, marker_key, feature_identifier):
     erosion_radius = config.infected_erosion_radius
     tophat_radius = config.infected_tophat_radius
     quantile = config.infected_quantile
@@ -128,7 +132,7 @@ def get_infected_detection_jobs(config, marker_key_for_infected_classification, 
             or config.ignore_nuclei_in_infected_classification != config.ignore_nuclei:
         jobs.append((InstanceFeatureExtraction, {
             'build': {
-                'channel_keys': (marker_key_for_infected_classification,),
+                'channel_keys': (marker_key,),
                 'nuc_seg_key_to_ignore': config.nuc_key if config.ignore_nuclei_in_infected_classification else None,
                 'cell_seg_key': seg_key_for_infected_classification,
                 'identifier': None,
@@ -144,7 +148,7 @@ def get_infected_detection_jobs(config, marker_key_for_infected_classification, 
     jobs.append(
         (FindInfectedCells, {
          'build': {
-             'marker_key': marker_key_for_infected_classification,
+             'marker_key': marker_key,
              'cell_seg_key': seg_key_for_infected_classification,
              'scale_with_mad': config.infected_scale_with_mad,  # default: True
              'infected_threshold': config.infected_threshold,  # default: 5.4
@@ -156,51 +160,55 @@ def get_infected_detection_jobs(config, marker_key_for_infected_classification, 
     return jobs
 
 
-# TODO refactor further!
-# - get rid of the marker_key_for_infected_classification, just rename if we have the
 def add_background_estimation(job_list, config, seg_key,
-                              bg_estimation_keys, feature_identifier):
+                              bg_estimation_keys, feature_identifier,
+                              identifier=None):
     # NOTE the bg extraction is independent of the features, but we still need to pass
     # the identifier so that the input validation passes
+    # also, we don't run this on the GPU, due to memory constraints
     job_list.append((
          ExtractBackground, {
             'build': {'marker_key': bg_estimation_keys[0],  # is ignored
                       'serum_key': bg_estimation_keys[0],    # is ignored
                       'actual_channels_to_use': bg_estimation_keys,
                       'feature_identifier': feature_identifier,
+                      'identifier': identifier,
                       'cell_seg_key': seg_key}}
     ))
-    # TODO return the correct bg key
     return job_list
 
 
-# parser.add("--background_radius_factor", default=2.5, type=float)
-# # TODO is 5 % background reasonable? should we rather specify number of pix?
-# parser.add("--min_background_fraction", default=.05, type=float)
-# # arguments for the nucleus dilation used for the serum intensity qc
-# parser.add("--qc_dilation", type=int, default=5)
-def add_background_estimation_from_dimmest_well(job_list, config,
-                                                bg_estimation_keys,
-                                                feature_identifier):
+def add_background_estimation_from_min_well(job_list, config,
+                                            bg_estimation_keys,
+                                            feature_identifier):
 
     # add the job for nucleus dilation
     identifier = 'dilated_for_bg'
     seg_key = config.nuc_key + '_' + identifier
-    job_list.append((
-        VoronoiRingSegmentation, {
-            'build': {'input_key': config.nuc_key,
-                      'output_key': seg_key,
-                      'identifier': identifier,
-                      'radius_factor': config.background_radius_factor,
-                      'remove_nucleus': False},
-            'run': {'n_jobs': config.n_cpus}}
-    ))
+    job_list.append(
+        (VoronoiRingSegmentation, {
+             'build': {'input_key': config.nuc_key,
+                       'output_key': seg_key,
+                       'identifier': identifier,
+                       'radius_factor': config.background_radius_factor,
+                       'remove_nucleus': False},
+             'run': {'n_jobs': config.n_cpus}}),
+    )
 
-    # TODO choose values from dimmest well modulo background fraction
     # add the background estimation jobs
-    job_list, bg_key = add_background_estimation(job_list, config, seg_key,
-                                                 bg_estimation_keys, feature_identifier)
-    return job_list, bg_key
+    job_list = add_background_estimation(job_list, config, seg_key,
+                                         bg_estimation_keys, feature_identifier,
+                                         identifier=seg_key)
+    job_list.append((
+        BackgroundFromMinWell, {
+            'build': {'bg_table': f'wells/backgrounds_{seg_key}',
+                      'property_table': f'{seg_key}/properties',
+                      'output_table': 'plate/backgrounds_from_min_well',
+                      'min_background_fraction': config.min_background_fraction,
+                      'channel_names': bg_estimation_keys}
+            }
+    ))
+    return job_list
 
 
 def core_workflow_tasks(config, name, feature_identifier):
@@ -285,6 +293,8 @@ def core_workflow_tasks(config, name, feature_identifier):
                 'dilate_seeds': 3,
                 'n_jobs': config.n_cpus}})
     ]
+
+    # check whether we apply denoising to the marker before analysis
     if config.marker_denoise_radius > 0:
         job_list.append((DenoiseByGrayscaleOpening, {
             'build': {
@@ -293,18 +303,15 @@ def core_workflow_tasks(config, name, feature_identifier):
             'run': {'n_jobs': config.n_cpus}
         }))
         marker_ana_in_key = marker_ana_in_key + '_denoised'
-
     if config.infected_tophat_radius > 0:
-        marker_key_for_infected_classification = 'marker_for_infected_classification'
         job_list.append((DenoiseByWhiteTophat, {
             'build': {
                 'key_to_denoise': marker_ana_in_key,
                 'radius': config.infected_tophat_radius,
-                'output_key': marker_key_for_infected_classification},
+                'output_key': marker_ana_in_key + '_tophat'},
             'run': {'n_jobs': config.n_cpus}
         }))
-    else:
-        marker_key_for_infected_classification = marker_ana_in_key
+        marker_ana_in_key += '_tophat'
 
     # add the tasks to extract the features from the cell instance segmentation,
     # do initial image level qc (necessary for the background extraction) and extract the quantiles
@@ -328,16 +335,14 @@ def core_workflow_tasks(config, name, feature_identifier):
 
     # we could also just add these on demand depending on what we need according to the background params
     bg_estimation_keys = [marker_ana_in_key] + serum_ana_in_keys
-    job_list, bg_tables1 = add_background_estimation_from_dimmest_well(job_list, config,
-                                                                       bg_estimation_keys, feature_identifier)
+    job_list, bg_tables1 = add_background_estimation_from_min_well(job_list, config,
+                                                                   bg_estimation_keys, feature_identifier)
     job_list, bg_tables2 = add_background_estimation(job_list, config, config.seg_key,
                                                      bg_estimation_keys, feature_identifier)
 
-    infected_detection_jobs = get_infected_detection_jobs(config, marker_key_for_infected_classification,
-                                                          feature_identifier)
+    infected_detection_jobs = get_infected_detection_jobs(config, marker_ana_in_key, feature_identifier)
     job_list.extend(infected_detection_jobs)
 
-    # TODO need to match these values to the correct bg tables from above
     # for the background substraction, we can either use a fixed value per channel,
     # or compute it from the data. In the first case, we pass the value
     # as 'serum_bg_key' / 'marker_bg_key'. In the second case, we pass a key
@@ -358,7 +363,7 @@ def core_workflow_tasks(config, name, feature_identifier):
             })
         )
 
-    # TODO add the second voronoi tessalation tasks for cell intensity based qc
+    # TODO add second nucleus dilation task and feature extraction for image level intensity qc
 
     table_identifiers = serum_ana_in_keys if feature_identifier is None else [k + f'_{feature_identifier}'
                                                                               for k in serum_ana_in_keys]
@@ -369,7 +374,7 @@ def core_workflow_tasks(config, name, feature_identifier):
             'build': {
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
-                'marker_key': marker_key_for_infected_classification,
+                'marker_key': marker_ana_in_key,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'feature_identifier': feature_identifier,
@@ -379,7 +384,7 @@ def core_workflow_tasks(config, name, feature_identifier):
             'build': {
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
-                'marker_key': marker_key_for_infected_classification,
+                'marker_key': marker_ana_in_key,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'outlier_predicate': outlier_predicate,
@@ -390,7 +395,7 @@ def core_workflow_tasks(config, name, feature_identifier):
             'build': {
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
-                'marker_key': marker_key_for_infected_classification,
+                'marker_key': marker_ana_in_key,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'feature_identifier': feature_identifier,
@@ -399,7 +404,7 @@ def core_workflow_tasks(config, name, feature_identifier):
         job_list.append((CellLevelAnalysis, {
             'build': {
                 'serum_key': serum_key,
-                'marker_key': marker_key_for_infected_classification,
+                'marker_key': marker_ana_in_key,
                 'cell_seg_key': config.seg_key,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
