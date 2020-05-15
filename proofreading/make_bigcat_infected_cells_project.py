@@ -138,5 +138,4 @@ if __name__ == '__main__':
     parser.add_argument('--use_corrected', type=int, default=0)
     args = parser.parse_args()
 
-    convert_to_bigcat(args.input_path, args.output_path, args.use_corrected, args.order)
-    convert_to_bigcat(args.input_path, args.output_path, bool(args.use_corrected))
+    convert_to_bigcat(args.input_path, args.output_path, bool(args.use_corrected), args.order)
