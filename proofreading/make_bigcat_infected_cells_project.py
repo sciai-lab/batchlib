@@ -23,9 +23,8 @@ def fragment_segment_lut(segmentation, infected_labels):
 
 def to_uint8(raw):
     raw = raw.astype('float32')
-    raw_min = raw.min()
-    raw -= raw_min
-    raw /= raw.max() - raw_min
+    raw -= raw.min()
+    raw /= raw.max()
     raw *= 255
     return raw.astype('uint8')
 
