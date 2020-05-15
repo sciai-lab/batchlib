@@ -46,7 +46,7 @@ trainer:
   # model with lower eval score is considered better
   eval_score_higher_is_better: False
   # path to the checkpoint directory
-  checkpoint_dir: '/g/kreshuk/wolny/workspace/antibodies-nuclei/unet_segmentation/lou_config9'
+  checkpoint_dir: '/g/kreshuk/software/antibodies-nuclei/unet_segmentation/lou_config9'
   # path to latest checkpoint; if provided the training will be resumed from that checkpoint
   resume: null
   # how many iterations between validations
