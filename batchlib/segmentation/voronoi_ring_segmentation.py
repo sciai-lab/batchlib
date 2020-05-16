@@ -31,14 +31,14 @@ class VoronoiRingSegmentation(BatchJobOnContainer):
                  input_key, output_key,
                  ring_width=None, radius_factor=None,
                  remove_nucleus=True, **super_kwargs):
+        super().__init__(input_key=input_key, input_format='image',
+                         output_key=output_key, output_format='image',
+                         **super_kwargs)
 
         self.validate_params(ring_width, radius_factor)
         self.ring_width = ring_width
         self.radius_factor = radius_factor
         self.remove_nucleus = remove_nucleus
-        super().__init__(input_key=input_key, input_format='image',
-                         output_key=output_key, output_format='image',
-                         **super_kwargs)
 
     def get_dilation_radius(self, seg, im_path):
         if self.ring_width is not None:

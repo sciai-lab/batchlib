@@ -353,9 +353,9 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
     to the result_dict loaded from tables computed by InstanceFeatureExtraction.
     """
     def __init__(self,
-                 cell_seg_key, serum_key, marker_key,
+                 cell_seg_key, serum_key=None, marker_key=None,
                  serum_bg_key=None, marker_bg_key=None,
-                 output_key=None,
+                 image_input_keys=None, output_key=None,
                  validate_cell_classification=True,
                  feature_identifier=None,
                  **super_kwargs):
@@ -364,22 +364,34 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
         self.serum_bg_key = serum_bg_key
         self.marker_bg_key = marker_bg_key
 
-        # TODO allow for serum and marker data to come from different segmentations
-        #  Idea: pass these things directly (with cell_seg_key and '/').
-        #  Allows for more options + job_dict is more readable
         root_key = cell_seg_key if feature_identifier is None else cell_seg_key + f'_{feature_identifier}'
-        self.serum_key = root_key + '/' + serum_key
-        self.marker_key = root_key + '/' + marker_key
+        input_key = [] if image_input_keys is None else list(image_input_keys)
+        input_format = [] if image_input_keys is None else ['image'] * len(image_input_keys)
 
-        self.classification_key = f'cell_classification/{cell_seg_key}/{marker_key}'
-        if validate_cell_classification:
-            input_key = [self.serum_key, self.marker_key, self.classification_key]
+        if serum_key is None:
+            self.serum_key = None
         else:
-            input_key = [self.serum_key, self.marker_key]
-        super().__init__(input_key=input_key,
-                         input_format=len(input_key)*['table'],
-                         output_key=output_key,
-                         **super_kwargs)
+            self.serum_key = root_key + '/' + serum_key
+            input_key.append(self.serum_key)
+            input_format.append('table')
+
+        if marker_key is None:
+            self.marker_key = None
+        else:
+            self.marker_key = root_key + '/' + marker_key
+            input_key.append(self.marker_key)
+            input_format.append('table')
+
+        if validate_cell_classification:
+            self.classification_key = f'cell_classification/{cell_seg_key}/{marker_key}'
+            assert self.marker_key is not None
+            input_key.append(self.classification_key)
+            input_format.append('table')
+        else:
+            self.classification_key = None
+
+        super().__init__(input_key=input_key, input_format=input_format,
+                         output_key=output_key, **super_kwargs)
 
     @staticmethod
     def folder_to_table_path(folder):

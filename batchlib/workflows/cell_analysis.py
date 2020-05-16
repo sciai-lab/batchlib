@@ -160,27 +160,17 @@ def get_infected_detection_jobs(config, marker_key, feature_identifier):
     return jobs
 
 
-def add_background_estimation(job_list, config, seg_key,
-                              bg_estimation_keys, feature_identifier,
-                              identifier=None):
-    # NOTE the bg extraction is independent of the features, but we still need to pass
-    # the identifier so that the input validation passes
-    # also, we don't run this on the GPU, due to memory constraints
+def add_background_estimation(job_list, seg_key, channel_keys, identifier=None):
     job_list.append((
          ExtractBackground, {
-            'build': {'marker_key': bg_estimation_keys[0],  # is ignored
-                      'serum_key': bg_estimation_keys[0],    # is ignored
-                      'actual_channels_to_use': bg_estimation_keys,
-                      'feature_identifier': feature_identifier,
+            'build': {'channel_keys': channel_keys,
                       'identifier': identifier,
                       'cell_seg_key': seg_key}}
     ))
     return job_list
 
 
-def add_background_estimation_from_min_well(job_list, config,
-                                            bg_estimation_keys,
-                                            feature_identifier):
+def add_background_estimation_from_min_well(job_list, config, channel_keys):
 
     # add the job for nucleus dilation
     identifier = 'dilated_for_bg'
@@ -196,16 +186,13 @@ def add_background_estimation_from_min_well(job_list, config,
     )
 
     # add the background estimation jobs
-    job_list = add_background_estimation(job_list, config, seg_key,
-                                         bg_estimation_keys, feature_identifier,
-                                         identifier=seg_key)
+    job_list = add_background_estimation(job_list, seg_key, channel_keys, identifier=seg_key)
     job_list.append((
         BackgroundFromMinWell, {
             'build': {'bg_table': f'wells/backgrounds_{seg_key}',
-                      'property_table': f'{seg_key}/properties',
                       'output_table': 'plate/backgrounds_from_min_well',
                       'min_background_fraction': config.min_background_fraction,
-                      'channel_names': bg_estimation_keys}
+                      'channel_names': channel_keys}
             }
     ))
     return job_list
@@ -335,10 +322,8 @@ def core_workflow_tasks(config, name, feature_identifier):
 
     # we could also just add these on demand depending on what we need according to the background params
     bg_estimation_keys = [marker_ana_in_key] + serum_ana_in_keys
-    job_list, bg_tables1 = add_background_estimation_from_min_well(job_list, config,
-                                                                   bg_estimation_keys, feature_identifier)
-    job_list, bg_tables2 = add_background_estimation(job_list, config, config.seg_key,
-                                                     bg_estimation_keys, feature_identifier)
+    job_list = add_background_estimation_from_min_well(job_list, config, bg_estimation_keys)
+    job_list = add_background_estimation(job_list, config.seg_key, bg_estimation_keys)
 
     infected_detection_jobs = get_infected_detection_jobs(config, marker_ana_in_key, feature_identifier)
     job_list.extend(infected_detection_jobs)
