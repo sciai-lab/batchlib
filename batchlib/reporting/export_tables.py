@@ -62,6 +62,7 @@ def export_default_table(table_file, table_name, output_path, output_format=None
     export_table(columns, table, output_path, output_format)
 
 
+# TODO export the anchor and bounding box from 'tables/{seg_name}/properties' as well
 def export_cell_tables(folder, output_path, table_name, output_format=None, skip_existing=True):
     if os.path.exists(output_path) and skip_existing:
         return

@@ -278,7 +278,10 @@ def core_workflow_tasks(config, name, feature_identifier):
             'run': {
                 'erode_mask': 20,
                 'dilate_seeds': 3,
-                'n_jobs': config.n_cpus}})
+                'n_jobs': config.n_cpus}}),
+        (SegmentationProperties, {
+            'build': {'seg_key': config.seg_key},
+            'run': {'n_jobs': config.n_cpus}})
     ]
 
     # check whether we apply denoising to the marker before analysis

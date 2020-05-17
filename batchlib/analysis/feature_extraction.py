@@ -1,18 +1,50 @@
 import os
+from concurrent import futures
 from functools import partial
 
 import numpy as np
 import torch
 from tqdm import tqdm
+from skimage.measure import regionprops
 
 from ..base import BatchJobOnContainer
 from ..util import open_file
 
 
-# TODO compute intensity independent properties like size
-# and anchors (= region center points)
+# compute intensity independent properties like size and anchors (= region center points)
 class SegmentationProperties(BatchJobOnContainer):
-    pass
+    def __init__(self, seg_key):
+
+        self.seg_key = seg_key
+        self.table_key = f'{seg_key}/properties'
+
+        super().__init__(input_key=self.seg_key, input_format='image',
+                         output_key=self.table_key, output_format='table')
+
+    def compute_seg_properties(self, in_file, out_file):
+        with open_file(in_file, 'r') as f:
+            seg = self.read_image(f, self.seg_key)
+
+        # TODO not sure about axis order
+        column_names = ['label_id',
+                        'anchor_y', 'anchor_x',
+                        'bb_min_y', 'bb_min_x',
+                        'bb_max_y', 'bb_max_x',
+                        'size']
+
+        props = regionprops(seg)
+        table = np.array([[prop['label'],
+                           prop['centroid'][0], prop['centroid'][1],
+                           prop['bbox'][0], prop['bbox'][1], prop['bbox'][2], prop['bbox'][3],
+                           prop['area']] for prop in props])
+
+        with open_file(out_file, 'a') as f:
+            self.write_table(f, self.table_key, column_names, table)
+
+    def run(self, input_files, output_files, n_jobs=1):
+        with futures.ThreadPoolExecutor(n_jobs) as tp:
+            list(tqdm(tp.map(self.compute_seg_properties, input_files, output_files),
+                      total=len(input_files), desc='Compute segmentation properties'))
 
 
 class InstanceFeatureExtraction(BatchJobOnContainer):
