@@ -41,7 +41,7 @@ def _update_run_kwargs(run_kwargs, force_recompute,
 
 def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None,
                  ignore_invalid_inputs=None, ignore_failed_outputs=None,
-                 lock_folder=True, enable_logging=True, skip_processed=False):
+                 lock_folder=False, enable_logging=True, skip_processed=False):
     """ Run workflow of consecutive batch jobs.
 
     The jobs to be run are specified in a dictionary, like
