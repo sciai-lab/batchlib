@@ -24,8 +24,14 @@ def get_bg_config_file(folder, tischi_mode):
             return './configs/cell_analysis_bg.conf'
 
 
+def check_channel_mappings(folder_list):
+    for folder in folder_list:
+        assert os.path.exists(os.path.join(folder, 'channel_mapping.json')), f"{folder} does not have a channel mapping"
+
+
 def submit_folders(folder_list, config_file=None, fixed_background=False, tischi_mode=False, mean_and_sum=False):
     assert all(os.path.exists(folder) for folder in folder_list), str(folder_list)
+    check_channel_mappings(folder_list)
 
     if mean_and_sum:
         assert False, "Currently not working !"
