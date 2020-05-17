@@ -16,6 +16,14 @@ DEFAULT_CELL_OUTLIER_CRITERIA = {'max_cell_size': 12500,
                                  'min_cell_size': 250,
                                  'min_nucleus_size': None,  # suggested by Vibor: 100
                                  'max_nucleus_size': None}  # suggested by Vibor: 1000
+# nucleus sizes on 20200405_test_images (based on median in images)
+# mean: 444.30555555555554
+# std: 22.539659833992587
+# median: 444.25
+# min: 390.0
+# max: 514.0
+# -> need to make a consistent size criterion
+# I would calculate the radius in pixels and then take +- 50 %
 
 
 # the cell numbers are final (for the pre-print)
