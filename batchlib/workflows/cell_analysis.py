@@ -108,16 +108,14 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
     return background_dict
 
 
-def get_infected_detection_jobs(config, marker_key, feature_identifier):
+def add_infected_detection_jobs(job_list, config, marker_key, feature_identifier):
     erosion_radius = config.infected_erosion_radius
     tophat_radius = config.infected_tophat_radius
     quantile = config.infected_quantile
 
-    jobs = []
-
     if erosion_radius > 0:
         seg_key_for_infected_classification = config.seg_key + '_for_infected_classification'
-        jobs.append((ErodeSegmentation, {
+        job_list.append((ErodeSegmentation, {
             'build': {
                  'input_key': config.seg_key,
                  'output_key': seg_key_for_infected_classification,
@@ -130,7 +128,7 @@ def get_infected_detection_jobs(config, marker_key, feature_identifier):
     if erosion_radius > 0 \
             or tophat_radius > 0 \
             or config.ignore_nuclei_in_infected_classification != config.ignore_nuclei:
-        jobs.append((InstanceFeatureExtraction, {
+        job_list.append((InstanceFeatureExtraction, {
             'build': {
                 'channel_keys': (marker_key,),
                 'nuc_seg_key_to_ignore': config.nuc_key if config.ignore_nuclei_in_infected_classification else None,
@@ -145,7 +143,7 @@ def get_infected_detection_jobs(config, marker_key, feature_identifier):
 
     link_out_table = config.seg_key
 
-    jobs.append(
+    job_list.append(
         (FindInfectedCells, {
          'build': {
              'marker_key': marker_key,
@@ -157,7 +155,7 @@ def get_infected_detection_jobs(config, marker_key, feature_identifier):
              'bg_correction_key': 'plate/backgrounds',
              'link_out_table': link_out_table}})
     )
-    return jobs
+    return job_list
 
 
 def add_background_estimation(job_list, seg_key, channel_keys, identifier=None):
@@ -192,6 +190,7 @@ def add_background_estimation_from_min_well(job_list, config, channel_keys):
             'build': {'bg_table': f'wells/backgrounds_{seg_key}',
                       'output_table': 'plate/backgrounds_from_min_well',
                       'min_background_fraction': config.min_background_fraction,
+                      'max_background_fraction': config.max_background_fraction,
                       'channel_names': channel_keys}
             }
     ))
@@ -328,8 +327,7 @@ def core_workflow_tasks(config, name, feature_identifier):
     job_list = add_background_estimation_from_min_well(job_list, config, bg_estimation_keys)
     job_list = add_background_estimation(job_list, config.seg_key, bg_estimation_keys)
 
-    infected_detection_jobs = get_infected_detection_jobs(config, marker_ana_in_key, feature_identifier)
-    job_list.extend(infected_detection_jobs)
+    job_list = add_infected_detection_jobs(job_list, config, marker_ana_in_key, feature_identifier)
 
     # for the background substraction, we can either use a fixed value per channel,
     # or compute it from the data. In the first case, we pass the value
@@ -561,8 +559,10 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--background_dict", default=None)
     # arguments for the background estimation from the dimmest well
     parser.add("--background_radius_factor", default=2.5, type=float)
-    # TODO is 5 % background reasonable? should we rather specify number of pix?
-    parser.add("--min_background_fraction", default=.05, type=float)
+    # for now we settle for 10 / 90 % min / max background for the estimation
+    # of the min background well
+    parser.add("--min_background_fraction", default=.1, type=float)
+    parser.add("--max_background_fraction", default=.9, type=float)
 
     # arguments for the nucleus dilation used for the serum intensity qc
     parser.add("--qc_dilation", type=int, default=5)

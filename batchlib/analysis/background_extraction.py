@@ -14,11 +14,9 @@ from ..util.io import (open_file, image_name_to_well_name,
 logger = get_logger('Workflow.BatchJob.ExtractBackground')
 
 
-# TODO we need to make sure that we are robust against completely empty wells
-# (these should have no cells at all, so we can use this as a criterion to identify them)
 class BackgroundFromMinWell(BatchJobOnContainer):
-    def __init__(self, bg_table, output_table,
-                 channel_names, min_background_fraction):
+    def __init__(self, bg_table, output_table, channel_names,
+                 min_background_fraction, max_background_fraction):
 
         self.bg_table = bg_table
         self.output_table = output_table
@@ -29,8 +27,9 @@ class BackgroundFromMinWell(BatchJobOnContainer):
                          input_format='table',
                          output_key=self.output_table, output_format='table')
 
-        self.min_background_fraction = min_background_fraction
         self.channel_names = channel_names
+        self.min_background_fraction = min_background_fraction
+        self.max_background_fraction = max_background_fraction
 
     def run(self, input_files, output_files):
         if len(input_files) != 1 or len(output_files) != 1:
@@ -44,10 +43,12 @@ class BackgroundFromMinWell(BatchJobOnContainer):
         # have enough background
         bg_fraction = table[:, col_names.index('background_fraction')]
         well_names = table[:, col_names.index('well_name')]
-        invalid_wells = bg_fraction < self.min_background_fraction
+        invalid_wells = np.logical_or(bg_fraction < self.min_background_fraction,
+                                      bg_fraction > self.max_background_fraction)
 
         logger.info(f"{self.name}: {invalid_wells.sum()} wells will not be considered for the min background")
         logger.info(f"{self.name}: because they have a smaller background fraction than {self.min_background_fraction}")
+        logger.info(f"{self.name}: or a larger background fraction than {self.max_background_fraction}")
         logger.debug(f"{self.name}: the following wells are invalid {well_names[invalid_wells]}")
 
         plate_name = os.path.split(self.folder)[1]
