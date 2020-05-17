@@ -392,7 +392,7 @@ def core_workflow_tasks(config, name, feature_identifier):
                 'scale_factors': config.scale_factors,
                 'feature_identifier': feature_identifier,
                 'identifier': identifier},
-            'run': {'force_recompute': True}}))
+            'run': {'force_recompute': None}}))
         write_summary_images = False
 
     # get a dict with all relevant analysis parameters, so that we can write it as a table and log it
