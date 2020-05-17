@@ -45,9 +45,9 @@ class TestCellLevelQC(unittest.TestCase):
             pass
 
     def run_wf1(self, outlier_criteria):
-        from batchlib.analysis.cell_level_analysis import (InstanceFeatureExtraction,
-                                                           FindInfectedCells,
-                                                           ExtractBackground)
+        from batchlib.analysis import (InstanceFeatureExtraction,
+                                       FindInfectedCells,
+                                       ExtractBackground)
         from batchlib.analysis.cell_analysis_qc import CellLevelQC
         from batchlib.workflow import run_workflow
 
@@ -108,9 +108,9 @@ class TestCellLevelQC(unittest.TestCase):
 
     def run_wf2(self, outlier_criteria):
         from batchlib.preprocessing import Preprocess
-        from batchlib.analysis.cell_level_analysis import (InstanceFeatureExtraction,
-                                                           FindInfectedCells,
-                                                           ExtractBackground)
+        from batchlib.analysis import (InstanceFeatureExtraction,
+                                       FindInfectedCells,
+                                       ExtractBackground)
         from batchlib.analysis.cell_analysis_qc import CellLevelQC
         from batchlib.segmentation import SeededWatershed
         from batchlib.segmentation.stardist_prediction import StardistPrediction
@@ -257,8 +257,8 @@ class TestImageLevelQC(unittest.TestCase):
             pass
 
     def run_wf(self, outlier_criteria, outlier_predicate=lambda im: -1):
-        from batchlib.analysis.cell_level_analysis import (InstanceFeatureExtraction,
-                                                           FindInfectedCells)
+        from batchlib.analysis import (InstanceFeatureExtraction,
+                                       FindInfectedCells)
         from batchlib.analysis.cell_analysis_qc import ImageLevelQC
         from batchlib.workflow import run_workflow
 
@@ -479,8 +479,8 @@ class TestWellLevelQC(unittest.TestCase):
             pass
 
     def run_wf(self, outlier_criteria, run_analysis=False):
-        from batchlib.analysis.cell_level_analysis import (InstanceFeatureExtraction,
-                                                           FindInfectedCells)
+        from batchlib.analysis import (InstanceFeatureExtraction,
+                                       FindInfectedCells)
         from batchlib.analysis.cell_analysis_qc import ImageLevelQC, WellLevelQC
         from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
         from batchlib.workflow import run_workflow

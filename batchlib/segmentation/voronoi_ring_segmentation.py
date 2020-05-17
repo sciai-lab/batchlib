@@ -3,7 +3,7 @@ from concurrent import futures
 import numpy as np
 import skimage.morphology as morph
 from scipy import ndimage as ndi
-from skimage.segmentation import watershed  # for now, just use skimage
+from skimage.segmentation import watershed
 from tqdm.auto import tqdm
 
 from batchlib.base import BatchJobOnContainer
@@ -42,7 +42,7 @@ class VoronoiRingSegmentation(BatchJobOnContainer):
 
     def get_dilation_radius(self, seg, im_path):
         if self.ring_width is not None:
-            self.ring_width
+            return self.ring_width
         seg_ids, sizes = np.unique(seg, return_counts=True)
 
         if seg_ids[0] == 0:
@@ -69,9 +69,11 @@ class VoronoiRingSegmentation(BatchJobOnContainer):
         dilation_radius = self.get_dilation_radius(input_seg, in_path)
 
         distance = ndi.distance_transform_edt(input_mask == 0)
-        ring_mask = morph.dilation(input_mask, morph.disk(dilation_radius))
+        ring_mask = distance < dilation_radius
+
         if self.remove_nucleus:
             ring_mask ^= input_mask  # remove nuclei to get the rings
+
         voronoi_ring_seg = watershed(distance, input_seg)
         voronoi_ring_seg[np.invert(ring_mask)] = 0
         return voronoi_ring_seg
