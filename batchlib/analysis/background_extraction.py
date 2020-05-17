@@ -180,13 +180,13 @@ class ExtractBackground(CellLevelAnalysisWithTableBase):
 
         bg_per_well_dict = {well: torch.cat(bg_segments, dim=1) for well, bg_segments in bg_per_well_dict.items()}
         bg_per_well_stats = {well: self.get_bg_stats(bg_per_well_dict.get(well, None)) for well in wells}
-        bg_fractions_per_well = {well: np.median(bg_fractions_per_well[well]) if well in bg_fractions_per_well
+        bg_fractions_per_well = {well: np.mean(bg_fractions_per_well[well]) if well in bg_fractions_per_well
                                  else None for well in wells}
 
         bg_plate_stats = self.get_bg_stats(torch.cat(list(bg_per_well_dict.values()), dim=1)
                                            if len(bg_per_well_dict) > 0 else None)
         plate_bg_fraction = [frac for frac in bg_fractions_per_well.values() if frac is not None]
-        plate_bg_fraction = np.median(plate_bg_fraction) if len(plate_bg_fraction) > 0 else None
+        plate_bg_fraction = np.mean(plate_bg_fraction) if len(plate_bg_fraction) > 0 else None
 
         # save the results in tables
         self.write_stat_dict_to_table(bg_per_image_stats, bg_fractions_per_image, 'image_name', self.image_table_key)
