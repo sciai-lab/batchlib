@@ -62,6 +62,7 @@ def export_default_table(table_file, table_name, output_path, output_format=None
     export_table(columns, table, output_path, output_format)
 
 
+# TODO export the anchor and bounding box from 'tables/{seg_name}/properties' as well
 def export_cell_tables(folder, output_path, table_name, output_format=None, skip_existing=True):
     if os.path.exists(output_path) and skip_existing:
         return
@@ -147,12 +148,13 @@ def export_tables_for_plate(folder,
     # export the infected/non-infected classification
     # cell_table_root = cell_table_name.split('/')[0]
     class_name = f'cell_classification/cell_segmentation/{marker_name}'
-    class_out = os.path.join(folder, f'{plate_name}_cell_table_infected_clasification{ext}')
+    class_out = os.path.join(folder, f'{plate_name}_cell_infected_clasification_table{ext}')
     export_cell_tables(folder, class_out, class_name, skip_existing=skip_existing)
 
+    # TODO this doesn't work right now, because we changed the voronoi naming schemes
     # export voronoi tables
-    if export_voronoi:
-        export_voronoi_tables(folder, ext, skip_existing=skip_existing)
+    # if export_voronoi:
+    #     export_voronoi_tables(folder, ext, skip_existing=skip_existing)
 
 
 def _get_db_metadata(well_names, metadata_repository, plate_name):
