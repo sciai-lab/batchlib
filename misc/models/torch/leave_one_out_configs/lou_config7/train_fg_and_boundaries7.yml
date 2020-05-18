@@ -56,7 +56,7 @@ trainer:
   # max number of epochs
   epochs: 1000
   # max number of iterations
-  iters: 150000
+  iters: 100000
   # tensorboard formatter
   tensorboard_formatter:
     name: DefaultTensorboardFormatter
@@ -97,6 +97,9 @@ loaders:
     transformer:
       raw:
         - name: Standardize
+          # hardcoded mean/std computed on all training files, except the ones containing bright objects
+          mean: 42.53
+          std: 31.95
         - name: RandomFlip
         - name: RandomRotate90
         - name: RandomRotate
@@ -153,6 +156,9 @@ loaders:
     transformer:
       raw:
         - name: Standardize
+          # hardcoded mean/std computed on all training files, except the ones containing bright objects
+          mean: 42.53
+          std: 31.95
         - name: ToTensor
           expand_dims: true
       label:

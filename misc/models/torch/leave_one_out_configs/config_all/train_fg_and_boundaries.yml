@@ -46,7 +46,7 @@ trainer:
   # model with lower eval score is considered better
   eval_score_higher_is_better: False
   # path to the checkpoint directory
-  checkpoint_dir: '/g/kreshuk/software/antibodies-nuclei/unet_segmentation/lou_config8'
+  checkpoint_dir: '/g/kreshuk/software/antibodies-nuclei/unet_segmentation/config_all'
   # path to latest checkpoint; if provided the training will be resumed from that checkpoint
   resume: null
   # how many iterations between validations
@@ -56,7 +56,7 @@ trainer:
   # max number of epochs
   epochs: 1000
   # max number of iterations
-  iters: 100000
+  iters: 30000
   # tensorboard formatter
   tensorboard_formatter:
     name: DefaultTensorboardFormatter
@@ -76,6 +76,7 @@ loaders:
     file_paths:
       - '/g/kreshuk/software/antibodies-nuclei/groundtruth/segmentation/20200405_test_images/WellC01_PointC01_0000_ChannelDAPI,WF_GFP,TRITC,WF_Cy5_Seq0216_segmentation_done.h5'
       - '/g/kreshuk/software/antibodies-nuclei/groundtruth/segmentation/20200405_test_images/WellC05_PointC05_0004_ChannelDAPI,WF_GFP,TRITC,WF_Cy5_Seq0256_segmentation_done.h5'
+      - '/g/kreshuk/software/antibodies-nuclei/groundtruth/segmentation/20200405_test_images/WellC06_PointC06_0000_ChannelDAPI,WF_GFP,TRITC,WF_Cy5_Seq0261_segmentation_done.h5'
       - '/g/kreshuk/software/antibodies-nuclei/groundtruth/segmentation/20200405_test_images/WellC07_PointC07_0007_ChannelDAPI,WF_GFP,TRITC,WF_Cy5_Seq0277_segmentation_done.h5'
       - '/g/kreshuk/software/antibodies-nuclei/groundtruth/segmentation/20200417_172611_193_IgG/WellA04_PointA04_0007_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0025_segmentation_done.h5'
       - '/g/kreshuk/software/antibodies-nuclei/groundtruth/segmentation/20200417_203228_156_IgG/WellC06_PointC06_0003_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0219_segmentation_done.h5'
@@ -141,7 +142,7 @@ loaders:
   val:
     # paths to the val datasets
     file_paths:
-      - '/g/kreshuk/software/antibodies-nuclei/groundtruth/segmentation/20200405_test_images/WellC06_PointC06_0000_ChannelDAPI,WF_GFP,TRITC,WF_Cy5_Seq0261_segmentation_done.h5'
+      - '/g/kreshuk/software/antibodies-nuclei/unet_segmentation/config_all/WellC07_PointC07_0007_ChannelDAPI,WF_GFP,TRITC,WF_Cy5_Seq0277_segmentation_done_copy.h5'
 
     # SliceBuilder configuration, i.e. how to iterate over the input volume patch-by-patch
     slice_builder:
