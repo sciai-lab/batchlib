@@ -52,14 +52,23 @@ def check_bg_well_for_all_plates(root):
     with open(bg_wells_per_plate) as f:
         bg_wells_per_plate = json.load(f)
 
+    n_disagree = 0
+    n_total = 0
     for name in plate_names:
         expected_bg_well = get_expected_bg_well(name, bg_wells_per_plate)
+
+        if expected_bg_well is None:
+            continue
+
         channel_dict = get_channel_dict(name)
         actual_bg_well = get_actual_bg_well(name, root, channel_dict)
-        print(name)
-        print(expected_bg_well)
-        print(actual_bg_well)
-        print()
+        igg_well = actual_bg_well['serum_IgG']
+        if igg_well not in expected_bg_well:
+            print("Plate", name, ": expected bg well to be one of", expected_bg_well, "but got", igg_well)
+            n_disagree += 1
+        n_total += 1
+
+    print("Error rate:", float(n_disagree) / float(n_total))
 
 
 if __name__ == '__main__':

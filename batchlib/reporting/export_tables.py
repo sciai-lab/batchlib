@@ -8,9 +8,8 @@ from ..util import read_table, open_file, image_name_to_site_name, image_name_to
 SUPPORTED_TABLE_FORMATS = {'excel': '.xlsx',
                            'csv': '.csv',
                            'tsv': '.tsv'}
-# TODO more scores to report?
-DEFAULT_SCORE_PATTERNS = ['robust_z_score_of_means',
-                          'ratio_of_q0.5_of_means']
+DEFAULT_SCORE_PATTERNS = ('IgG_robust_z_score_means', 'IgG_ratio_of_q0.5_of_means',
+                          'IgA_robust_z_score_means', 'IgA_ratio_of_q0.5_of_means')
 
 
 def format_to_extension(format_):
@@ -192,10 +191,7 @@ def _get_db_metadata(well_names, metadata_repository, plate_name):
     return np.array(additional_values)
 
 
-# FIXME all metadata is blank
-# FIXME the name matching triggers for unwanted scores,
-# we only want IgG and IgM
-# FIXME make score names more succinct
+# consider making our score names more succinct
 def export_scores(folder_list, output_path,
                   score_patterns=DEFAULT_SCORE_PATTERNS,
                   table_name='wells/default',
@@ -238,7 +234,7 @@ def export_scores(folder_list, output_path,
         plate_col = np.array([plate_name] * this_len)
 
         col_ids = [this_result_columns.index(name) if name in this_result_columns else -1
-                   for name in result_columns[1:]]
+                   for name in result_columns]
         this_table = [np.array([None] * this_len)[:, None] if col_id == -1 else
                       this_result_table[:, col_id:col_id+1] for col_id in col_ids]
         this_table = np.concatenate([plate_col[:, None]] + this_table, axis=1)
@@ -251,5 +247,6 @@ def export_scores(folder_list, output_path,
 
         table.append(this_table)
 
+    print(columns)
     table = np.concatenate(table, axis=0)
     export_table(columns, table, output_path)

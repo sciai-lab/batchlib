@@ -43,7 +43,8 @@ def summarize_kinder_experiment(root, token, clean_up, ignore_incomplete, metada
 
 
 def redo_summary(root):
-    folder_names = all_manuscript_plates()  # + all_kinder_plates()
+    # folder_names = all_manuscript_plates()  # + all_kinder_plates()
+    folder_names = os.listdir(root)
 
     def redo_folder(folder):
         plot_folder = os.path.join(folder, 'plots')
@@ -90,10 +91,10 @@ if __name__ == '__main__':
     parser.add_argument('--root', type=str, default=ROOT_OUT)
 
     # configure db connection
-    parser.add_argument('--host', type=str, help='IP of the MongoDB primary DB', required=True)
+    parser.add_argument('--host', type=str, help='IP of the MongoDB primary DB', default=None)
     parser.add_argument('--port', type=int, help='MongoDB port', default=27017)
     parser.add_argument('--user', type=str, help='MongoDB user', default='covid19')
-    parser.add_argument('--password', type=str, help='MongoDB password', required=True)
+    parser.add_argument('--password', type=str, help='MongoDB password', default=None)
     parser.add_argument('--db', type=str, help='Default database', default='covid')
 
     args = parser.parse_args()
@@ -103,6 +104,7 @@ if __name__ == '__main__':
     # escape username and password to be URL friendly
     if args.host is None:
         metadata_repository = None
+        print("Database was not specified, will not add any metadata!")
     else:
         username = urllib.parse.quote_plus(args.user)
         password = urllib.parse.quote_plus(args.password)
