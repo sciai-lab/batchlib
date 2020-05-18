@@ -48,8 +48,9 @@ def make_summary(folder_list, experiment_name,
         have_summary = os.path.exists(summary_folder)
 
         # copy the plots
-        # TODO switch to jpg
-        plots = glob(os.path.join(summary_folder, '*.jpg'))
+        plots = []
+        for ext in ['*.jpg', '*.png']:
+            plots.extend(glob(os.path.join(summary_folder, ext)))
         if len(plots) == 0:
             have_summary = False
         for plot in plots:
@@ -66,7 +67,7 @@ def make_summary(folder_list, experiment_name,
             copyfile(table, table_out)
 
         # copy the text
-        msg_path = os.path.join(summary_folder, 'message.md')
+        msg_path = os.path.join(summary_folder, 'message.txt')
         if os.path.exists(msg_path):
             copyfile(msg_path, os.path.join(out_folder, "README.md"))
         else:

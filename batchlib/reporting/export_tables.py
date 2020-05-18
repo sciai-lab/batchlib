@@ -159,6 +159,7 @@ def export_tables_for_plate(folder,
 def _get_db_metadata(well_names, metadata_repository, plate_name):
     """
     Args
+        well_names: array of well_names
         metadata_repository: instance of PlateMetadataRepository
         plate_name: name of the plate
     Returns:
@@ -178,6 +179,7 @@ def _get_db_metadata(well_names, metadata_repository, plate_name):
         else:
             return 'unknown'
 
+    assert len(well_names) > 0 and isinstance(well_names[0], str)
     cohort_ids = metadata_repository.get_cohort_ids(plate_name)
     elisa_results = metadata_repository.get_elisa_results(plate_name)
 
@@ -236,7 +238,7 @@ def export_scores(folder_list, output_path,
         col_ids = [this_result_columns.index(name) if name in this_result_columns else -1
                    for name in result_columns]
         this_table = [np.array([None] * this_len)[:, None] if col_id == -1 else
-                      this_result_table[:, col_id:col_id+1] for col_id in col_ids]
+                      this_result_table[:, col_id:col_id + 1] for col_id in col_ids]
         this_table = np.concatenate([plate_col[:, None]] + this_table, axis=1)
 
         # extend table with the values from DB
