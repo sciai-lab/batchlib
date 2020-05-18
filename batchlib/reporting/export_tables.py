@@ -245,6 +245,7 @@ def export_scores(folder_list, output_path,
         if metadata_repository is not None:
             metadata = _get_db_metadata(this_table[:, 1], metadata_repository, plate_name)
             assert len(metadata) == len(this_table)
+            assert metadata.shape[1] == len(db_metadata), f"{metadata.shape[1], len(db_metadata)}"
             this_table = np.concatenate([this_table, metadata], axis=1)
 
         table.append(this_table)
