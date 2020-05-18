@@ -66,6 +66,10 @@ class BackgroundFromMinWell(BatchJobOnContainer):
             min_id = np.argmin(medians)
 
             min_well, min_median, min_mad = well_names[min_id], medians[min_id], mads[min_id]
+            if not np.isfinite(min_median):
+                raise RuntimeError(f"{self.name}: median background value is not finite")
+            msg = f"{self.name}: min well {min_well} with median background {min_median} for channel {channel_name}"
+            logger.info(msg)
 
             out_table.extend([min_well, min_median, min_mad])
             out_col_names.extend([f'{channel_name}_min_well', median_col_name, mad_col_name])

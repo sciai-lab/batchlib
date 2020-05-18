@@ -188,7 +188,7 @@ def _get_db_metadata(well_names, metadata_repository, plate_name):
         cohort_id = cohort_ids.get(well_name, None)
         cohort_type = _get_cohort_type(cohort_id)
         elisa_IgG, elisa_IgA = elisa_results.get(well_name, (None, None))
-        additional_values.append([cohort_id, cohort_id, elisa_IgG, elisa_IgA, cohort_type])
+        additional_values.append([cohort_id, elisa_IgG, elisa_IgA, cohort_type])
 
     return np.array(additional_values)
 
@@ -250,6 +250,7 @@ def export_scores(folder_list, output_path,
 
         table.append(this_table)
 
+    print("Found the following columns:")
     print(columns)
     table = np.concatenate(table, axis=0)
     export_table(columns, table, output_path)

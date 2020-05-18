@@ -44,6 +44,20 @@ def get_actual_bg_well(name, root, channel_dict, bg_table_key='plate/backgrounds
     return {chan_name: table[0, col_names.index(well_key)] for chan_name, well_key in channel_dict.items()}
 
 
+def get_well_bg_fractions(name, root):
+    folder = os.path.join(root, name)
+    table_path = os.path.join(folder, f'{name}_table.hdf5')
+    bg_table_key = 'wells/backgrounds'
+    with h5py.File(table_path, 'r') as f:
+        col_names, table = read_table(f, bg_table_key)
+
+    wells = table[:, col_names.index('well_name')]
+    fractions = table[:, col_names.index('background_fraction')]
+    values = table[:, col_names.index('serum_IgG_median')]
+
+    return dict(zip(wells, values)), dict(zip(wells, fractions))
+
+
 def check_bg_well_for_all_plates(root):
     plate_names = os.listdir(root)
     plate_names.sort()
@@ -63,14 +77,27 @@ def check_bg_well_for_all_plates(root):
         channel_dict = get_channel_dict(name)
         actual_bg_well = get_actual_bg_well(name, root, channel_dict)
         igg_well = actual_bg_well['serum_IgG']
+        bg_vals, bg_fractions = get_well_bg_fractions(name, root)
         if igg_well not in expected_bg_well:
             print("Plate", name, ": expected bg well to be one of", expected_bg_well, "but got", igg_well)
+            print("BG-fraction for expected wells:")
+            for well in expected_bg_well + [igg_well]:
+                print(well, ": bg-val:", bg_vals[well], "fraction:", bg_fractions[well])
             n_disagree += 1
         n_total += 1
 
     print("Error rate:", float(n_disagree) / float(n_total))
 
 
+def check_plate():
+    from batchlib.analysis.background_extraction import BackgroundFromMinWell
+    folder = '/g/kreshuk/data/covid/data-processed-scratch/plateT8rep1_20200516_091304_432'
+    chan_names = ['serum_IgG', 'serum_IgA']
+    job = BackgroundFromMinWell('wells/backgrounds', 'plate/backgrounds/blub', chan_names, .05, .95)
+    job(folder, force_recompute=True)
+
+
 if __name__ == '__main__':
     root = '/g/kreshuk/data/covid/data-processed-scratch'
     check_bg_well_for_all_plates(root)
+    # check_plate()
