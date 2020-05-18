@@ -1,0 +1,156 @@
+# use a fixed random seed to guarantee that when you run the code twice you will get the same outcome
+manual_seed: 0
+model:
+  name: UNet2D
+  # number of input channels to the model
+  in_channels: 1
+  # number of output channels
+  out_channels: 3
+  # determines the order of operators in a single layer (crg - Conv3d+ReLU+GroupNorm)
+  layer_order: gcr
+  # initial number of feature maps
+  f_maps: [32, 64, 128, 256, 512]
+  # number of groups in the groupnorm
+  num_groups: 8
+  # apply element-wise nn.Sigmoid after the final 1x1x1 convolution, otherwise apply nn.Softmax
+  final_sigmoid: true
+  is_segmentation: true
+# trainer configuration
+trainer:
+  # model with higher eval score is considered better
+  eval_score_higher_is_better: True
+  # path to the checkpoint directory
+  checkpoint_dir: 'CHECKPOINT_DIR'
+  # path to latest checkpoint; if provided the training will be resumed from that checkpoint
+  resume: null
+  # how many iterations between validations
+  validate_after_iters: 500
+  # how many iterations between tensorboard logging
+  log_after_iters: 250
+  # max number of epochs
+  epochs: 1000
+  # max number of iterations
+  iters: 100000
+# optimizer configuration
+optimizer:
+  # initial learning rate
+  learning_rate: 0.0001
+  # weight decay
+  weight_decay: 0.00001
+# loss function configuration
+loss:
+  # loss function to be used during training
+  name: CrossEntropyLoss
+  # A manual rescaling weight given to each class
+  weight: null
+  # a target value that is ignored and does not contribute to the input gradient
+  ignore_index: null
+# evaluation metric configuration
+eval_metric:
+  name: MeanIoU
+  # a target label that is ignored during metric evaluation
+  ignore_index: null
+# learning rate scheduler configuration
+lr_scheduler:
+  # reduce learning rate when evaluation metric plateaus
+  name: ReduceLROnPlateau
+  # use 'max' if eval_score_higher_is_better=True, 'min' otherwise
+  mode: max
+  # factor by which learning rate will be reduced
+  factor: 0.2
+  # number of *validation runs* with no improvement after which learning rate will be reduced
+  patience: 10
+# data loaders configuration
+loaders:
+  batch_size: 24
+  # how many subprocesses to use for data loading
+  num_workers: 8
+  # path to the raw data within the H5
+  raw_internal_path: /raw
+  # path to the the label data withtin the H5
+  label_internal_path: /cells
+  # configuration of the train loader
+  train:
+    # paths to the training datasets
+    file_paths:
+      - 'TRAINING_FILE_PATH1'
+      - 'TRAINING_FILE_PATH2'
+
+    # SliceBuilder configuration, i.e. how to iterate over the input volume patch-by-patch
+    slice_builder:
+      name: SliceBuilder
+      # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
+      patch_shape: [1, 256, 256]
+      # train stride between patches
+      stride_shape: [1, 32, 32]
+      skip_shape_check: true
+
+    transformer:
+      raw:
+        - name: Standardize
+        - name: RandomFlip
+        - name: RandomRotate90
+        - name: RandomRotate
+          # rotate only in ZY plane due to anisotropy
+          axes: [[2, 1]]
+          angle_spectrum: 30
+          mode: reflect
+        - name: ElasticDeformation
+          spline_order: 3
+          execution_probability: 0.2
+        - name: AdditiveGaussianNoise
+        - name: AdditivePoissonNoise
+        - name: ToTensor
+          expand_dims: true
+      label:
+        - name: RandomFlip
+        - name: RandomRotate90
+        - name: RandomRotate
+          # rotate only in ZY plane due to anisotropy
+          axes: [[2, 1]]
+          angle_spectrum: 30
+          mode: reflect
+        - name: ElasticDeformation
+          spline_order: 0
+          execution_probability: 0.2
+        - name: StandardLabelToBoundary
+          # append original ground truth labels to the last channel (to be able to compute the eval metric)
+          append_label: true
+          # guassian blur and threshold the boundary map in order to help with overfitting
+          blur: true
+          # stddev of Gaussian kernel
+          sigma: 1.0
+          # foreground in the 1st channel
+          foreground: true
+        - name: ToTensor
+          expand_dims: false
+
+  # configuration of the val loader
+  val:
+    # paths to the val datasets
+    file_paths:
+      - 'VAL_FILE1'
+
+    # SliceBuilder configuration, i.e. how to iterate over the input volume patch-by-patch
+    slice_builder:
+      name: SliceBuilder
+      # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
+      patch_shape: [1, 256, 256]
+      # train stride between patches
+      stride_shape: [1, 256, 256]
+      skip_shape_check: true
+
+    # data augmentation
+    transformer:
+      raw:
+        - name: Standardize
+        - name: ToTensor
+          expand_dims: true
+      label:
+        - name: StandardLabelToBoundary
+          append_label: true
+          blur: true
+          sigma: 1.0
+          foreground: true
+        - name: ToTensor
+          expand_dims: false
