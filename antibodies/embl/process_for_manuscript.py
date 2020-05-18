@@ -14,7 +14,8 @@ def is_processed(folder):
 
     with open(status) as f:
         status = json.load(f)
-    return 'MergeAnalysisTables' in status
+    name = 'MergeAnalysisTables'
+    return name in status and status[name] == 'processed'
 
 
 def is_processed_mean_and_sums(folder):
