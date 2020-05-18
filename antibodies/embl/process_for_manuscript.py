@@ -4,7 +4,7 @@ import os
 from glob import glob
 
 ROOT_IN = '/g/kreshuk/data/covid/covid-data-vibor'
-ROOT_OUT = '/g/kreshuk/data/covid/data-processed'
+ROOT_OUT = '/g/kreshuk/data/covid/data-processed-scratch'
 
 
 def is_processed(folder):
@@ -33,6 +33,7 @@ def fixed_pattern_plates(patterns):
         inputs.extend(glob(os.path.join(ROOT_IN, pattern)))
     folder_names = [os.path.split(folder)[1] for folder in inputs]
     folder_names.sort()
+    folder_names = list(set(folder_names))
     return folder_names
 
 
@@ -46,8 +47,13 @@ def tubingen_kinder_plates():
     return fixed_pattern_plates(patterns)
 
 
+def ulm_kinder_plates():
+    patterns = ['*plateU*']
+    return fixed_pattern_plates(patterns)
+
+
 def all_kinder_plates():
-    patterns = ['*plateK*', '*PlateK*', '*plateT*']
+    patterns = ['*plateK*', '*PlateK*', '*plateT*', '*plateU*']
     return fixed_pattern_plates(patterns)
 
 

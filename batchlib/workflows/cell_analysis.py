@@ -135,7 +135,7 @@ def add_infected_detection_jobs(job_list, config, marker_key, feature_identifier
                 'cell_seg_key': seg_key_for_infected_classification,
                 'identifier': None,
                 'quantiles': [quantile]},
-            'run': {'gpu_id': config.gpu}
+            'run': {'gpu_id': config.gpu, 'on_cluster': config.on_cluster}
         }))
         this_feature_identifier = None
     else:
@@ -312,7 +312,7 @@ def core_workflow_tasks(config, name, feature_identifier):
                       'cell_seg_key': config.seg_key,
                       'quantiles': [config.infected_quantile],
                       'identifier': feature_identifier},
-            'run': {'gpu_id': config.gpu}}),
+            'run': {'gpu_id': config.gpu, 'on_cluster': config.on_cluster}}),
         (ImageLevelQC, {
           'build': {
               'cell_seg_key': config.seg_key,

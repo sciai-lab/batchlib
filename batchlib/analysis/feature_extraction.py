@@ -8,7 +8,9 @@ from tqdm import tqdm
 from skimage.measure import regionprops
 
 from ..base import BatchJobOnContainer
-from ..util import open_file
+from ..util import open_file, get_logger
+
+logger = get_logger('Workflow.BatchJob.InstanceFeatureExtraction')
 
 
 # compute intensity independent properties like size and anchors (= region center points)
@@ -33,10 +35,14 @@ class SegmentationProperties(BatchJobOnContainer):
                         'size']
 
         props = regionprops(seg)
-        table = np.array([[prop['label'],
-                           prop['centroid'][0], prop['centroid'][1],
-                           prop['bbox'][0], prop['bbox'][1], prop['bbox'][2], prop['bbox'][3],
-                           prop['area']] for prop in props])
+
+        # regionprops ignores the background label, but we need to add a row for it:
+        table = [[0] + [np.nan] * (len(column_names) - 1)]
+        table.extend([[prop['label'],
+                       prop['centroid'][0], prop['centroid'][1],
+                       prop['bbox'][0], prop['bbox'][1], prop['bbox'][2], prop['bbox'][3],
+                       prop['area']] for prop in props])
+        table = np.array(table)
 
         with open_file(out_file, 'a') as f:
             self.write_table(f, self.table_key, column_names, table)
@@ -154,13 +160,20 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
             with open_file(out_file, 'a') as f:
                 self.write_table(f, output_key, columns, table)
 
-    def run(self, input_files, output_files, gpu_id=None):
+    def run(self, input_files, output_files, gpu_id=None, on_cluster=False):
         with torch.no_grad():
-            if gpu_id is not None:
-                os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
-                device = torch.device(0)
-            else:
+            if gpu_id is None:
                 device = torch.device('cpu')
+            else:
+                # if we run on the slurm cluster, the visible devices are set automatically and must not be changed
+                if not on_cluster:
+                    logger.info(f"{self.name}: setting CUDA_VISIBLE_DEVICES to {gpu_id}")
+                    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
+
+                vis_devices = os.environ.get('CUDA_VISIBLE_DEVICES', '')
+                logger.info(f"{self.name}: CUDA_VISIBLE_DEVICES are set to {vis_devices}")
+                device = torch.device(0)
+
             _save_all_stats = partial(self.save_all_stats, device=device)
             for input_file, output_file in tqdm(list(zip(input_files, output_files)),
                                                 desc='extracting cell-level features'):

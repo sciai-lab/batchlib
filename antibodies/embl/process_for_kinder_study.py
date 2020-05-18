@@ -4,7 +4,7 @@ import os
 from process_for_manuscript import all_kinder_plates, heidelberg_kinder_plates, tubingen_kinder_plates, is_processed
 
 ROOT_IN = '/g/kreshuk/data/covid/covid-data-vibor'
-ROOT_OUT = '/g/kreshuk/data/covid/data-processed'
+ROOT_OUT = '/g/kreshuk/data/covid/data-processed-scratch'
 
 
 def folders_for_kinder_study(root_out, check_if_processed, city):
