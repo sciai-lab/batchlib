@@ -263,6 +263,6 @@ def export_scores(folder_list, output_path,
 
         table.append(this_table)
 
-    print(columns)
+    logger.info(f'Columns: {columns}')
     table = np.concatenate(table, axis=0)
     export_table(columns, table, output_path)
