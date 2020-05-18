@@ -3,6 +3,8 @@ from glob import glob
 
 import numpy as np
 import pandas as pd
+
+from batchlib.util import get_logger
 from ..util import read_table, open_file, image_name_to_site_name, image_name_to_well_name
 
 SUPPORTED_TABLE_FORMATS = {'excel': '.xlsx',
@@ -11,6 +13,8 @@ SUPPORTED_TABLE_FORMATS = {'excel': '.xlsx',
 DEFAULT_SCORE_PATTERNS = ('IgG_robust_z_score_means', 'IgG_ratio_of_q0.5_of_means',
                           'IgA_robust_z_score_means', 'IgA_ratio_of_q0.5_of_means')
 
+
+logger = get_logger('TableExporter')
 
 def format_to_extension(format_):
     if format_ not in SUPPORTED_TABLE_FORMATS:
@@ -186,6 +190,9 @@ def _get_db_metadata(well_names, metadata_repository, plate_name):
     additional_values = []
     for well_name in well_names:
         cohort_id = cohort_ids.get(well_name, None)
+        if cohort_id is None:
+            logger.warning(f'Plate: {plate_name}, well: {well_name} has no cohort_id metadata')
+
         cohort_type = _get_cohort_type(cohort_id)
         elisa_IgG, elisa_IgA = elisa_results.get(well_name, (None, None))
         additional_values.append([cohort_id, cohort_id, elisa_IgG, elisa_IgA, cohort_type])
