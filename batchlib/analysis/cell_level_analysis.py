@@ -1,12 +1,10 @@
 import os
 from copy import copy, deepcopy
-from functools import partial
 from collections import defaultdict
 from concurrent import futures
 
 import numpy as np
 import skimage.morphology
-import torch
 from tqdm.auto import tqdm
 from glob import glob
 
@@ -14,9 +12,8 @@ from batchlib.util.logging import get_logger
 from ..base import BatchJobOnContainer
 from ..util.image import seg_to_edges
 from ..util.io import (open_file, image_name_to_site_name, image_name_to_well_name, get_column_dict,
-                       in_file_to_image_name, in_file_to_plate_name,
                        has_table, read_table, write_image_information,
-                       to_image_table, add_site_name_to_image_table)
+                       in_file_to_image_name, to_image_table)
 
 logger = get_logger('Workflow.BatchJob.CellLevelAnalysis')
 
@@ -217,126 +214,6 @@ def _load_image_outliers(name, table_out_path, image_outlier_table, input_files)
     return outlier_dict
 
 
-class InstanceFeatureExtraction(BatchJobOnContainer):
-    def __init__(self,
-                 channel_keys=('serum', 'marker'),
-                 nuc_seg_key_to_ignore=None,
-                 cell_seg_key='cell_segmentation',
-                 topk=(10, 30, 50),
-                 quantiles=tuple(),
-                 identifier=None):
-
-        self.channel_keys = tuple(channel_keys)
-        self.nuc_seg_key_to_ignore = nuc_seg_key_to_ignore
-        self.cell_seg_key = cell_seg_key
-
-        self.topk = topk
-        self.quantiles = quantiles
-
-        # all inputs should be 2d
-        input_ndim = [2] * (1 + len(channel_keys) + (1 if nuc_seg_key_to_ignore else 0))
-
-        # tables are per default saved at tables/cell_segmentation/channel in the container
-        output_group = cell_seg_key if identifier is None else cell_seg_key + '_' + identifier
-        self.output_table_keys = [output_group + '/' + channel for channel in channel_keys]
-        super().__init__(input_key=list(self.channel_keys) + [self.cell_seg_key] +
-                                       ([self.nuc_seg_key_to_ignore] if self.nuc_seg_key_to_ignore is not None else []),
-                         input_ndim=input_ndim,
-                         output_key=self.output_table_keys,
-                         output_format=['table'] * len(self.output_table_keys),
-                         identifier=identifier)
-
-    def load_sample(self, path, device):
-        with open_file(path, 'r') as f:
-            channels = [self.read_image(f, key) for key in self.channel_keys]
-            cell_seg = self.read_image(f, self.cell_seg_key)
-            if self.nuc_seg_key_to_ignore is not None:
-                nucleus_seg = self.read_image(f, self.nuc_seg_key_to_ignore)
-
-        channels = [torch.FloatTensor(channel.astype(np.float32)).to(device) for channel in channels]
-        cell_seg = torch.LongTensor(cell_seg.astype(np.int32)).to(device)
-
-        if self.nuc_seg_key_to_ignore is not None:
-            nucleus_seg = torch.LongTensor(nucleus_seg.astype(np.int32)).to(device)
-            cell_seg[nucleus_seg != 0] = -1  # negative labels are ignored in eval_cells
-
-        return channels, cell_seg
-
-    def get_per_instance_statistics(self, data, seg, labels):
-        per_cell_values = [data[seg == label] for label in labels]
-        sums = data.new([arr.sum() for arr in per_cell_values])
-        means = data.new([arr.mean() for arr in per_cell_values])
-        instance_sizes = data.new([len(arr.view(-1)) for arr in per_cell_values])
-        topkdict = {f'top{k}': np.array([0 if len(t) < k else t.topk(k)[0][-1].item()
-                                         for t in per_cell_values])
-                    for k in self.topk}
-        quantile_dict = {f'quantile{q}': np.array([np.quantile(t.cpu().numpy(), q)
-                                                   for t in per_cell_values])
-                         for q in self.quantiles}
-        medians = np.array([t.median().item()
-                            for t in per_cell_values])
-        mads = np.array([(t - median).abs().median().item()
-                         for t, median in zip(per_cell_values, medians)])
-
-        # when adding a new stat, make sure that it's BG is subtracted in CellLevelAnalysis.subtract_background()
-        # convert to numpy here
-        return dict(sums=sums.cpu().numpy(),
-                    means=means.cpu().numpy(),
-                    medians=medians,
-                    mads=mads,
-                    sizes=instance_sizes.cpu().numpy(),
-                    **topkdict,
-                    **quantile_dict)
-
-    def eval_cells(self, channels, cell_seg,
-                   ignore_label=0):
-        # all segs have shape H, W
-        shape = cell_seg.shape
-        for channel in list(channels):
-            assert channel.shape == shape
-
-        # include background as instance with label 0
-        labels = torch.sort(torch.unique(cell_seg))[0]
-        labels = labels[labels >= 0]  # ignore nuclei with label -1
-
-        cell_properties = dict()
-        for key, channel in zip(self.channel_keys, channels):
-            cell_properties[key] = self.get_per_instance_statistics(channel, cell_seg, labels)
-        cell_properties['labels'] = labels.cpu().numpy()
-
-        return cell_properties
-
-    # this is what should be run for each h5 file
-    def save_all_stats(self, in_file, out_file, device):
-        sample = self.load_sample(in_file, device=device)
-        per_cell_statistics = self.eval_cells(*sample)
-
-        labels = per_cell_statistics['labels']
-        for i, (channel, output_key) in enumerate(zip(self.channel_keys, self.output_table_keys)):
-            columns = ['label_id']
-            table = [list(labels)]
-            for key, values in per_cell_statistics[channel].items():
-                columns.append(key)
-                table.append([v if v is not None else np.nan for v in values])
-
-            # transpose table to have shape (n_cells, n_features)
-            table = np.asarray(table, dtype=float).T
-            with open_file(out_file, 'a') as f:
-                self.write_table(f, output_key, columns, table)
-
-    def run(self, input_files, output_files, gpu_id=None):
-        with torch.no_grad():
-            if gpu_id is not None:
-                os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
-                device = torch.device(0)
-            else:
-                device = torch.device('cpu')
-            _save_all_stats = partial(self.save_all_stats, device=device)
-            for input_file, output_file in tqdm(list(zip(input_files, output_files)),
-                                                desc='extracting cell-level features'):
-                _save_all_stats(input_file, output_file)
-
-
 def _get_bg_correction_dict(table_path, key_in_table, column_name, in_files):
     # if key in table is float or int, return constant background
     if isinstance(key_in_table, (int, float)):
@@ -347,8 +224,15 @@ def _get_bg_correction_dict(table_path, key_in_table, column_name, in_files):
     column_names, table = to_image_table((column_names, table), list(map(in_file_to_image_name, in_files)))
     assert column_name in column_names, \
         f'Did not find column {column_name} in background table columns {column_names}'
-    return dict(zip(table[:, column_names.index('image_name')],
-                    table[:, column_names.index(column_name)].astype(np.float32)))
+
+    image_names = table[:, column_names.index('image_name')]
+    bg_values = table[:, column_names.index(column_name)]
+    try:
+        bg_values = bg_values.astype(np.float32)
+    except ValueError:
+        pass
+
+    return dict(zip(image_names, bg_values))
 
 
 class FindInfectedCells(BatchJobOnContainer):
@@ -476,9 +360,9 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
     to the result_dict loaded from tables computed by InstanceFeatureExtraction.
     """
     def __init__(self,
-                 cell_seg_key, serum_key, marker_key,
+                 cell_seg_key, serum_key=None, marker_key=None,
                  serum_bg_key=None, marker_bg_key=None,
-                 output_key=None,
+                 image_input_keys=None, output_key=None,
                  validate_cell_classification=True,
                  feature_identifier=None,
                  **super_kwargs):
@@ -487,22 +371,34 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
         self.serum_bg_key = serum_bg_key
         self.marker_bg_key = marker_bg_key
 
-        # TODO allow for serum and marker data to come from different segmentations
-        #  Idea: pass these things directly (with cell_seg_key and '/').
-        #  Allows for more options + job_dict is more readable
         root_key = cell_seg_key if feature_identifier is None else cell_seg_key + f'_{feature_identifier}'
-        self.serum_key = root_key + '/' + serum_key
-        self.marker_key = root_key + '/' + marker_key
+        input_key = [] if image_input_keys is None else list(image_input_keys)
+        input_format = [] if image_input_keys is None else ['image'] * len(image_input_keys)
 
-        self.classification_key = f'cell_classification/{cell_seg_key}/{marker_key}'
-        if validate_cell_classification:
-            input_key = [self.serum_key, self.marker_key, self.classification_key]
+        if serum_key is None:
+            self.serum_key = None
         else:
-            input_key = [self.serum_key, self.marker_key]
-        super().__init__(input_key=input_key,
-                         input_format=len(input_key)*['table'],
-                         output_key=output_key,
-                         **super_kwargs)
+            self.serum_key = root_key + '/' + serum_key
+            input_key.append(self.serum_key)
+            input_format.append('table')
+
+        if marker_key is None:
+            self.marker_key = None
+        else:
+            self.marker_key = root_key + '/' + marker_key
+            input_key.append(self.marker_key)
+            input_format.append('table')
+
+        if validate_cell_classification:
+            self.classification_key = f'cell_classification/{cell_seg_key}/{marker_key}'
+            assert self.marker_key is not None
+            input_key.append(self.classification_key)
+            input_format.append('table')
+        else:
+            self.classification_key = None
+
+        super().__init__(input_key=input_key, input_format=input_format,
+                         output_key=output_key, **super_kwargs)
 
     @staticmethod
     def folder_to_table_path(folder):
@@ -672,103 +568,6 @@ class CellLevelAnalysisWithTableBase(CellLevelAnalysisBase):
                                                            ignore_failed_outputs)
         else:
             return have_table
-
-
-class ExtractBackground(CellLevelAnalysisWithTableBase):
-    def __init__(self,
-                 cell_seg_key, serum_key, marker_key,  # TODO: get rid of this in CellLevelAnalysisWithTableBase
-                 actual_channels_to_use,
-                 image_outlier_table='images/outliers',
-                 identifier=None,
-                 **super_kwargs):
-
-        self.channel_keys = actual_channels_to_use
-        self.image_outlier_table = image_outlier_table
-
-        group_name = 'backgrounds' if identifier is None else f'backgrounds_{identifier}'
-        self.image_table_key = 'images/' + group_name
-        self.well_table_key = 'wells/' + group_name
-        self.plate_table_key = 'plate/' + group_name
-
-        super().__init__(
-            cell_seg_key=cell_seg_key, serum_key=serum_key, marker_key=marker_key,
-            table_out_keys=[self.image_table_key, self.well_table_key, self.plate_table_key],
-            validate_cell_classification=False,
-            identifier=identifier,
-            **super_kwargs
-        )
-
-    def get_bg_segment(self, path, device):
-        with open_file(path, 'r') as f:
-            channels = [self.read_image(f, key) for key in self.channel_keys]
-            cell_seg = self.read_image(f, self.cell_seg_key)
-
-        channels = [torch.FloatTensor(channel.astype(np.float32)).to(device) for channel in channels]
-        cell_seg = torch.LongTensor(cell_seg.astype(np.int32)).to(device)
-
-        return torch.stack(channels)[:, cell_seg == 0]
-
-    def get_bg_stats(self, bg_values):
-        if bg_values is None:
-            return {'median': [np.nan] * len(self.channel_keys),
-                    'mad': [np.nan] * len(self.channel_keys)}
-        # bg_vales should have shape n_channels, n_pixels
-        bg_values = bg_values.cpu().numpy().astype(np.float32)
-        medians = np.median(bg_values, axis=1)
-        mads = np.median(np.abs(bg_values - medians[:, None]), axis=1)
-
-        return {'median': medians, 'mad': mads}
-
-    def stat_dict_to_table(self, stat_dict, first_column_name):
-        column_names = [first_column_name] + [f'{channel}_{stat}'
-                                              for channel in self.channel_keys
-                                              for stat in list(next(iter(stat_dict.values())))]
-        table = [list(stat_dict.keys())] + [[d[stat][i] for d in stat_dict.values()]
-                                            for i, _ in enumerate(self.channel_keys)
-                                            for stat in list(next(iter(stat_dict.values())))]
-        table = np.array(table).T
-        if first_column_name == 'image_name':
-            # image tables need an extra 'site_name' column
-            column_names, table = add_site_name_to_image_table(column_names, table)
-        n_cols = len(column_names)
-        assert n_cols == table.shape[1]
-        return column_names, table
-
-    def write_stat_dict_to_talbe(self, stat_dict, first_column_name, table_key):
-        column_names, table = self.stat_dict_to_table(stat_dict, first_column_name)
-        with open_file(self.table_out_path, 'a') as f:
-            self.write_table(f, table_key, column_names, table)
-
-    def run(self, input_files, out_files):
-        # first, get plate wide and per-well background statistics
-        logger.info(f'{self.name}: computing background statistics')
-        bg_dict = {file: self.get_bg_segment(file, device='cpu') for file in input_files}
-        bg_per_image_stats = {in_file_to_image_name(file): self.get_bg_stats(bg_segments)
-                              for file, bg_segments in bg_dict.items()}
-
-        # ignore image outliers in per_well and per_plate backgrounds
-        outlier_dict = _load_image_outliers(self.name, self.table_out_path, self.image_outlier_table, input_files)
-        bg_per_well_dict = defaultdict(list)
-        wells = set()
-        for file, bg_segment in bg_dict.items():
-            well = image_name_to_well_name(os.path.basename(file))
-            wells.add(well)
-            image_name = os.path.splitext(os.path.split(file)[1])[0]
-            if outlier_dict.get(image_name, (-1, None))[0] == 1:
-                logger.info(f'{self.name}: skipping outlier image in bg calculation')
-                continue
-            bg_per_well_dict[well].append(bg_segment)
-        bg_per_well_dict = {well: torch.cat(bg_segments, dim=1) for well, bg_segments in bg_per_well_dict.items()}
-        bg_per_well_stats = {well: self.get_bg_stats(bg_per_well_dict.get(well, None)) for well in wells}
-
-        bg_plate_stats = self.get_bg_stats(torch.cat(list(bg_per_well_dict.values()), dim=1)
-                                           if len(bg_per_well_dict) > 0 else None)
-
-        # save the results in tables
-        self.write_stat_dict_to_talbe(bg_per_image_stats, 'image_name', self.image_table_key)
-        self.write_stat_dict_to_talbe(bg_per_well_stats, 'well_name', self.well_table_key)
-        plate_name = in_file_to_plate_name(input_files[0])
-        self.write_stat_dict_to_talbe({plate_name: bg_plate_stats}, 'plate_name', self.plate_table_key)
 
 
 class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
@@ -1029,7 +828,6 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         assert len(label_ids) == len(infected_indicator), f'{len(label_ids)} != {len(infected_indicator)}'
         infected_label_ids = label_ids[infected_indicator.astype('bool')]  # cast to bool again to be sure
 
-        # TODO think about what is most intuitive here
         infected_mask = np.isin(cell_seg, infected_label_ids).astype(cell_seg.dtype)
         # mark the outliers in a different color
         infected_mask[outlier_mask == 1] = 3

@@ -88,7 +88,9 @@ class TorchPrediction(BatchJobOnContainer):
             normalize=standardize, threshold_channels={}, on_cluster=False):
 
         with torch.no_grad():
-            if gpu_id is not None:
+            if gpu_id is None:
+                device = torch.device('cpu')
+            else:
                 # if we run on the slurm cluster, the visible devices are set automatically and must not be changed
                 if not on_cluster:
                     logger.info(f"{self.name}: setting CUDA_VISIBLE_DEVICES to {gpu_id}")
@@ -97,8 +99,6 @@ class TorchPrediction(BatchJobOnContainer):
                 vis_devices = os.environ.get('CUDA_VISIBLE_DEVICES', '')
                 logger.info(f"{self.name}: CUDA_VISIBLE_DEVICES are set to {vis_devices}")
                 device = torch.device(0)
-            else:
-                device = torch.device('cpu')
             model = self.load_model(device)
             model.to(device)
 

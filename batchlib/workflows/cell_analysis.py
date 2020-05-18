@@ -6,17 +6,21 @@ from numbers import Number
 import configargparse
 
 from batchlib import run_workflow
+
 from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    DenoiseByGrayscaleOpening,
                                                    DenoiseByWhiteTophat,
-                                                   InstanceFeatureExtraction,
-                                                   FindInfectedCells,
-                                                   ExtractBackground)
+                                                   FindInfectedCells)
+from batchlib.analysis.background_extraction import (ExtractBackground,
+                                                     BackgroundFromMinWell)
 from batchlib.analysis.cell_analysis_qc import (CellLevelQC, ImageLevelQC, WellLevelQC,
                                                 DEFAULT_CELL_OUTLIER_CRITERIA,
                                                 DEFAULT_IMAGE_OUTLIER_CRITERIA,
                                                 DEFAULT_WELL_OUTLIER_CRITERIA)
+from batchlib.analysis.feature_extraction import (InstanceFeatureExtraction,
+                                                  SegmentationProperties)
 from batchlib.analysis.merge_tables import MergeAnalysisTables
+
 from batchlib.mongo.result_writer import DbResultWriter
 from batchlib.outliers.outlier import get_outlier_predicate
 from batchlib.preprocessing import get_barrel_corrector, get_serum_keys, Preprocess
@@ -79,7 +83,8 @@ def get_input_keys(config, serum_in_keys):
 def validate_bg_dict(bg_dict):
     excepted_vals = ('images/backgrounds',
                      'wells/backgrounds',
-                     'plate/backgrounds')
+                     'plate/backgrounds',
+                     'plate/backgrounds_from_min_well')
     for key, val in bg_dict.items():
         if not isinstance(val, Number) and val not in excepted_vals:
             raise ValueError(f"Invalid background value {val} for {key}")
@@ -89,8 +94,8 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
     keys = serum_ana_in_keys + [marker_ana_in_key]
     background_dict = config.background_dict
     if background_dict is None:
-        logger.info(f"Compute background from data and use the per plate background")
-        return {key: f'plate/backgrounds' for key in keys}
+        logger.info("Compute background from data and use the background measured on the dimmest well")
+        return {key: "plate/backgrounds_from_min_well" for key in keys}
 
     if isinstance(background_dict, str):
         background_dict = json.loads(background_dict.replace('\'', '\"'))
@@ -103,16 +108,14 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
     return background_dict
 
 
-def get_infected_detection_jobs(config, marker_key_for_infected_classification, feature_identifier):
+def add_infected_detection_jobs(job_list, config, marker_key, feature_identifier):
     erosion_radius = config.infected_erosion_radius
     tophat_radius = config.infected_tophat_radius
     quantile = config.infected_quantile
 
-    jobs = []
-
     if erosion_radius > 0:
         seg_key_for_infected_classification = config.seg_key + '_for_infected_classification'
-        jobs.append((ErodeSegmentation, {
+        job_list.append((ErodeSegmentation, {
             'build': {
                  'input_key': config.seg_key,
                  'output_key': seg_key_for_infected_classification,
@@ -125,14 +128,14 @@ def get_infected_detection_jobs(config, marker_key_for_infected_classification, 
     if erosion_radius > 0 \
             or tophat_radius > 0 \
             or config.ignore_nuclei_in_infected_classification != config.ignore_nuclei:
-        jobs.append((InstanceFeatureExtraction, {
+        job_list.append((InstanceFeatureExtraction, {
             'build': {
-                'channel_keys': (marker_key_for_infected_classification,),
+                'channel_keys': (marker_key,),
                 'nuc_seg_key_to_ignore': config.nuc_key if config.ignore_nuclei_in_infected_classification else None,
                 'cell_seg_key': seg_key_for_infected_classification,
                 'identifier': None,
                 'quantiles': [quantile]},
-            'run': {'gpu_id': config.gpu}
+            'run': {'gpu_id': config.gpu, 'on_cluster': config.on_cluster}
         }))
         this_feature_identifier = None
     else:
@@ -140,10 +143,10 @@ def get_infected_detection_jobs(config, marker_key_for_infected_classification, 
 
     link_out_table = config.seg_key
 
-    jobs.append(
+    job_list.append(
         (FindInfectedCells, {
          'build': {
-             'marker_key': marker_key_for_infected_classification,
+             'marker_key': marker_key,
              'cell_seg_key': seg_key_for_infected_classification,
              'scale_with_mad': config.infected_scale_with_mad,  # default: True
              'infected_threshold': config.infected_threshold,  # default: 5.4
@@ -152,36 +155,46 @@ def get_infected_detection_jobs(config, marker_key_for_infected_classification, 
              'bg_correction_key': 'plate/backgrounds',
              'link_out_table': link_out_table}})
     )
-    return jobs
+    return job_list
 
 
-def get_voronoi_jobs(config, marker_ana_in_key, serum_ana_in_keys):
-    voronoi_param_dict = config.voronoi_param_dict
-    if isinstance(voronoi_param_dict, str):
-        voronoi_param_dict = json.loads(voronoi_param_dict.replace('\'', '\"'))
+def add_background_estimation(job_list, seg_key, channel_keys, identifier=None):
+    job_list.append((
+         ExtractBackground, {
+            'build': {'channel_keys': channel_keys,
+                      'identifier': identifier,
+                      'cell_seg_key': seg_key}}
+    ))
+    return job_list
 
-    jobs = []
-    for identifier, (width, remove_nucleus) in voronoi_param_dict.items():
-        voronoi_key = config.nuc_key + f'_voronoi_{identifier}'
-        jobs.extend([
-            (VoronoiRingSegmentation, {
-                'build': {'input_key': config.nuc_key,
-                          'output_key': voronoi_key,
-                          'identifier': identifier,
-                          'ring_width': width,
-                          'remove_nucleus': remove_nucleus,
-                          'scale_factors': config.scale_factors},
-                'run': {'n_jobs': config.n_cpus}}),
-            (InstanceFeatureExtraction, {
-                'build': {
-                    'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
-                    'nuc_seg_key_to_ignore': None,
-                    'cell_seg_key': voronoi_key
-                },
-                'run': {'gpu_id': config.gpu}
-            })
-        ])
-    return jobs
+
+def add_background_estimation_from_min_well(job_list, config, channel_keys):
+
+    # add the job for nucleus dilation
+    identifier = 'dilated_for_bg'
+    seg_key = config.nuc_key + '_' + identifier
+    job_list.append(
+        (VoronoiRingSegmentation, {
+             'build': {'input_key': config.nuc_key,
+                       'output_key': seg_key,
+                       'identifier': identifier,
+                       'radius_factor': config.background_radius_factor,
+                       'remove_nucleus': False},
+             'run': {'n_jobs': config.n_cpus}}),
+    )
+
+    # add the background estimation jobs
+    job_list = add_background_estimation(job_list, seg_key, channel_keys, identifier=seg_key)
+    job_list.append((
+        BackgroundFromMinWell, {
+            'build': {'bg_table': f'wells/backgrounds_{seg_key}',
+                      'output_table': 'plate/backgrounds_from_min_well',
+                      'min_background_fraction': config.min_background_fraction,
+                      'max_background_fraction': config.max_background_fraction,
+                      'channel_names': channel_keys}
+            }
+    ))
+    return job_list
 
 
 def core_workflow_tasks(config, name, feature_identifier):
@@ -264,8 +277,13 @@ def core_workflow_tasks(config, name, feature_identifier):
             'run': {
                 'erode_mask': 20,
                 'dilate_seeds': 3,
-                'n_jobs': config.n_cpus}})
+                'n_jobs': config.n_cpus}}),
+        (SegmentationProperties, {
+            'build': {'seg_key': config.seg_key},
+            'run': {'n_jobs': config.n_cpus}})
     ]
+
+    # check whether we apply denoising to the marker before analysis
     if config.marker_denoise_radius > 0:
         job_list.append((DenoiseByGrayscaleOpening, {
             'build': {
@@ -274,56 +292,42 @@ def core_workflow_tasks(config, name, feature_identifier):
             'run': {'n_jobs': config.n_cpus}
         }))
         marker_ana_in_key = marker_ana_in_key + '_denoised'
-
     if config.infected_tophat_radius > 0:
-        marker_key_for_infected_classification = 'marker_for_infected_classification'
         job_list.append((DenoiseByWhiteTophat, {
             'build': {
                 'key_to_denoise': marker_ana_in_key,
                 'radius': config.infected_tophat_radius,
-                'output_key': marker_key_for_infected_classification},
+                'output_key': marker_ana_in_key + '_tophat'},
             'run': {'n_jobs': config.n_cpus}
         }))
-    else:
-        marker_key_for_infected_classification = marker_ana_in_key
-
-    if config.voronoi_param_dict is not None:
-        job_list.extend(get_voronoi_jobs(config, marker_ana_in_key, serum_ana_in_keys))
+        marker_ana_in_key += '_tophat'
 
     # add the tasks to extract the features from the cell instance segmentation,
     # do initial image level qc (necessary for the background extraction) and extract the quantiles
-    job_list.extend(
-        [(InstanceFeatureExtraction, {
-          'build': {
-              'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
-              'nuc_seg_key_to_ignore': None if config.ignore_nuclei else config.nuc_key,
-              'cell_seg_key': config.seg_key,
-              'quantiles': [config.infected_quantile],
-              'identifier': feature_identifier},
-          'run': {'gpu_id': config.gpu}}),
-         (ImageLevelQC, {
+    # + do the image QC necessary for the bg estimation jobs
+    job_list.extend([
+        (InstanceFeatureExtraction, {
+            'build': {'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
+                      'nuc_seg_key_to_ignore': None if config.ignore_nuclei else config.nuc_key,
+                      'cell_seg_key': config.seg_key,
+                      'quantiles': [config.infected_quantile],
+                      'identifier': feature_identifier},
+            'run': {'gpu_id': config.gpu, 'on_cluster': config.on_cluster}}),
+        (ImageLevelQC, {
           'build': {
               'cell_seg_key': config.seg_key,
               'serum_key': serum_seg_in_key,
               'marker_key': marker_ana_in_key,
               'feature_identifier': feature_identifier,
-              'outlier_predicate': outlier_predicate}}),
-         # NOTE the bg extraction is independent of the features, but we still need to pass
-         # the identifier so that the input validation passes
-         (ExtractBackground, {
-          'build': {
-              'marker_key': marker_ana_in_key,  # is ignored
-              'serum_key': serum_seg_in_key,    # is ignored
-              'actual_channels_to_use': (*serum_ana_in_keys, marker_ana_in_key) +
-                                        ((marker_key_for_infected_classification,)
-                                         if marker_key_for_infected_classification != marker_ana_in_key else tuple()),
-              'feature_identifier': feature_identifier,
-              'cell_seg_key': config.seg_key}})]
-    )
+              'outlier_predicate': outlier_predicate}})
+    ])
 
-    infected_detection_jobs = get_infected_detection_jobs(config, marker_key_for_infected_classification,
-                                                          feature_identifier)
-    job_list.extend(infected_detection_jobs)
+    # we could also just add these on demand depending on what we need according to the background params
+    bg_estimation_keys = [marker_ana_in_key] + serum_ana_in_keys
+    job_list = add_background_estimation_from_min_well(job_list, config, bg_estimation_keys)
+    job_list = add_background_estimation(job_list, config.seg_key, bg_estimation_keys)
+
+    job_list = add_infected_detection_jobs(job_list, config, marker_ana_in_key, feature_identifier)
 
     # for the background substraction, we can either use a fixed value per channel,
     # or compute it from the data. In the first case, we pass the value
@@ -345,6 +349,8 @@ def core_workflow_tasks(config, name, feature_identifier):
             })
         )
 
+    # TODO add second nucleus dilation task and feature extraction for image level intensity qc
+
     table_identifiers = serum_ana_in_keys if feature_identifier is None else [k + f'_{feature_identifier}'
                                                                               for k in serum_ana_in_keys]
     write_summary_images = config.write_summary_images
@@ -354,7 +360,7 @@ def core_workflow_tasks(config, name, feature_identifier):
             'build': {
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
-                'marker_key': marker_key_for_infected_classification,
+                'marker_key': marker_ana_in_key,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'feature_identifier': feature_identifier,
@@ -364,7 +370,7 @@ def core_workflow_tasks(config, name, feature_identifier):
             'build': {
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
-                'marker_key': marker_key_for_infected_classification,
+                'marker_key': marker_ana_in_key,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'outlier_predicate': outlier_predicate,
@@ -375,7 +381,7 @@ def core_workflow_tasks(config, name, feature_identifier):
             'build': {
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
-                'marker_key': marker_key_for_infected_classification,
+                'marker_key': marker_ana_in_key,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'feature_identifier': feature_identifier,
@@ -384,7 +390,7 @@ def core_workflow_tasks(config, name, feature_identifier):
         job_list.append((CellLevelAnalysis, {
             'build': {
                 'serum_key': serum_key,
-                'marker_key': marker_key_for_infected_classification,
+                'marker_key': marker_ana_in_key,
                 'cell_seg_key': config.seg_key,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
@@ -392,7 +398,7 @@ def core_workflow_tasks(config, name, feature_identifier):
                 'scale_factors': config.scale_factors,
                 'feature_identifier': feature_identifier,
                 'identifier': identifier},
-            'run': {'force_recompute': True}}))
+            'run': {'force_recompute': None}}))
         write_summary_images = False
 
     # get a dict with all relevant analysis parameters, so that we can write it as a table and log it
@@ -548,12 +554,18 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--infected_threshold", type=float, default=4.8)
     parser.add("--infected_quantile", type=float, default=0.95)
 
-    # optional background subtraction values for the individual channels
+    # background subtraction values for the individual channels
     # if None, all backgrounds will be computed from the data and the plate background will be used
     parser.add("--background_dict", default=None)
+    # arguments for the background estimation from the dimmest well
+    parser.add("--background_radius_factor", default=2.5, type=float)
+    # for now we settle for 10 / 90 % min / max background for the estimation
+    # of the min background well
+    parser.add("--min_background_fraction", default=.1, type=float)
+    parser.add("--max_background_fraction", default=.9, type=float)
 
-    # do we run voronoi segmentation?
-    parser.add("--voronoi_param_dict", default=None)
+    # arguments for the nucleus dilation used for the serum intensity qc
+    parser.add("--qc_dilation", type=int, default=5)
 
     #
     # more options

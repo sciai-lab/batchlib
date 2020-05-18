@@ -208,7 +208,7 @@ def well_plot(data_dict, infected_list=None,
     if title is not None:
         plt.title(title)
     if outfile is not None:
-        plt.savefig(outfile, dpi=300)
+        plt.savefig(outfile, dpi=300, quality=75, optimize=True)
         plt.close()
 
 
@@ -356,7 +356,7 @@ def all_plots(table_path, out_folder, table_key, stat_names, identifier,
         stat_id = column_names.index(name)
         stats_per_file = dict(zip(image_or_well_names, table[:, stat_id].astype('float')))
 
-        outfile = os.path.join(out_folder, f"{plate_name}_{name}_{identifier}.png")
+        outfile = os.path.join(out_folder, f"{plate_name}_{name}_{identifier}.jpg")
         well_plot(stats_per_file,
                   infected_list=outlier_list,
                   print_medians=True,
