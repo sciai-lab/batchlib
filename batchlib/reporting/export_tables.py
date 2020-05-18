@@ -3,6 +3,8 @@ from glob import glob
 
 import numpy as np
 import pandas as pd
+
+from batchlib.util import get_logger
 from ..util import read_table, open_file, image_name_to_site_name, image_name_to_well_name
 
 SUPPORTED_TABLE_FORMATS = {'excel': '.xlsx',
@@ -10,6 +12,8 @@ SUPPORTED_TABLE_FORMATS = {'excel': '.xlsx',
                            'tsv': '.tsv'}
 DEFAULT_SCORE_PATTERNS = ('IgG_robust_z_score_means', 'IgG_ratio_of_q0.5_of_means',
                           'IgA_robust_z_score_means', 'IgA_ratio_of_q0.5_of_means')
+
+logger = get_logger('TableExporter')
 
 
 def format_to_extension(format_):
@@ -31,7 +35,7 @@ def export_table(columns, table, output_path, output_format=None):
     if len(columns) != table.shape[1]:
         raise ValueError(f"Number of columns does not match: {len(columns)}, {table.shape[1]}")
 
-    output_format = extension_to_format(os.path.splitext(output_path)[1])\
+    output_format = extension_to_format(os.path.splitext(output_path)[1]) \
         if output_format is None else output_format
 
     if output_format not in SUPPORTED_TABLE_FORMATS:
@@ -48,7 +52,6 @@ def export_table(columns, table, output_path, output_format=None):
 
 
 def export_default_table(table_file, table_name, output_path, output_format=None, skip_existing=True):
-
     if os.path.exists(output_path) and skip_existing:
         return
 
@@ -179,6 +182,14 @@ def _get_db_metadata(well_names, metadata_repository, plate_name):
         else:
             return 'unknown'
 
+    def _get_cohort(cohort_id):
+        if cohort_id is None:
+            return None
+
+        if cohort_id.startswith('3-'):
+            return cohort_id[-1]
+        return cohort_id[0]
+
     assert len(well_names) > 0 and isinstance(well_names[0], str)
     cohort_ids = metadata_repository.get_cohort_ids(plate_name)
     elisa_results = metadata_repository.get_elisa_results(plate_name)
@@ -186,9 +197,12 @@ def _get_db_metadata(well_names, metadata_repository, plate_name):
     additional_values = []
     for well_name in well_names:
         cohort_id = cohort_ids.get(well_name, None)
+        if cohort_id is None:
+            logger.warning(f'Plate: {plate_name}, well: {well_name} has no cohort_id metadata')
+        cohort = _get_cohort(cohort_id)
         cohort_type = _get_cohort_type(cohort_id)
         elisa_IgG, elisa_IgA = elisa_results.get(well_name, (None, None))
-        additional_values.append([cohort_id, elisa_IgG, elisa_IgA, cohort_type])
+        additional_values.append([cohort_id, cohort, elisa_IgG, elisa_IgA, cohort_type])
 
     return np.array(additional_values)
 
@@ -198,7 +212,6 @@ def export_scores(folder_list, output_path,
                   score_patterns=DEFAULT_SCORE_PATTERNS,
                   table_name='wells/default',
                   metadata_repository=None):
-
     def name_matches_score(name):
         return any(pattern in name for pattern in score_patterns)
 
@@ -221,7 +234,7 @@ def export_scores(folder_list, output_path,
 
     # append cohort_id, elisa results and cohort_type (positive/control/unknow) if we have db
     if metadata_repository is not None:
-        db_metadata = ['cohort_id', 'elisa_IgG', 'elisa_IgA', 'cohort_type']
+        db_metadata = ['cohort_id', 'cohort', 'elisa_IgG', 'elisa_IgA', 'cohort_type']
         columns += db_metadata
 
     # second pass: load the tables
@@ -250,7 +263,6 @@ def export_scores(folder_list, output_path,
 
         table.append(this_table)
 
-    print("Found the following columns:")
-    print(columns)
+    logger.info(f'Columns: {columns}')
     table = np.concatenate(table, axis=0)
     export_table(columns, table, output_path)
