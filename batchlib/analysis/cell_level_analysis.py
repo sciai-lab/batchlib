@@ -224,8 +224,15 @@ def _get_bg_correction_dict(table_path, key_in_table, column_name, in_files):
     column_names, table = to_image_table((column_names, table), list(map(in_file_to_image_name, in_files)))
     assert column_name in column_names, \
         f'Did not find column {column_name} in background table columns {column_names}'
-    return dict(zip(table[:, column_names.index('image_name')],
-                    table[:, column_names.index(column_name)].astype(np.float32)))
+
+    image_names = table[:, column_names.index('image_name')]
+    bg_values = table[:, column_names.index(column_name)]
+    try:
+        bg_values = bg_values.astype(np.float32)
+    except ValueError:
+        pass
+
+    return dict(zip(image_names, bg_values))
 
 
 class FindInfectedCells(BatchJobOnContainer):
