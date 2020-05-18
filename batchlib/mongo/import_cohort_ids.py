@@ -69,6 +69,7 @@ def import_cohort_descriptions(db):
         {"patient_type": "X", "description": "from before 2018, patients with mycoplasma infection"}
     ]
 
+    db["cohort-descriptions"].delete_many({})
     db["cohort-descriptions"].insert_many(cohort_descriptions)
 
 
