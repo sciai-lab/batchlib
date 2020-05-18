@@ -12,8 +12,8 @@ from ..config import get_default_extension
 from ..util import get_logger, open_file, in_file_to_image_name
 from .export_tables import export_default_table
 
-DEFAULT_PLOT_PATTERNS = ('*ratio_of_q0.5_of_means*per-well.png',
-                         '*robust_z_score_means*per-well.png')
+DEFAULT_PLOT_PATTERNS = ('*ratio_of_q0.5_of_means*per-well.jpg',
+                         '*robust_z_score_means*per-well.jpg')
 
 DEFAULT_SLACK_CHANNEL = '#latest-results'
 # DEFAULT_SLACK_CHANNEL = '#random'
@@ -49,7 +49,7 @@ class SlackSummaryWriter(BatchJobOnContainer):
         if self.write_to_slack:
             check_path = os.path.join(self.out_folder, 'message_sent.txt')
         else:
-            check_path = os.path.join(self.out_folder, 'message.txt')
+            check_path = os.path.join(self.out_folder, 'message.md')
         return os.path.exists(check_path)
 
     def validate_output(self, path, **kwargs):
@@ -73,12 +73,16 @@ class SlackSummaryWriter(BatchJobOnContainer):
         return params
 
     def compile_message(self, out_folder, input_file, plate_name, runtime, background_dict):
-        msg_path = os.path.join(self.out_folder, 'message.txt')
+        msg_path = os.path.join(self.out_folder, 'message.md')
 
         ext = '*' + get_default_extension()
         input_pattern = os.path.join(self.input_folder, ext)
         in_files = glob(input_pattern)
-        im_name = in_file_to_image_name(in_files[0])
+        in_file = in_files[0]
+        im_name = in_file_to_image_name(in_file)
+
+        with open_file(in_file, 'r') as f:
+            commit_id = f.attrs['batchlib_commit']
 
         with open(msg_path, 'w') as f:
             f.write(f"Results for plate `{plate_name}`:\n")
@@ -86,10 +90,11 @@ class SlackSummaryWriter(BatchJobOnContainer):
             if runtime is not None:
                 f.write(f"Computation ran in {runtime} s\n")
 
+            f.write(f"The files were processed using batchlib commit `{commit_id}`.\n")
             f.write("The following values were used for the background subtraction for the individual channels:\n")
             for channel_name, bg_key in background_dict.items():
                 if isinstance(bg_key, Number):
-                    f.write(f"{channel_name}: the fixed background was fixed to the value {bg_key}\n")
+                    f.write(f"`{channel_name}`: the fixed background was fixed to the value {bg_key}\n")
                 else:
                     bg_src, bg_type = bg_key.split('/')
                     if bg_src == 'plate':
@@ -103,17 +108,17 @@ class SlackSummaryWriter(BatchJobOnContainer):
                             msg = f"the background was computed via median over the whole plate: {bg_val}"
                     else:
                         msg = f"the background was computed per {bg_src}"
-                    f.write(f"{channel_name}: {msg}\n")
+                    f.write(f"`{channel_name}`: {msg}\n")
 
     def post_slack(self, out_folder):
         msg_sent_path = os.path.join(self.out_folder, 'message_sent.txt')
 
         # load the messages
-        msg_path = os.path.join(self.out_folder, 'message.txt')
+        msg_path = os.path.join(self.out_folder, 'message.md')
         with open(msg_path) as f:
             message = f.read()
 
-        image_paths = glob(os.path.join(out_folder, '*.png'))
+        image_paths = glob(os.path.join(out_folder, '*.jpg'))
         image_paths.sort()
         table_path = glob(os.path.join(out_folder, '*.xlsx'))
         assert len(table_path) == 1
