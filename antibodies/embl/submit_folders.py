@@ -6,8 +6,7 @@ from subprocess import check_output
 DEFAULT_CONFIG = 'configs/cell_analysis_db.conf'
 DEFAULT_SLACK_CONFIG = 'configs/cell_analysis_db_slack.conf'
 
-ALT_BG_PLATES = ('plate6rep2_wp_20200507_131032_010',
-                 'titration_plate_20200403_154849')
+ALT_BG_PLATES = ('plate6rep2_wp_20200507_131032_010',)
 
 
 def get_bg_config_file(folder, tischi_mode):
