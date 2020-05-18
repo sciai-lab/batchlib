@@ -3,7 +3,7 @@ from concurrent import futures
 import numpy as np
 import skimage.morphology as morph
 from scipy import ndimage as ndi
-from skimage.segmentation import watershed  # for now, just use skimage
+from skimage.segmentation import watershed
 from tqdm.auto import tqdm
 
 from batchlib.base import BatchJobOnContainer
@@ -31,18 +31,18 @@ class VoronoiRingSegmentation(BatchJobOnContainer):
                  input_key, output_key,
                  ring_width=None, radius_factor=None,
                  remove_nucleus=True, **super_kwargs):
+        super().__init__(input_key=input_key, input_format='image',
+                         output_key=output_key, output_format='image',
+                         **super_kwargs)
 
         self.validate_params(ring_width, radius_factor)
         self.ring_width = ring_width
         self.radius_factor = radius_factor
         self.remove_nucleus = remove_nucleus
-        super().__init__(input_key=input_key, input_format='image',
-                         output_key=output_key, output_format='image',
-                         **super_kwargs)
 
     def get_dilation_radius(self, seg, im_path):
         if self.ring_width is not None:
-            self.ring_width
+            return self.ring_width
         seg_ids, sizes = np.unique(seg, return_counts=True)
 
         if seg_ids[0] == 0:
@@ -50,11 +50,12 @@ class VoronoiRingSegmentation(BatchJobOnContainer):
 
         median_size = np.median(sizes)
 
-        # logging this to determine the nucleus radii for more data
+        # logging this to determine the nucleus sizes to estimate the nucleus radius for data
         im_name = in_file_to_image_name(im_path)
         logger.debug(f"{self.name}: median nucleus size for {im_name} is {median_size}")
 
-        return int(self.radius_factor * np.sqrt(median_size / np.pi))
+        # we don't divide by pi here on purpose!
+        return int(self.radius_factor * np.sqrt(median_size))
 
     def segment_image(self, in_path):
         with open_file(in_path, 'r') as f:
@@ -68,9 +69,11 @@ class VoronoiRingSegmentation(BatchJobOnContainer):
         dilation_radius = self.get_dilation_radius(input_seg, in_path)
 
         distance = ndi.distance_transform_edt(input_mask == 0)
-        ring_mask = morph.dilation(input_mask, morph.disk(dilation_radius))
+        ring_mask = distance < dilation_radius
+
         if self.remove_nucleus:
             ring_mask ^= input_mask  # remove nuclei to get the rings
+
         voronoi_ring_seg = watershed(distance, input_seg)
         voronoi_ring_seg[np.invert(ring_mask)] = 0
         return voronoi_ring_seg

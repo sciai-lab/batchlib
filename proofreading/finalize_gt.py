@@ -54,9 +54,15 @@ def finalize_gt_volume(data_path, seg_gt_path, infected_gt_path, out_path,
         serum_igg_raw = read_image(f, 'serum_IgG_raw')
         marker_raw = read_image(f, 'marker_raw')
         nuclei_raw = read_image(f, 'nuclei_raw')
+
+        # TODO we should also quickly proofread the nucleus segmentation
+        # to get rid of false positives due to dirt
+        # also, we should later map nucleus and cell segmentation ids again
+        nucleus_seg = read_image(f, 'nucleus_segmentation')
+
     shape = serum_igg.shape
 
-    # TODO load the segmentation gt
+    # TODO run connected components (excluding bg) and filter small segments
     with open_file(seg_gt_path, 'r') as f:
         seg = f['cells'][:]
         seg = vigra.analysis.relabelConsecutive(seg, start_label=1, keep_zeros=True)[0]
@@ -88,6 +94,7 @@ def finalize_gt_volume(data_path, seg_gt_path, infected_gt_path, out_path,
             write_image(f, 'nuclei_raw', nuclei_raw)
 
             write_image(f, 'cell_segmentation', seg)
+            write_image(f, 'nucleus_segmentation', nucleus_seg)
             write_image(f, 'infected_mask', infected_mask)
 
             write_table(f, 'infected_cell_labels', infected_labels_cols, infected_labels_table)
