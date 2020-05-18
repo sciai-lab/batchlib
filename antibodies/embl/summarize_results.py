@@ -17,10 +17,10 @@ from process_for_manuscript import all_kinder_plates, all_manuscript_plates
 ROOT_OUT = '/g/kreshuk/data/covid/data-processed-scratch'
 
 
-def summarize_manuscript_experiment(token, clean_up, ignore_incomplete, metadata_repository):
+def summarize_manuscript_experiment(root, token, clean_up, ignore_incomplete, metadata_repository):
     # plate_names = all_manuscript_plates()
-    plate_names = os.listdir(ROOT_OUT)
-    folders = [os.path.join(ROOT_OUT, name) for name in plate_names]
+    plate_names = os.listdir(root)
+    folders = [os.path.join(root, name) for name in plate_names]
 
     today = date.today().strftime('%Y%m%d')
     experiment = f'manuscript_plates_{today}'
@@ -29,9 +29,11 @@ def summarize_manuscript_experiment(token, clean_up, ignore_incomplete, metadata
                             metadata_repository=metadata_repository)
 
 
-def summarize_kinder_experiment(token, clean_up, ignore_incomplete, metadata_repository):
+def summarize_kinder_experiment(root, token, clean_up, ignore_incomplete, metadata_repository):
+    raise NotImplementedError("Need to adapt")
+
     plate_names = all_kinder_plates()
-    folders = [os.path.join(ROOT_OUT, name) for name in plate_names]
+    folders = [os.path.join(root, name) for name in plate_names]
 
     today = date.today().strftime('%Y%m%d')
     experiment = f'kinder_study_plates_{today}'
@@ -40,7 +42,7 @@ def summarize_kinder_experiment(token, clean_up, ignore_incomplete, metadata_rep
                             metadata_repository=metadata_repository)
 
 
-def redo_summary():
+def redo_summary(root):
     folder_names = all_manuscript_plates()  # + all_kinder_plates()
 
     def redo_folder(folder):
@@ -72,7 +74,7 @@ def redo_summary():
         summary_writer(folder, folder, force_recompute=True)
 
     for folder_name in tqdm(folder_names):
-        folder = os.path.join(ROOT_OUT, folder_name)
+        folder = os.path.join(root, folder_name)
         try:
             redo_folder(folder)
         except Exception as e:
@@ -85,6 +87,7 @@ if __name__ == '__main__':
     parser.add_argument('--token', type=str, default=None)
     parser.add_argument('--redo', type=int, default=0)
     parser.add_argument('--ignore_incomplete', type=int, default=0)
+    parser.add_argument('--root', type=str, default=ROOT_OUT)
 
     # configure db connection
     parser.add_argument('--host', type=str, help='IP of the MongoDB primary DB', default=None)
@@ -110,9 +113,9 @@ if __name__ == '__main__':
         metadata_repository = PlateMetadataRepository(db)
 
     if redo:
-        redo_summary()
+        redo_summary(args.root)
     else:
         clean_up = token is not None
         # summarize_kinder_experiment(token, clean_up, bool(args.ignore_incomplete))
-        summarize_manuscript_experiment(token, clean_up, bool(args.ignore_incomplete),
+        summarize_manuscript_experiment(args.root, token, clean_up, bool(args.ignore_incomplete),
                                         metadata_repository=metadata_repository)
