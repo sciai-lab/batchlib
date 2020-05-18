@@ -191,7 +191,8 @@ def add_background_estimation_from_min_well(job_list, config, channel_keys):
                       'output_table': 'plate/backgrounds_from_min_well',
                       'min_background_fraction': config.min_background_fraction,
                       'max_background_fraction': config.max_background_fraction,
-                      'channel_names': channel_keys}
+                      'channel_names': channel_keys},
+            "run": {"force_recompute": None}
             }
     ))
     return job_list
@@ -559,10 +560,10 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--background_dict", default=None)
     # arguments for the background estimation from the dimmest well
     parser.add("--background_radius_factor", default=2.5, type=float)
-    # for now we settle for 10 / 90 % min / max background for the estimation
+    # for now we settle for 5 / 95 % min / max background for the estimation
     # of the min background well
-    parser.add("--min_background_fraction", default=.1, type=float)
-    parser.add("--max_background_fraction", default=.9, type=float)
+    parser.add("--min_background_fraction", default=.05, type=float)
+    parser.add("--max_background_fraction", default=.95, type=float)
 
     # arguments for the nucleus dilation used for the serum intensity qc
     parser.add("--qc_dilation", type=int, default=5)
