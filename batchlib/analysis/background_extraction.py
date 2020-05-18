@@ -14,6 +14,55 @@ from ..util.io import (open_file, image_name_to_well_name,
 logger = get_logger('Workflow.BatchJob.ExtractBackground')
 
 
+class BackgroundFromWells(CellLevelAnalysisWithTableBase):
+    def __init__(self, well_list, output_table, channel_names, seg_key, **super_kwargs):
+        self.well_list = well_list
+        self.output_table = output_table
+        self.channel_names = channel_names
+        super().__init__(cell_seg_key=seg_key, table_out_keys=[output_table],
+                         image_input_keys=channel_names, validate_cell_classification=False,
+                         **super_kwargs)
+
+    def bg_for_channel(self, input_files, channel_name):
+        bg_values = []
+        for in_file in input_files:
+            with open_file(in_file, 'r') as f:
+                values = self.read_image(f, channel_name).flatten()
+            bg_values.append(values)
+
+        bg_values = np.concatenate(bg_values)
+        median = np.median(bg_values)
+        mad = np.median(np.abs(bg_values - median))
+        min_well = ','.join(self.well_list)
+
+        logger.info(f"{self.name}: background value {median} was extracted from wells {min_well} for {channel_name}")
+
+        col_names = [f'{channel_name}_min_well', f'{channel_name}_median', f'{channel_name}_mad']
+        values = [min_well, median, mad]
+
+        return col_names, values
+
+    def run(self, input_files, output_files):
+        columns = []
+        table = []
+
+        well_names = [image_name_to_well_name(in_file_to_image_name(in_file))
+                      for in_file in input_files]
+        if not all(well in well_names for well in self.well_list):
+            raise RuntimeError("Could not find all min wells")
+        inputs = [in_file for in_file, well_name in zip(input_files, well_names)
+                  if well_name in self.well_list]
+
+        for channel in self.channel_names:
+            col_names, values = self.bg_for_channel(inputs, channel)
+            columns.extend(col_names)
+            table.extend(values)
+
+        table = np.array(table)[None]
+        with open_file(self.table_out_path, 'a') as f:
+            self.write_table(f, self.output_table, columns, table)
+
+
 class BackgroundFromMinWell(BatchJobOnContainer):
     def __init__(self, bg_table, output_table, channel_names,
                  min_background_fraction, max_background_fraction):

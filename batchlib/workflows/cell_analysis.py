@@ -12,7 +12,7 @@ from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    DenoiseByWhiteTophat,
                                                    FindInfectedCells)
 from batchlib.analysis.background_extraction import (ExtractBackground,
-                                                     BackgroundFromMinWell)
+                                                     BackgroundFromWells)
 from batchlib.analysis.cell_analysis_qc import (CellLevelQC, ImageLevelQC, WellLevelQC,
                                                 DEFAULT_CELL_OUTLIER_CRITERIA,
                                                 DEFAULT_IMAGE_OUTLIER_CRITERIA,
@@ -28,7 +28,7 @@ from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
-from batchlib.segmentation.voronoi_ring_segmentation import ErodeSegmentation, VoronoiRingSegmentation
+from batchlib.segmentation.voronoi_ring_segmentation import ErodeSegmentation  # , VoronoiRingSegmentation
 from batchlib.reporting import (SlackSummaryWriter,
                                 export_tables_for_plate,
                                 WriteBackgroundSubtractedImages)
@@ -90,12 +90,66 @@ def validate_bg_dict(bg_dict):
             raise ValueError(f"Invalid background value {val} for {key}")
 
 
+def has_two_bg_wells(name):
+    isT = 'plateT' in name
+
+    is_recentK = False
+    if 'plateK' in name or 'PlateK' in name:
+        prelen = len('plateK')
+        kid = int(name[prelen:prelen+2])
+        if kid >= 22:
+            is_recentK = True
+
+    return isT or is_recentK
+
+
+def get_bg_well(name, bg_wells_dict):
+    if name in bg_wells_dict:
+        return bg_wells_dict[name]
+    if has_two_bg_wells(name):
+        return ['H01', 'G01']
+    else:
+        return ['H01']
+
+
+def get_bg_dict_without_min_well(name, keys):
+    # the one special plate with a different bg
+    if name == 'plate6rep2_wp_20200507_131032_010':
+        full_dict = {'serum_IgA': 7000., 'serum_IgG': 5000.}
+    else:
+        full_dict = {'serum_IgA': 1800., 'serum_IgG': 1300.}
+    return {k: full_dict.get(k, 'plate/backgrounds') for k in keys}
+
+
+def get_bg_dict_with_min_well(name, keys):
+    full_dict = {'serum_IgM': 'plate/backgrounds_min_well',
+                 'serum_IgA': 'plate/backgrounds_min_well', 'serum_IgG': 'plate/backgrounds_min_well'}
+    return {k: full_dict.get(k, 'plate/backgrounds') for k in keys}
+
+
+def default_bg_parameters(config, keys):
+    name = os.path.split(config.input_folder)[1]
+
+    # TODO get rid of hacky functions and move all intp the dict
+    bg_wells_dict = os.path.join(config.misc_folder, 'plates_to_background_well.json')
+    with open(bg_wells_dict) as f:
+        bg_wells_dict = json.load(f)
+    bg_wells = get_bg_well(name, bg_wells_dict)
+
+    if bg_wells is None:
+        bg_dict = get_bg_dict_without_min_well(name, keys)
+        return bg_dict, []
+
+    bg_dict = get_bg_dict_with_min_well(name, keys)
+    return bg_dict, bg_wells
+
+
 def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
     keys = serum_ana_in_keys + [marker_ana_in_key]
     background_dict = config.background_dict
     if background_dict is None:
-        logger.info("Compute background from data and use the background measured on the dimmest well")
-        return {key: "plate/backgrounds_from_min_well" for key in keys}
+        logger.info("Background parameter were not specified, using default values for this plate")
+        return default_bg_parameters(config, keys)
 
     if isinstance(background_dict, str):
         background_dict = json.loads(background_dict.replace('\'', '\"'))
@@ -105,7 +159,7 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
     if len(set(keys) - set(background_dict.keys())) > 0:
         bg_keys = list(background_dict.keys())
         raise ValueError(f"Did not find values for all channels {keys} in {bg_keys}")
-    return background_dict
+    return background_dict, []
 
 
 def add_infected_detection_jobs(job_list, config, marker_key, feature_identifier):
@@ -168,29 +222,13 @@ def add_background_estimation(job_list, seg_key, channel_keys, identifier=None):
     return job_list
 
 
-def add_background_estimation_from_min_well(job_list, config, channel_keys):
-
-    # add the job for nucleus dilation
-    identifier = 'dilated_for_bg'
-    seg_key = config.nuc_key + '_' + identifier
-    job_list.append(
-        (VoronoiRingSegmentation, {
-             'build': {'input_key': config.nuc_key,
-                       'output_key': seg_key,
-                       'identifier': identifier,
-                       'radius_factor': config.background_radius_factor,
-                       'remove_nucleus': False},
-             'run': {'n_jobs': config.n_cpus}}),
-    )
-
+def add_background_estimation_from_min_well(job_list, config, wells, channel_keys):
     # add the background estimation jobs
-    job_list = add_background_estimation(job_list, seg_key, channel_keys, identifier=seg_key)
     job_list.append((
-        BackgroundFromMinWell, {
-            'build': {'bg_table': f'wells/backgrounds_{seg_key}',
+        BackgroundFromWells, {
+            'build': {'well_list': wells,
                       'output_table': 'plate/backgrounds_from_min_well',
-                      'min_background_fraction': config.min_background_fraction,
-                      'max_background_fraction': config.max_background_fraction,
+                      'seg_key': config.seg_key,
                       'channel_names': channel_keys},
             "run": {"force_recompute": None}
             }
@@ -323,18 +361,22 @@ def core_workflow_tasks(config, name, feature_identifier):
               'outlier_predicate': outlier_predicate}})
     ])
 
-    # we could also just add these on demand depending on what we need according to the background params
-    bg_estimation_keys = [marker_ana_in_key] + serum_ana_in_keys
-    job_list = add_background_estimation_from_min_well(job_list, config, bg_estimation_keys)
-    job_list = add_background_estimation(job_list, config.seg_key, bg_estimation_keys)
-
-    job_list = add_infected_detection_jobs(job_list, config, marker_ana_in_key, feature_identifier)
-
     # for the background substraction, we can either use a fixed value per channel,
     # or compute it from the data. In the first case, we pass the value
     # as 'serum_bg_key' / 'marker_bg_key'. In the second case, we pass a key
     # to the table holding these values.
-    background_parameters = parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys)
+    background_parameters, bg_wells = parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys)
+    print("Parsed the following background params and min wells:")
+    print(background_parameters)
+    print(bg_wells)
+
+    # we could also just add these on demand depending on what we need according to the background params
+    bg_estimation_keys = [marker_ana_in_key] + serum_ana_in_keys
+    job_list = add_background_estimation(job_list, config.seg_key, bg_estimation_keys)
+    if len(bg_wells) > 0:
+        job_list = add_background_estimation_from_min_well(job_list, config, bg_wells, bg_estimation_keys)
+
+    job_list = add_infected_detection_jobs(job_list, config, marker_ana_in_key, feature_identifier)
 
     table_path = CellLevelAnalysis.folder_to_table_path(config.folder)
     if config.write_background_images:
@@ -558,12 +600,6 @@ def cell_analysis_parser(config_folder, default_config_name):
     # background subtraction values for the individual channels
     # if None, all backgrounds will be computed from the data and the plate background will be used
     parser.add("--background_dict", default=None)
-    # arguments for the background estimation from the dimmest well
-    parser.add("--background_radius_factor", default=2.5, type=float)
-    # for now we settle for 5 / 95 % min / max background for the estimation
-    # of the min background well
-    parser.add("--min_background_fraction", default=.05, type=float)
-    parser.add("--max_background_fraction", default=.95, type=float)
 
     # arguments for the nucleus dilation used for the serum intensity qc
     parser.add("--qc_dilation", type=int, default=5)
