@@ -86,10 +86,10 @@ if __name__ == '__main__':
     parser.add_argument('--ignore_incomplete', type=int, default=0)
 
     # configure db connection
-    parser.add_argument('--host', type=str, help='IP of the MongoDB primary DB')
+    parser.add_argument('--host', type=str, help='IP of the MongoDB primary DB', required=True)
     parser.add_argument('--port', type=int, help='MongoDB port', default=27017)
-    parser.add_argument('--user', type=str, help='MongoDB user')
-    parser.add_argument('--password', type=str, help='MongoDB password')
+    parser.add_argument('--user', type=str, help='MongoDB user', default='covid19')
+    parser.add_argument('--password', type=str, help='MongoDB password', required=True)
     parser.add_argument('--db', type=str, help='Default database', default='covid')
 
     args = parser.parse_args()
