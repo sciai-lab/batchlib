@@ -79,6 +79,8 @@ class TorchPrediction(BatchJobOnContainer):
         else:
             model = self.model_class(**self.model_kwargs)
             state = torch.load(self.model_path, map_location=device)
+            if 'model_state_dict' in state:
+                state = state['model_state_dict']
             model.load_state_dict(state)
         model.eval()
         return model
