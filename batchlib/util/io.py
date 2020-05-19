@@ -175,7 +175,7 @@ def to_plate_table(obj):
     if is_plate_table(obj):
         return obj
     else:
-        assert False, f'not a plate table: {obj}'
+        raise ValueError(f'not a plate table: {obj}, expected first column to be plate_name')
 
 
 def to_well_table(obj, well_names):

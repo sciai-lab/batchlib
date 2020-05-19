@@ -227,10 +227,10 @@ def add_background_estimation_from_min_well(job_list, config, wells, channel_key
     job_list.append((
         BackgroundFromWells, {
             'build': {'well_list': wells,
-                      'output_table': 'plate/backgrounds_from_min_well',
+                      'output_table': 'plate/backgrounds_min_well',
                       'seg_key': config.seg_key,
                       'channel_names': channel_keys},
-            "run": {"force_recompute": None}
+            "run": {"force_recompute": True}
             }
     ))
     return job_list
@@ -366,9 +366,6 @@ def core_workflow_tasks(config, name, feature_identifier):
     # as 'serum_bg_key' / 'marker_bg_key'. In the second case, we pass a key
     # to the table holding these values.
     background_parameters, bg_wells = parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys)
-    print("Parsed the following background params and min wells:")
-    print(background_parameters)
-    print(bg_wells)
 
     # we could also just add these on demand depending on what we need according to the background params
     bg_estimation_keys = [marker_ana_in_key] + serum_ana_in_keys
@@ -380,11 +377,9 @@ def core_workflow_tasks(config, name, feature_identifier):
 
     table_path = CellLevelAnalysis.folder_to_table_path(config.folder)
     if config.write_background_images:
-        background_params = {chan_name: background_parameters[chan_name]
-                             for chan_name in serum_ana_in_keys + [marker_ana_in_key]}
         job_list.append(
             (WriteBackgroundSubtractedImages, {
-                 'build': {'background_dict': background_params,
+                 'build': {'background_dict': background_parameters,
                            'table_path': table_path,
                            'scale_factors': config.scale_factors},
                  'run': {'n_jobs': config.n_cpus,

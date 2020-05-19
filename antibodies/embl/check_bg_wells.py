@@ -90,14 +90,15 @@ def check_bg_well_for_all_plates(root):
 
 
 def check_plate():
-    from batchlib.analysis.background_extraction import BackgroundFromMinWell
+    from batchlib.analysis.background_extraction import BackgroundFromWells
     folder = '/g/kreshuk/data/covid/data-processed-scratch/plateT8rep1_20200516_091304_432'
     chan_names = ['serum_IgG', 'serum_IgA']
-    job = BackgroundFromMinWell('wells/backgrounds', 'plate/backgrounds/blub', chan_names, .05, .95)
+    job = BackgroundFromWells(well_list=['H01', 'G01'], output_table='backgrounds/blub',
+                              seg_key='segmentation', channel_names=chan_names)
     job(folder, force_recompute=True)
 
 
 if __name__ == '__main__':
     root = '/g/kreshuk/data/covid/data-processed-scratch'
-    check_bg_well_for_all_plates(root)
-    # check_plate()
+    # check_bg_well_for_all_plates(root)
+    check_plate()

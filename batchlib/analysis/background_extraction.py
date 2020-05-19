@@ -43,8 +43,10 @@ class BackgroundFromWells(CellLevelAnalysisWithTableBase):
         return col_names, values
 
     def run(self, input_files, output_files):
-        columns = []
-        table = []
+        plate_name = os.path.split(self.input_folder)[1]
+
+        columns = ['plate_name']
+        table = [plate_name]
 
         well_names = [image_name_to_well_name(in_file_to_image_name(in_file))
                       for in_file in input_files]
@@ -60,7 +62,7 @@ class BackgroundFromWells(CellLevelAnalysisWithTableBase):
 
         table = np.array(table)[None]
         with open_file(self.table_out_path, 'a') as f:
-            self.write_table(f, self.output_table, columns, table)
+            self.write_table(f, self.output_table, columns, table, force_write=True)
 
 
 class BackgroundFromMinWell(BatchJobOnContainer):
@@ -100,7 +102,7 @@ class BackgroundFromMinWell(BatchJobOnContainer):
         logger.info(f"{self.name}: or a larger background fraction than {self.max_background_fraction}")
         logger.debug(f"{self.name}: the following wells are invalid {well_names[invalid_wells]}")
 
-        plate_name = os.path.split(self.folder)[1]
+        plate_name = os.path.split(self.input_folder)[1]
 
         out_col_names = ['plate_name']
         out_table = [plate_name]
