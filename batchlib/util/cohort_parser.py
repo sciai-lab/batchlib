@@ -46,7 +46,7 @@ PLATE_NAME_MAP = {
     "Plate T6": "plateT6_20200513_105342_945",
     "Plate T7": "plateT7_20200513_131739_093",
     "Plate T8": "plateT8rep1_20200516_091304_432",
-    "Plate U11_T9": "plateU13_T9rep1_20200516_105403_122"
+    "Plate U13_T9": "plateU13_T9rep1_20200516_105403_122"
 }
 
 
@@ -66,7 +66,7 @@ def _parse_well_name(row):
 
 def _parse_cohort_ids(row, well_ind):
     # cohort_id pattern for standard and Tuebingen cohorts
-    cohort_patterns = [re.compile('[A-Z]\\d+'), re.compile('3-.+')]
+    cohort_patterns = [re.compile('[A-Z]\\d+'), re.compile('3-.+'), re.compile('02-.+')]
 
     result = []
     for i in range(well_ind + 1, len(row)):
@@ -116,32 +116,42 @@ def _contains_plate_name(row):
 def _parse_plate_name(row):
     for cell in row:
         if isinstance(cell, str) and 'Plate ' in cell:
-            return PLATE_NAME_MAP[cell.strip()]
+            cell = cell.strip()
+            return PLATE_NAME_MAP.get(cell, cell)
     raise RuntimeError("Cannot parse plate name")
 
 
 def _load_cohort_ids_multiple_plates(excel_file):
-    df = pd.read_excel(excel_file)
+    sheets = pd.read_excel(excel_file, sheet_name=None)
     final_results = {}
 
-    results = []
-    plate_name = None
-    for row in df.values:
-        if _contains_plate_name(row):
-            # save current plate
-            if plate_name is not None:
-                if isinstance(plate_name, list):
-                    for pn in plate_name:
-                        final_results[pn] = results
-                else:
-                    final_results[plate_name] = results
-            # reset plate name
-            plate_name = _parse_plate_name(row)
-            # reset results
-            results = []
-            continue
+    # iterate over sheets
+    for df in sheets.values():
+        results = []
+        plate_name = None
+        for row in df.values:
+            if _contains_plate_name(row):
+                # save current plate
+                if plate_name is not None:
+                    if isinstance(plate_name, list):
+                        for pn in plate_name:
+                            final_results[pn] = results
+                    else:
+                        final_results[plate_name] = results
+                # reset plate name
+                plate_name = _parse_plate_name(row)
+                # reset results
+                results = []
+                continue
 
-        parse_row_cohord_ids(results, row)
+            parse_row_cohord_ids(results, row)
+
+        # add final plate
+        if isinstance(plate_name, list):
+            for pn in plate_name:
+                final_results[pn] = results
+        else:
+            final_results[plate_name] = results
 
     return final_results
 
@@ -159,3 +169,12 @@ class CohortIdParser:
             else:
                 # parse multiple plates
                 self.well_cohort_ids.update(_load_cohort_ids_multiple_plates(excel_file))
+
+    def get_cohorts_for_plate(self, plate_name):
+        plate_cohorts = self.well_cohort_ids.get(plate_name)
+        if plate_cohorts is None:
+            return {}
+        result = {}
+        for row in plate_cohorts:
+            result.update(dict(row))
+        return result

@@ -126,9 +126,10 @@ class DbResultWriter(BatchJobOnContainer):
         }
         self.db[ASSAY_ANALYSIS_RESULTS].find_one_and_replace(_filter, result_object, upsert=True)
 
-        # scan the plate directory, create the metadata document and insert into DB (or replace existing)
-        plate_doc = create_plate_doc(plate_name, self.plate_dir)
-        self.db[ASSAY_METADATA].find_one_and_replace({"name": plate_name}, plate_doc, upsert=True)
+        # insert plate metadata if does not exist
+        if self.db[ASSAY_METADATA].find_one({"name": plate_name}) is None:
+            plate_doc = create_plate_doc(plate_name, self.plate_dir)
+            self.db[ASSAY_METADATA].insert_one(plate_doc)
 
         # update cohort ids if present for the plate
         cohort_id_parser = CohortIdParser()

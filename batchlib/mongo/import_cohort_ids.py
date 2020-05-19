@@ -17,11 +17,11 @@ def import_cohort_ids(db):
     # get metadata collection
     assay_metadata = db[ASSAY_METADATA]
     # iterate over all plates for which cohort ids were provided
-    for plate_name, cohort_ids in cohort_id_parser.well_cohort_ids.items():
-        import_cohort_ids_for_plate(plate_name, assay_metadata, cohort_id_parser)
+    for plate_name in cohort_id_parser.well_cohort_ids.keys():
+        import_cohort_ids_for_plate(plate_name, assay_metadata, cohort_id_parser.get_cohorts_for_plate(plate_name))
 
 
-def import_cohort_ids_for_plate(plate_name, assay_metadata, cohort_id_parser):
+def import_cohort_ids_for_plate(plate_name, assay_metadata, plate_cohorts):
     logger.info(f'Importing cohort ids for plate: {plate_name}')
 
     # fetch plate metadata from DB
@@ -30,25 +30,10 @@ def import_cohort_ids_for_plate(plate_name, assay_metadata, cohort_id_parser):
         logger.warning(f"Plate {plate_name} not found in the DB")
         return
 
-    wells = plate_doc["wells"]
-
-    cohort_ids = cohort_id_parser.well_cohort_ids.get(plate_name, None)
-    if cohort_ids is None:
-        logger.info(f"No cohort ids info for plate: {plate_name}. Skipping cohort ids DB update")
-        return
-
-    for plate_row in cohort_ids:
-        for well_name, cohort_id in plate_row:
-            matching_well = list(filter(lambda w: w["name"] == well_name, wells))
-            if len(matching_well) != 1:
-                if cohort_id != 'unknown':
-                    logger.warning(f"Well {well_name} with cohort id {cohort_id} not found in DB")
-                continue
-
-            matching_well = matching_well[0]
-            # update cohort_id and patient_type
-            matching_well["cohort_id"] = cohort_id
-            matching_well["patient_type"] = cohort_id[0]
+    for well in plate_doc["wells"]:
+        cohort_id = plate_cohorts[well['name']]
+        well["cohort_id"] = cohort_id
+        well["patient_type"] = cohort_id[0]
 
     # replace plate with cohort info update
     assay_metadata.replace_one({"name": plate_name}, plate_doc)
