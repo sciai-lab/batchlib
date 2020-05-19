@@ -25,9 +25,7 @@ DEFAULT_CELL_OUTLIER_CRITERIA = {'max_cell_size': 12500,
 DEFAULT_IMAGE_OUTLIER_CRITERIA = {'max_number_cells': 1000,
                                   'min_number_cells': 10}
 
-DEFAULT_WELL_OUTLIER_CRITERIA = {'max_number_cells_per_image': None,  # redundant with imlevel
-                                 'min_number_cells_per_image': None,  # redundant with imlevel
-                                 'min_number_control_cells': 100,  # preprint final
+DEFAULT_WELL_OUTLIER_CRITERIA = {'min_number_control_cells': 100,  # preprint final
                                  'min_fraction_of_control_cells': None,  # redundant
                                  'check_ratios': True}
 
@@ -180,7 +178,8 @@ class ImageLevelQC(CellLevelAnalysisWithTableBase):
     def outlier_heuristics(self, in_file):
         cell_stats = self.load_per_cell_statistics(in_file, split_infected_and_control=False)
 
-        n_cells = len(cell_stats['labels'])
+        # we subtract 1, otherwise the count would include the background as well
+        n_cells = len(cell_stats['labels']) - 1
 
         outlier_type = ''
         is_outlier = 0
@@ -291,23 +290,12 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
     def outlier_heuristics(self, in_files):
         infected_stats, control_stats = self.load_per_cell_statistics(in_files)
 
-        n_images = len(in_files)
         n_infected = len(infected_stats[self.serum_key]['label_id'])
         n_control = len(control_stats[self.serum_key]['label_id'])
         n_cells = n_infected + n_control
 
         outlier_type = ''
         is_outlier = 0
-
-        min_cells_per_im = self.outlier_criteria['min_number_cells_per_image']
-        if min_cells_per_im is not None and n_cells < min_cells_per_im * n_images:
-            is_outlier = 1
-            outlier_type += 'too few cells;'
-
-        max_cells_per_im = self.outlier_criteria['max_number_cells_per_image']
-        if max_cells_per_im is not None and n_cells > max_cells_per_im * n_images:
-            is_outlier = 1
-            outlier_type += 'too many cells;'
 
         min_control = self.outlier_criteria['min_number_control_cells']
         if min_control is not None and n_control < min_control:
