@@ -4,8 +4,7 @@ from glob import glob
 import numpy as np
 import pandas as pd
 
-from batchlib.util import get_logger
-from ..util import read_table, open_file, image_name_to_site_name, image_name_to_well_name
+from batchlib.util import get_logger, read_table, open_file, image_name_to_site_name, image_name_to_well_name
 
 SUPPORTED_TABLE_FORMATS = {'excel': '.xlsx',
                            'csv': '.csv',
