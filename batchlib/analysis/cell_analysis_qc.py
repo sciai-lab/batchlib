@@ -123,7 +123,7 @@ class CellLevelQC(CellLevelAnalysisBase):
             is_outlier = outliers_cells
             outlier_types = types_cells
         else:
-            is_outlier = np.logical_or(outliers_nuclei, outliers_cells)
+            is_outlier = np.logical_or(outliers_nuclei, outliers_cells).astype('uint8')
             outlier_types = np.array([f'cell:{ctype},nucleus:{ntype}'
                                       for ctype, ntype in zip(types_cells, types_nuclei)])
 
