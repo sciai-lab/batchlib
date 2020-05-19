@@ -8,22 +8,17 @@ from ..util import open_file, image_name_to_site_name, get_logger
 
 logger = get_logger('Workflow.BatchJob.CellLevelAnalysis')
 
-# cell size is final (for the pre-print)
+# thresholds are final (for the pre-print)
 # (I went a bit more conservative then the values proposed by Vibor now)
-# nucleus size still needs to be determined from the data by looking at median radius
-# and choosing a min / max based on fraction / factor of it
+# for the nucleus size, I have measured the median on some test data and found:
+# median: 444.25
+# this corresponds to a radius of 12 pixels.
+# allowing the radius to vary +- 6 pixels we get the size thresholds here,
+# which are very close to vibors suggestiosn (100, 1000)
 DEFAULT_CELL_OUTLIER_CRITERIA = {'max_cell_size': 12500,
                                  'min_cell_size': 250,
-                                 'min_nucleus_size': None,  # suggested by Vibor: 100
-                                 'max_nucleus_size': None}  # suggested by Vibor: 1000
-# nucleus sizes on 20200405_test_images (based on median in images)
-# mean: 444.30555555555554
-# std: 22.539659833992587
-# median: 444.25
-# min: 390.0
-# max: 514.0
-# -> need to make a consistent size criterion
-# I would calculate the radius in pixels and then take +- 50 %
+                                 'min_nucleus_size': 125,
+                                 'max_nucleus_size': 1000}
 
 
 # the cell numbers are final (for the pre-print)

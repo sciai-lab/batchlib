@@ -258,7 +258,7 @@ def core_workflow_tasks(config, name, feature_identifier):
     if not os.path.exists(barrel_corrector_path):
         raise ValueError(f"Invalid barrel corrector path {barrel_corrector_path}")
 
-    torch_model_path = os.path.join(misc_folder, 'models/torch/fg_and_boundaries_V1.torch')
+    torch_model_path = os.path.join(misc_folder, 'models/torch/fg_and_boundaries_V2.torch')
     torch_model_class = UNet2D
     torch_model_kwargs = {
         'in_channels': 1,
