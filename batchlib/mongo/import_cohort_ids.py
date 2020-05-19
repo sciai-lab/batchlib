@@ -16,27 +16,24 @@ def import_cohort_ids(db):
 
     # get metadata collection
     assay_metadata = db[ASSAY_METADATA]
-    # iterate over all plates for which cohort ids were provided
-    for plate_name in cohort_id_parser.well_cohort_ids.keys():
-        import_cohort_ids_for_plate(plate_name, assay_metadata, cohort_id_parser.get_cohorts_for_plate(plate_name))
+    # iterate over all plates in the DB
+    for plate_doc in assay_metadata.find({}):
+        plate_name = plate_doc['name']
+        logger.info(f'Importing cohort ids for plate: {plate_name}')
 
+        plate_cohorts = cohort_id_parser.get_cohorts_for_plate(plate_name)
 
-def import_cohort_ids_for_plate(plate_name, assay_metadata, plate_cohorts):
-    logger.info(f'Importing cohort ids for plate: {plate_name}')
+        if not plate_cohorts:
+            logger.warning(f"No cohort metadata for plate: {plate_name}. Check your cohort excel files.")
+            continue
 
-    # fetch plate metadata from DB
-    plate_doc = assay_metadata.find_one({"name": plate_name})
-    if plate_doc is None:
-        logger.warning(f"Plate {plate_name} not found in the DB")
-        return
+        for well in plate_doc["wells"]:
+            cohort_id = plate_cohorts[well['name']]
+            well["cohort_id"] = cohort_id
+            well["patient_type"] = cohort_id[0]
 
-    for well in plate_doc["wells"]:
-        cohort_id = plate_cohorts[well['name']]
-        well["cohort_id"] = cohort_id
-        well["patient_type"] = cohort_id[0]
-
-    # replace plate with cohort info update
-    assay_metadata.replace_one({"name": plate_name}, plate_doc)
+        # replace plate with cohort info update
+        assay_metadata.replace_one({"name": plate_name}, plate_doc)
 
 
 def import_cohort_descriptions(db):
@@ -50,7 +47,8 @@ def import_cohort_descriptions(db):
          "description": "childrens study Heidelberg, roughly 1100 samples, sampling ongoing (goal 3300)"},
         {"patient_type": "M",
          "description": "from 2020, not tested for RNA or negative, roughly 150 samples, sampling ongoing"},
-        {"patient_type": "P", "description": "recovered from Sars-CoV infection, roughly 150 samples, sampling ongoing"},
+        {"patient_type": "P",
+         "description": "recovered from Sars-CoV infection, roughly 150 samples, sampling ongoing"},
         {"patient_type": "X", "description": "from before 2018, patients with mycoplasma infection"}
     ]
 
