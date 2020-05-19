@@ -83,7 +83,6 @@ def _create_images(well_name, well_files, outlier_predicate):
 def _create_wells(plate_name, plate_dir, cohort_id_parser, elisa_results_parser):
     outlier_predicate = OutlierPredicate(DEFAULT_OUTLIER_DIR, plate_name)
     plate_cohorts = cohort_id_parser.get_cohorts_for_plate(plate_name)
-    # TODO: import elisa results as well
 
     file_names = []
     for ext in SUPPORTED_FORMATS:
@@ -101,8 +100,10 @@ def _create_wells(plate_name, plate_dir, cohort_id_parser, elisa_results_parser)
     for well_name, well_files in well_dict.items():
         cohort_id = plate_cohorts.get(well_name, None)
         patient_type = None
+        IgG_value, IgA_value = None, None
         if cohort_id is not None:
             patient_type = cohort_id[0]
+            IgG_value, IgA_value = elisa_results_parser.elisa_results.get(cohort_id, (None, None))
 
         wells.append(
             {
@@ -112,7 +113,9 @@ def _create_wells(plate_name, plate_dir, cohort_id_parser, elisa_results_parser)
                 "outlier_type": "manual",
                 "images": _create_images(well_name, well_files, outlier_predicate),
                 "cohort_id": cohort_id,
-                "patient_type": patient_type
+                "patient_type": patient_type,
+                "elisa_IgG": IgG_value,
+                "elisa_IgA": IgA_value
             }
         )
 
