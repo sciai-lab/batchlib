@@ -32,7 +32,7 @@ from batchlib.segmentation.voronoi_ring_segmentation import ErodeSegmentation  #
 from batchlib.reporting import (SlackSummaryWriter,
                                 export_tables_for_plate,
                                 WriteBackgroundSubtractedImages)
-from batchlib.util import get_logger
+from batchlib.util import get_logger, open_file, read_table, has_table
 from batchlib.util.plate_visualizations import all_plots
 
 logger = get_logger('Workflow.CellAnalysis')
@@ -230,7 +230,7 @@ def add_background_estimation_from_min_well(job_list, config, wells, channel_key
                       'output_table': 'plate/backgrounds_min_well',
                       'seg_key': config.seg_key,
                       'channel_names': channel_keys},
-            "run": {"force_recompute": True}
+            "run": {"force_recompute": None}
             }
     ))
     return job_list
@@ -387,7 +387,8 @@ def core_workflow_tasks(config, name, feature_identifier):
             })
         )
 
-    # TODO add second nucleus dilation task and feature extraction for image level intensity qc
+    # we might add a second nucleus dilation task and feature extraction for image level intensity qc
+    # at some point here, but not for the preprint
 
     table_identifiers = serum_ana_in_keys if feature_identifier is None else [k + f'_{feature_identifier}'
                                                                               for k in serum_ana_in_keys]
@@ -459,25 +460,58 @@ def core_workflow_tasks(config, name, feature_identifier):
         'run': {'force_recompute': None}
     }))
 
-    return job_list, table_identifiers
+    return job_list, table_identifiers, background_parameters
 
 
-def workflow_summaries(name, config, t0, workflow_name, input_folder, stat_names):
+def bg_dict_for_plots(bg_params, table_path):
+    bg_dict = {}
+    with open_file(table_path, 'r') as f:
+        for channel_name, bg_param in bg_params.items():
+            if isinstance(bg_param, str):
+                assert has_table(f, bg_param)
+                cols, table = read_table(f, bg_param)
+                bg_src = bg_param.split('/')[-1]
+                if bg_param == 'plate/backgrounds':
+                    bg_val = table[0, cols.index(f'{channel_name}_median')]
+                    bg_msg = f' as {bg_val}'
+                elif bg_param == 'plate/backgrounds_min_well':
+                    bg_val = table[0, cols.index(f'{channel_name}_median')]
+                    bg_wells = table[0, cols.index(f'{channel_name}_min_well')]
+                    bg_src = f' the wells {bg_wells}'
+                    bg_msg = f' as {bg_val}'
+                else:
+                    bg_msg = ''
+                bg_info = f'background computed from {bg_src}{bg_msg}'
+            else:
+                bg_info = f'background fixed to {bg_param}'
+            bg_dict[channel_name] = bg_info
+    return bg_dict
+
+
+def workflow_summaries(name, config, t0, workflow_name, input_folder, stat_names, bg_params=None):
     # run all plots on the output files
     plot_folder = os.path.join(config.folder, 'plots')
 
     table_name = 'default'
     table_path = CellLevelAnalysis.folder_to_table_path(config.folder)
+
+    if bg_params is None:
+        bg_dict = None
+    else:
+        bg_dict = bg_dict_for_plots(bg_params, table_path)
+
     all_plots(table_path, plot_folder,
               table_key=f'images/{table_name}',
               identifier='per-image',
               stat_names=stat_names,
-              wedge_width=0.3)
+              wedge_width=0.3,
+              bg_dict=bg_dict)
     all_plots(table_path, plot_folder,
               table_key=f'wells/{table_name}',
               identifier='per-well',
               stat_names=stat_names,
-              wedge_width=0)
+              wedge_width=0,
+              bg_dict=bg_dict)
 
     db_writer = DbResultWriter(
         workflow_name=workflow_name,
@@ -507,7 +541,7 @@ def run_cell_analysis(config):
     if feature_identifier is not None:
         name += f'_{feature_identifier}'
 
-    job_list, table_identifiers = core_workflow_tasks(config, name, feature_identifier)
+    job_list, table_identifiers, bg_params = core_workflow_tasks(config, name, feature_identifier)
 
     t0 = time.time()
     run_workflow(name,
@@ -524,7 +558,8 @@ def run_cell_analysis(config):
         stat_names = [idf.replace('serum_', '') + '_' + name
                       for name in DEFAULT_PLOT_NAMES for idf in table_identifiers]
         workflow_summaries(name, config, t0, workflow_name=name,
-                           input_folder=config.input_folder, stat_names=stat_names)
+                           input_folder=config.input_folder, stat_names=stat_names,
+                           bg_params=bg_params)
 
     return table_identifiers
 

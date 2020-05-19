@@ -315,7 +315,7 @@ colorbar_threshold_dict = {
 
 
 def all_plots(table_path, out_folder, table_key, stat_names, identifier,
-              outlier_table_key='wells/outliers', **well_plot_kwargs):
+              outlier_table_key='wells/outliers', bg_dict=None, **well_plot_kwargs):
     if not isinstance(stat_names, (list, tuple)):
         raise ValueError(f"stat_names must be either list or tuple, got {type(stat_names)}")
     os.makedirs(out_folder, exist_ok=True)
@@ -356,13 +356,19 @@ def all_plots(table_path, out_folder, table_key, stat_names, identifier,
         stat_id = column_names.index(name)
         stats_per_file = dict(zip(image_or_well_names, table[:, stat_id].astype('float')))
 
+        title = f'{plate_name}\n{name}_{identifier}'
+        if bg_dict is not None:
+            channel_name = 'serum_IgG' if 'IgG' in name else 'serum_IgA'
+            bg_info = bg_dict[channel_name]
+            title += f'\n{bg_info}'
+
         outfile = os.path.join(out_folder, f"{plate_name}_{name}_{identifier}.jpg")
         well_plot(stats_per_file,
                   infected_list=outlier_list,
                   print_medians=True,
                   outfile=outfile,
                   figsize=(11, 6),
-                  title=f'{plate_name}\n{name}_{identifier}',
+                  title=title,
                   cmap=cmap,
                   colorbar_range=colorbar_range,
                   **well_plot_kwargs)
