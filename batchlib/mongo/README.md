@@ -129,7 +129,7 @@ Schema of a single document:
   "plate_name": "name of the plate",
   "batchlib_version": "version of batchlib the that produced the result",
   "analysis_parameters": "parameters/values the analysis was run with",
-  "result_tables": [[
+  "result_tables": [
     {
       "table_name": "wells/default",
       "results": [
@@ -141,7 +141,6 @@ Schema of a single document:
       "results": [
       
       ]
-    }
     }
   ]
 }
