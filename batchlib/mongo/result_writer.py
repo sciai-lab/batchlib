@@ -7,10 +7,8 @@ import h5py
 from pymongo import MongoClient
 
 from batchlib.base import BatchJobOnContainer
-from batchlib.mongo.import_cohort_ids import import_cohort_ids_for_plate
 from batchlib.mongo.utils import ASSAY_ANALYSIS_RESULTS, ASSAY_METADATA, create_plate_doc
 from batchlib.util import get_logger, get_commit_id
-from batchlib.util.cohort_parser import CohortIdParser
 from batchlib.util.io import read_table
 
 logger = get_logger('Workflow.BatchJob.DbResultWriter')
@@ -130,10 +128,6 @@ class DbResultWriter(BatchJobOnContainer):
         if self.db[ASSAY_METADATA].find_one({"name": plate_name}) is None:
             plate_doc = create_plate_doc(plate_name, self.plate_dir)
             self.db[ASSAY_METADATA].insert_one(plate_doc)
-
-        # update cohort ids if present for the plate
-        cohort_id_parser = CohortIdParser()
-        import_cohort_ids_for_plate(plate_name, self.db[ASSAY_METADATA], cohort_id_parser)
 
     @staticmethod
     def _get_workflow_duration(kwargs):
