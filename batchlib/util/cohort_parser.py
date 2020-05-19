@@ -17,7 +17,7 @@ PLATE_NAME_MAP = {
     "Plate 6": "plate6rep2_wp_20200507_131032_010",
     "Plate 7": "plate7rep1_20200426_103425_693",
     "Plate 8": ["plate8rep1_20200425_162127_242", "plate8rep2_20200502_182438_996"],
-    "Plate 9": "plate9rep1_20200430_144438_97",
+    "Plate 9": "plate9rep1_20200430_144438_974",
     "Plate 9_2": ["plate9_2rep1_20200506_163349_413", "plate9_2rep2_20200515_230124_149"],
     "Plate 9_3": "plate9_3rep1_20200513_160853_327",
     # K plates
