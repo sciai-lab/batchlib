@@ -1,9 +1,10 @@
 import glob
 import math
 import os
-import re
 
 import pandas as pd
+
+from batchlib.util.cohort_parser import COHORT_PATTERNS
 
 DEFAULT_EXCEL_DIR = os.path.join(os.path.split(__file__)[0], '../../misc/elisa')
 
@@ -33,9 +34,6 @@ def _validate_values(elisa_IgG, elisa_IgA):
 
 
 def _load_elisa_results(excel_file):
-    # cohort_id pattern
-    p = re.compile('[A-Z]\\d+')
-
     # load all sheets
     sheets = pd.read_excel(excel_file, sheet_name=None)
     results = {}
@@ -43,13 +41,18 @@ def _load_elisa_results(excel_file):
     for df in sheets.values():
         # iterate over rows
         for row in df.values:
-            cohort_id, elisa_IgG, elisa_IgA = row[:3]
+            # assume that cohort_id and Elisa values are in the first 3 columns
+            if len(row) == 2:
+                cohort_id, elisa_IgG = row
+                elisa_IgA = ''
+            else:
+                cohort_id, elisa_IgG, elisa_IgA = row[:3]
             if not isinstance(cohort_id, str):
                 continue
             # if there is a cohort_id match
-            if p.match(cohort_id) is not None:
+            if any(p.match(cohort_id) is not None for p in COHORT_PATTERNS):
                 # convert to lowercase
-                cohort_id = cohort_id.lower()
+                cohort_id = cohort_id.strip().lower()
                 elisa_tuple = _validate_values(elisa_IgG, elisa_IgA)
                 if elisa_tuple is not None and cohort_id not in results:
                     results[cohort_id] = elisa_tuple
@@ -62,3 +65,8 @@ class ElisaResultsParser:
         # parse outliers
         for excel_file in glob.glob(os.path.join(excel_dir, '*.xlsx')):
             self.elisa_results.update(_load_elisa_results(excel_file))
+
+    def get_elisa_values(self, cohort_id):
+        assert isinstance(cohort_id, str)
+        cohort_id = cohort_id.lower()
+        return self.elisa_results.get(cohort_id, (None, None))
