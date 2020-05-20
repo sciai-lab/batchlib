@@ -45,23 +45,6 @@ def erode_seg(seg, iters):
     return new_seg
 
 
-def size_filter(seg, infected_labels, min_size=100):
-    seg_ids, counts = np.unique(seg, return_counts=True)
-    filter_ = counts < min_size
-    filter_ids = seg_ids[filter_]
-
-    bg = seg == 0
-    seg[np.isin(seg, filter_ids)] = 0
-    hmap = np.random.rand(*seg.shape).astype('float32')
-    seg, _ = vigra.analysis.watershedsNew(hmap, seeds=seg.astype('uint32'))
-    seg[bg] = 0
-
-    seg_ids = np.unique(seg)
-    infected_labels = infected_labels[~filter_]
-    assert len(infected_labels) == len(seg_ids), f"{len(infected_labels), len(seg_ids)}"
-    return seg, seg_ids, infected_labels
-
-
 def export_proofreadng_image(path):
     with h5py.File(path, 'r') as f:
         serum = normalize(read_image(f, 'serum_IgG'))
