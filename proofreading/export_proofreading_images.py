@@ -2,10 +2,6 @@ import h5py
 import numpy as np
 import skimage.color as skc
 import imageio
-import vigra
-
-import matplotlib.pyplot as plt
-# import napari
 
 from glob import glob
 from batchlib.util import read_image, read_table
@@ -28,15 +24,12 @@ def quantile_normalize(im, low=.01, high=.99):
 
 
 def make_2d_edges(segmentation):
-    """ Make 2d edges from 2d segmentation
-    """
     gy = convolve(segmentation + 1, np.array([-1., 0., 1.]).reshape(1, 3))
     gx = convolve(segmentation + 1, np.array([-1., 0., 1.]).reshape(3, 1))
     return ((gx ** 2 + gy ** 2) > 0)
 
 
 def erode_seg(seg, iters):
-
     seg_ids = np.unique(seg)[1:]
     new_seg = np.zeros_like(seg)
     for seg_id in seg_ids:
@@ -56,7 +49,7 @@ def export_proofreadng_image(path):
         _, infected_labels = read_table(f, 'infected_cell_labels')
 
     infected_labels = infected_labels[:, 1]
-    seg, seg_ids, infected_labels = size_filter(seg, infected_labels)
+    seg_ids = np.unique(seg)
     pos_mask = np.isin(seg, seg_ids[infected_labels == 1])
     neg_mask = np.isin(seg, seg_ids[infected_labels == 2])
 
@@ -90,17 +83,6 @@ def export_proofreadng_image(path):
 
     imageio.imwrite(path.replace('.h5', '_pos_edges.png'), pos_edges.astype('float32'))
     imageio.imwrite(path.replace('.h5', '_neg_edges.png'), neg_edges.astype('float32'))
-
-    # plt.imshow(raw2)
-    # plt.show()
-    # quit()
-
-    # with napari.gui_qt():
-    #     viewer = napari.Viewer()
-    #     viewer.add_image(raw, rgb=True, name='raw')
-    #     viewer.add_image(raw2, rgb=True, name='enhanced')
-    #     viewer.add_labels(pos_edges, name='pos-edges')
-    #     viewer.add_labels(neg_edges, name='neg-edges')
 
 
 # TODO update
