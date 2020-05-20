@@ -62,15 +62,21 @@ def all_manuscript_plates():
     folder_names = ['titration_plate_20200403_154849',
                     '20200420_152417_316',
                     '20200420_164920_764',
-                    '20200417_203228_156',
                     '20200417_132123_311',
                     '20200417_152052_943']
     pattern = '*rep*'
     rep_folders = glob(os.path.join(ROOT_IN, pattern))
     rep_names = [os.path.split(folder)[1] for folder in rep_folders]
 
+    exclude = ['plate1rep3_20200505_100837_821',
+               'plate2rep3_20200507_094942_519',
+               'plate5rep3_20200507_113530_429',
+               'plate6rep2_wp_20200507_131032_010',
+               'plate9_2rep1_20200506_163349_413']
+
     # the pattern also matches the kinder names, so we filter them out
     rep_names = list(set(rep_names) - set(all_kinder_plates()))
+    rep_names = list(set(rep_names) - set(exclude))
 
     folder_names.extend(rep_names)
     folder_names.sort()
