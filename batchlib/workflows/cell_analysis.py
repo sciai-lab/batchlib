@@ -253,8 +253,14 @@ def core_workflow_tasks(config, name, feature_identifier):
     model_root = os.path.join(misc_folder, 'models/stardist')
     model_name = '2D_dsb2018'
 
-    barrel_corrector_path = get_barrel_corrector(os.path.join(misc_folder, 'barrel_correctors'),
-                                                 config.input_folder)
+    if config.barrel_corrector_folder == 'auto':
+        # TODO: Come up with a better way to determine which barrel corrector to use.
+        #  This currently relies on all new plates being named "plateU*".
+        subfolder = 'new_microscope' if 'plateU' in config.input_folder else 'old_microscope'
+        barrel_corrector_folder = os.path.join(misc_folder, 'barrel_correctors', subfolder)
+    else:
+        barrel_corrector_folder = config.barrel_corrector_folder
+    barrel_corrector_path = get_barrel_corrector(barrel_corrector_folder, config.input_folder)
     if not os.path.exists(barrel_corrector_path):
         raise ValueError(f"Invalid barrel corrector path {barrel_corrector_path}")
 
@@ -591,6 +597,9 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add('--n_cpus', required=True, type=int, help='number of cpus')
     parser.add('--folder', required=True, type=str, default="", help=fhelp)
     parser.add('--misc_folder', required=True, type=str, help=mischelp)
+    parser.add('--barrel_corrector_folder', type=str, default='auto',
+               help='optinally specify the folder containing the files for barrel correction.')
+
 
     # folder options
     # this parameter is not necessary here any more, but for now we need it to be
