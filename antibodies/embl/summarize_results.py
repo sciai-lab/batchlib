@@ -47,6 +47,7 @@ class DummyConfig:
 
 def redo_summary(root):
     folder_names = os.listdir(root)
+    # folder_names = ['titration_plate_20200403_154849']
 
     def redo_folder(folder):
         plot_folder = os.path.join(folder, 'plots')
@@ -60,17 +61,19 @@ def redo_summary(root):
         if 'titration' in folder or 'plate8rep2' in folder:
             stat_names = ['IgG_ratio_of_q0.5_of_means',
                           'IgG_robust_z_score_means']
+            channel_names = ['serum_IgG']
         else:
             stat_names = ['IgG_ratio_of_q0.5_of_means',
                           'IgG_robust_z_score_means',
                           'IgA_ratio_of_q0.5_of_means',
                           'IgA_robust_z_score_means']
+            channel_names = ['serum_IgG', 'serum_IgA']
 
         table_path = CellLevelAnalysis.folder_to_table_path(folder)
 
         misc_folder = '../../misc'
         config = DummyConfig(input_folder=folder, misc_folder=misc_folder)
-        bg_params, _ = default_bg_parameters(config, ['serum_IgG', 'serum_IgA'])
+        bg_params, _ = default_bg_parameters(config, channel_names)
         bg_dict = bg_dict_for_plots(bg_params, table_path)
 
         all_plots(table_path, plot_folder,
@@ -127,7 +130,7 @@ if __name__ == '__main__':
         redo_summary(args.root)
     else:
         clean_up = token is not None
-        summarize_kinder_experiment(args.root, token, clean_up, bool(args.ignore_incomplete),
-                                    metadata_repository=metadata_repository)
+        # summarize_kinder_experiment(args.root, token, clean_up, bool(args.ignore_incomplete),
+        #                             metadata_repository=metadata_repository)
         summarize_manuscript_experiment(args.root, token, clean_up, bool(args.ignore_incomplete),
                                         metadata_repository=metadata_repository)

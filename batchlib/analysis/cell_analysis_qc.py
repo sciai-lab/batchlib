@@ -8,6 +8,7 @@ from ..util import open_file, image_name_to_site_name, get_logger
 
 logger = get_logger('Workflow.BatchJob.CellLevelAnalysis')
 
+# FIXME nucleus and cell seg ids don't always match
 # thresholds are final (for the pre-print)
 # (I went a bit more conservative then the values proposed by Vibor now)
 # for the nucleus size, I have measured the median on some test data and found:
@@ -17,8 +18,8 @@ logger = get_logger('Workflow.BatchJob.CellLevelAnalysis')
 # which are very close to vibors suggestiosn (100, 1000)
 DEFAULT_CELL_OUTLIER_CRITERIA = {'max_cell_size': 12500,
                                  'min_cell_size': 250,
-                                 'min_nucleus_size': 125,
-                                 'max_nucleus_size': 1000}
+                                 'min_nucleus_size': None,  # 125
+                                 'max_nucleus_size': None}  # 1000
 
 
 # the cell numbers are final (for the pre-print)
