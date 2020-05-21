@@ -437,7 +437,7 @@ def core_workflow_tasks(config, name, feature_identifier):
         'run': {'force_recompute': None}
     }))
 
-    return job_list, table_identifiers, background_parameters
+    return job_list, table_identifiers, background_parameters, marker_ana_in_key
 
 
 def bg_dict_for_plots(bg_params, table_path):
@@ -465,7 +465,8 @@ def bg_dict_for_plots(bg_params, table_path):
     return bg_dict
 
 
-def workflow_summaries(name, config, t0, workflow_name, input_folder, stat_names, bg_params=None):
+def workflow_summaries(name, config, t0, workflow_name, input_folder, stat_names,
+                       bg_params=None, marker_name='marker'):
     # run all plots on the output files
     plot_folder = os.path.join(config.folder, 'plots')
 
@@ -506,7 +507,7 @@ def workflow_summaries(name, config, t0, workflow_name, input_folder, stat_names
     summary_writer(config.folder, config.folder, runtime=t0)
 
     if config.export_tables:
-        export_tables_for_plate(config.folder)
+        export_tables_for_plate(config.folder, marker_name=marker_name)
     logger.info(f"Run {name} in {t0}s")
 
 
@@ -518,7 +519,7 @@ def run_cell_analysis(config):
     if feature_identifier is not None:
         name += f'_{feature_identifier}'
 
-    job_list, table_identifiers, bg_params = core_workflow_tasks(config, name, feature_identifier)
+    job_list, table_identifiers, bg_params, marker_name = core_workflow_tasks(config, name, feature_identifier)
 
     t0 = time.time()
     run_workflow(name,
@@ -536,7 +537,7 @@ def run_cell_analysis(config):
                       for name in DEFAULT_PLOT_NAMES for idf in table_identifiers]
         workflow_summaries(name, config, t0, workflow_name=name,
                            input_folder=config.input_folder, stat_names=stat_names,
-                           bg_params=bg_params)
+                           bg_params=bg_params, marker_name=marker_name)
 
     return table_identifiers
 

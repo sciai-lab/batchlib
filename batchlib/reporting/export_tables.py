@@ -4,7 +4,8 @@ from glob import glob
 import numpy as np
 import pandas as pd
 
-from batchlib.util import get_logger, read_table, open_file, image_name_to_site_name, image_name_to_well_name
+from batchlib.util import (get_logger, read_table, open_file, has_table,
+                           image_name_to_site_name, image_name_to_well_name)
 
 SUPPORTED_TABLE_FORMATS = {'excel': '.xlsx',
                            'csv': '.csv',
@@ -63,7 +64,6 @@ def export_default_table(table_file, table_name, output_path, output_format=None
     export_table(columns, table, output_path, output_format)
 
 
-# TODO export the anchor and bounding box from 'tables/{seg_name}/properties' as well
 def export_cell_tables(folder, output_path, table_name, output_format=None, skip_existing=True):
     if os.path.exists(output_path) and skip_existing:
         return
@@ -72,13 +72,24 @@ def export_cell_tables(folder, output_path, table_name, output_format=None, skip
     files.sort()
 
     plate_name = os.path.split(folder)[1]
-    initial_columns = ['plate_name', 'well_name', 'site_name']
+    initial_columns = ['plate_name', 'well_name', 'site_name', 'anchor_x', 'anchor_y']
+
     columns = None
     table = []
 
+    props_table_name = 'cell_segmentation/properties'
     for path in files:
         with open_file(path, 'r') as f:
             this_columns, this_table = read_table(f, table_name)
+
+            if has_table(f, props_table_name):
+                prop_cols, prop_table = read_table(f, props_table_name)
+                anchors = np.concatenate([prop_table[:, prop_cols.index('anchor_x')][:, None],
+                                          prop_table[:, prop_cols.index('anchor_y')][:, None]], axis=1)
+            else:
+                n_cells = len(this_table)
+                anchors = np.array(2 * [n_cells * [None]]).T
+
         if columns is None:
             columns = initial_columns + this_columns
 
@@ -89,33 +100,21 @@ def export_cell_tables(folder, output_path, table_name, output_format=None, skip
         plate_col = np.array([plate_name] * len(this_table))
         well_col = np.array([well_name] * len(this_table))
         site_col = np.array([site_name] * len(this_table))
-        res_table = np.concatenate([plate_col[:, None], well_col[:, None], site_col[:, None], this_table], axis=1)
+        res_table = np.concatenate([plate_col[:, None],
+                                    well_col[:, None],
+                                    site_col[:, None],
+                                    anchors,
+                                    this_table], axis=1)
         table.append(res_table)
 
     table = np.concatenate(table, axis=0)
     export_table(columns, table, output_path, output_format)
 
 
-def export_voronoi_tables(folder, ext='.xlsx', skip_existing=True):
-    plate_name = os.path.split(folder)[1]
-    in_file = glob(os.path.join(folder, '*.h5'))[0]
-    with open_file(in_file, 'r') as f:
-        assert 'tables' in f
-        table_names = list(f['tables'].keys())
-        voronoi_tables = [name for name in table_names if 'voronoi' in name]
-        voronoi_tables = [f'{name}/{channel}' for name in voronoi_tables for channel in f['tables'][name].keys()]
-
-    for table_name in voronoi_tables:
-        out_name = f'{plate_name}_cell_table_{table_name}{ext}'.replace('/', '_')
-        out_path = os.path.join(folder, out_name)
-        export_cell_tables(folder, out_path, table_name, skip_existing=skip_existing)
-
-
 def export_tables_for_plate(folder,
                             cell_table_name='cell_segmentation',
                             marker_name='marker',
                             skip_existing=True,
-                            export_voronoi=True,
                             ext='.xlsx'):
     """ Conveneince function to export all relevant tables for a plate
     into a more common format (by default excel).
@@ -147,15 +146,9 @@ def export_tables_for_plate(folder,
         export_cell_tables(folder, cell_out, cell_table_name, skip_existing=skip_existing)
 
     # export the infected/non-infected classification
-    # cell_table_root = cell_table_name.split('/')[0]
     class_name = f'cell_classification/cell_segmentation/{marker_name}'
     class_out = os.path.join(folder, f'{plate_name}_cell_infected_clasification_table{ext}')
     export_cell_tables(folder, class_out, class_name, skip_existing=skip_existing)
-
-    # TODO this doesn't work right now, because we changed the voronoi naming schemes
-    # export voronoi tables
-    # if export_voronoi:
-    #     export_voronoi_tables(folder, ext, skip_existing=skip_existing)
 
 
 def _get_db_metadata(well_names, metadata_repository, plate_name):
