@@ -207,6 +207,35 @@ def add_background_estimation_from_min_well(job_list, config, wells, channel_key
     return job_list
 
 
+# TODO get a complete list of old plates instead
+def get_barrel_corrector_folder(config):
+    pre_len = len('plateT')
+
+    def isU(plate_name):
+        return 'plateU' in plate_name
+
+    def isRecentT(folder):
+        isT = 'plateT' in plate_name
+        if isT:
+            try:
+                plate_id = int(plate_name[pre_len:pre_len+1])
+            except ValueError:
+                plate_id = int(plate_name[pre_len:pre_len+2])
+            return plate_id > 8
+        else:
+            return False
+
+    plate_name = os.path.split(config.input_folder)[1]
+
+    if plate_name == 'plateU13_T9rep1_20200516_105403_122':
+        subfolder = 'old_microscope'
+    elif isU(plate_name) or isRecentT(plate_name):
+        subfolder = 'new_microscope'
+    else:
+        subfolder = 'old_microscope'
+    return os.path.join(config.misc_folder, 'barrel_correctors', subfolder)
+
+
 def core_workflow_tasks(config, name, feature_identifier):
 
     # to allow running on the cpu
@@ -219,23 +248,18 @@ def core_workflow_tasks(config, name, feature_identifier):
         if config.use_unique_output_folder:
             config.folder += '_' + name
 
-    misc_folder = config.misc_folder
-
-    model_root = os.path.join(misc_folder, 'models/stardist')
+    model_root = os.path.join(config.misc_folder, 'models/stardist')
     model_name = '2D_dsb2018'
 
     if config.barrel_corrector_folder == 'auto':
-        # TODO: Come up with a better way to determine which barrel corrector to use.
-        #  This currently relies on all new plates being named "plateU*".
-        subfolder = 'new_microscope' if 'plateU' in config.input_folder else 'old_microscope'
-        barrel_corrector_folder = os.path.join(misc_folder, 'barrel_correctors', subfolder)
+        barrel_corrector_folder = get_barrel_corrector_folder(config)
     else:
         barrel_corrector_folder = config.barrel_corrector_folder
     barrel_corrector_path = get_barrel_corrector(barrel_corrector_folder, config.input_folder)
     if not os.path.exists(barrel_corrector_path):
         raise ValueError(f"Invalid barrel corrector path {barrel_corrector_path}")
 
-    torch_model_path = os.path.join(misc_folder, 'models/torch/fg_and_boundaries_V2.torch')
+    torch_model_path = os.path.join(config.misc_folder, 'models/torch/fg_and_boundaries_V2.torch')
     torch_model_class = UNet2D
     torch_model_kwargs = {
         'in_channels': 1,
