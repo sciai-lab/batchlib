@@ -103,7 +103,7 @@ def _create_wells(plate_name, plate_dir, cohort_id_parser, elisa_results_parser)
         IgG_value, IgA_value = None, None
         if cohort_id is not None:
             patient_type = cohort_id[0]
-            IgG_value, IgA_value = elisa_results_parser.elisa_results.get(cohort_id, (None, None))
+            IgG_value, IgA_value = elisa_results_parser.get_elisa_values(cohort_id)
 
         wells.append(
             {
