@@ -49,6 +49,9 @@ PLATE_NAME_MAP = {
     "Plate U13_T9": "plateU13_T9rep1_20200516_105403_122"
 }
 
+# cohort_id pattern for standard and Tuebingen cohorts
+COHORT_PATTERNS = [re.compile('[A-Z]\\d+'), re.compile('3-.+'), re.compile('02-.+')]
+
 
 def _contains_well_name(row):
     for cell in row:
@@ -65,16 +68,13 @@ def _parse_well_name(row):
 
 
 def _parse_cohort_ids(row, well_ind):
-    # cohort_id pattern for standard and Tuebingen cohorts
-    cohort_patterns = [re.compile('[A-Z]\\d+'), re.compile('3-.+'), re.compile('02-.+')]
-
     result = []
     for i in range(well_ind + 1, len(row)):
         cohort_id = 'unknown'
         cell = row[i]
         if not isinstance(cell, str):
             cell = str(cell)
-        if any(p.match(cell) is not None for p in cohort_patterns):
+        if any(p.match(cell) is not None for p in COHORT_PATTERNS):
             cohort_id = cell.strip()
         result.append(cohort_id)
     return result
