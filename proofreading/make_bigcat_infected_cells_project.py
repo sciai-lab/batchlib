@@ -7,7 +7,8 @@ import numpy as np
 def fragment_segment_lut(segmentation, infected_labels):
     node_ids = np.unique(segmentation)
     assert len(infected_labels) == len(node_ids)
-    assert np.array_equal(np.unique(infected_labels), np.array([0, 1]))
+    unique_labels = np.unique(infected_labels)
+    assert np.array_equal(unique_labels, np.array([0, 1])), f"{unique_labels}"
     infected_labels += 1
 
     # the background gets a special label, because it is neither infected nor not infected
@@ -92,6 +93,7 @@ def infected_labels_from_mask(f, infected_mask_key, seg):
 
     infected_labels = [overlap.overlapArrays(nid, True)[0][0] for nid in node_ids]
     infected_labels = np.array(infected_labels, dtype='uint8')
+    infected_labels[infected_labels >= 1] = 1
 
     return infected_labels
 

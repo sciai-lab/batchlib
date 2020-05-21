@@ -90,57 +90,28 @@ def validate_bg_dict(bg_dict):
             raise ValueError(f"Invalid background value {val} for {key}")
 
 
-def has_two_bg_wells(name):
-    isT = 'plateT' in name
-
-    is_recentK = False
-    if 'plateK' in name or 'PlateK' in name:
-        prelen = len('plateK')
-        kid = int(name[prelen:prelen+2])
-        if kid >= 22:
-            is_recentK = True
-
-    return isT or is_recentK
-
-
-def get_bg_well(name, bg_wells_dict):
-    if name in bg_wells_dict:
-        return bg_wells_dict[name]
-    if has_two_bg_wells(name):
-        return ['H01', 'G01']
-    else:
-        return ['H01']
-
-
-def get_bg_dict_without_min_well(name, keys):
-    # the one special plate with a different bg
-    if name == 'plate6rep2_wp_20200507_131032_010':
-        full_dict = {'serum_IgA': 7000., 'serum_IgG': 5000.}
-    else:
-        full_dict = {'serum_IgA': 1800., 'serum_IgG': 1300.}
-    return {k: full_dict.get(k, 'plate/backgrounds') for k in keys}
-
-
-def get_bg_dict_with_min_well(name, keys):
-    full_dict = {'serum_IgM': 'plate/backgrounds_min_well',
-                 'serum_IgA': 'plate/backgrounds_min_well', 'serum_IgG': 'plate/backgrounds_min_well'}
-    return {k: full_dict.get(k, 'plate/backgrounds') for k in keys}
-
-
 def default_bg_parameters(config, keys):
     name = os.path.split(config.input_folder)[1]
 
-    # TODO get rid of hacky functions and move all intp the dict
-    bg_wells_dict = os.path.join(config.misc_folder, 'plates_to_background_well.json')
-    with open(bg_wells_dict) as f:
-        bg_wells_dict = json.load(f)
-    bg_wells = get_bg_well(name, bg_wells_dict)
+    bg_info_dict = os.path.join(config.misc_folder, 'plates_to_background_well_new.json')
+    with open(bg_info_dict) as f:
+        bg_info_dict = json.load(f)
 
-    if bg_wells is None:
-        bg_dict = get_bg_dict_without_min_well(name, keys)
-        return bg_dict, []
+    # all new plates have H01 and G01 as empty wells for bg estimation
+    bg_info = bg_info_dict.get(name, ['H01', 'G01'])
 
-    bg_dict = get_bg_dict_with_min_well(name, keys)
+    # the bg-info can have 2 different structures:
+    # list: -> list of wells for background estimation
+    # dict: -> dict of fixed background values for the channels
+    if isinstance(bg_info, list):
+        bg_wells = bg_info
+        # NOTE: marker background needs to be estimated from the whole plate
+        bg_dict = {k: 'plate/backgrounds_min_well' if k.startswith('serum') else 'plate/backgrounds'
+                   for k in keys}
+    else:
+        bg_wells = []
+        bg_dict = {k: bg_info.get(k, 'plate/backgrounds') for k in keys}
+
     return bg_dict, bg_wells
 
 
@@ -599,7 +570,6 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add('--misc_folder', required=True, type=str, help=mischelp)
     parser.add('--barrel_corrector_folder', type=str, default='auto',
                help='optinally specify the folder containing the files for barrel correction.')
-
 
     # folder options
     # this parameter is not necessary here any more, but for now we need it to be
