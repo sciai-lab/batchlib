@@ -33,7 +33,7 @@ def make_summary_tables(folder, root, redo_tables, marker_name, cell_seg_name):
     export_tables_for_plate(folder,
                             cell_table_name=cell_seg_name,
                             marker_name=marker_name,
-                            skip_existing=False)
+                            skip_existing=True)
 
 
 def get_folders(root, exclude_not_processed):
@@ -68,7 +68,8 @@ if __name__ == '__main__':
     parser.add_argument('--redo_tables', default=0, type=int)
     parser.add_argument('--n_jobs', default=24, type=int)
     parser.add_argument('--marker_name', type=str, default='marker_for_infected_classification')
-    parser.add_argument('--cell_seg_name', type=str, default='cell_segmentation')
+    parser.add_argument('--cell_seg_name', type=str, default=None)
+    # parser.add_argument('--cell_seg_name', type=str, default='cell_segmentation')
 
     args = parser.parse_args()
     make_all_tables(args.root, bool(args.redo_tables), args.n_jobs,
