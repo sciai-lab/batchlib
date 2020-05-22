@@ -9,10 +9,12 @@ from batchlib.util.io import open_file, read_table, get_column_dict
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from matplotlib.lines import Line2D
 import matplotlib
 matplotlib.use("Agg")
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Circle, Wedge
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 row_letters = np.array(list('ABCDEFGH'))
 letter_to_row = {letter: i for i, letter in enumerate(row_letters)}
@@ -92,7 +94,14 @@ def make_per_well_dict(data_dict, min_samples_per_well=None):
     return per_well_dict
 
 
-def well_plot(data_dict, infected_list=None,
+OUTLIER_TYPE_DICT = {
+    'too few control cells': '1',
+    'too small fraction of control cells': '2',
+    'too low infected cell intensity': '3',
+}
+
+
+def well_plot(data_dict, outlier_dict=None,
               fig=None, ax=None, title=None, outfile=None,
               sort=False, print_medians=False, figsize=(7.1, 4), colorbar_range=None, cmap=None,
               radius=0.45, wedge_width=0.2, infected_marker_width=0.05, angular_gap=0.0,
@@ -104,9 +113,9 @@ def well_plot(data_dict, infected_list=None,
     ----------
     data_dict : dict
         Dictionary mapping filenames to scores.
-    infected_list : list, optional
-        List of filenames or well-names (something that get_well() works on, like 'WellG04') of wells corresponding to
-        infected patients. They will be marked with a red circle.
+    outlier_dict : dict, optional
+        Dictionary whose keys are filenames or well-names (something that get_well() works on, like 'WellG04') of wells
+        corresponding to outliers. They will be marked with a red circle. The values should be the outlier types.
     fig : matplotlib.figure.Figure, optional
     ax : matplotlib.axes.Axes, optional
     title : str, optional
@@ -130,6 +139,8 @@ def well_plot(data_dict, infected_list=None,
     min_samples_per_well : int, optional
         Wells with less samples will not be displayed.
     """
+    if isinstance(outlier_dict, list):  # for backwards compatibility
+        outlier_dict = {well: '' for well in outlier_dict}
 
     per_well_dict = make_per_well_dict(data_dict, min_samples_per_well)
 
@@ -176,15 +187,20 @@ def well_plot(data_dict, infected_list=None,
             coll.set_cmap(cmap)
 
     ax.add_collection(coll)
-    fig.colorbar(coll, ax=ax)
+
+    plt.gca().set_aspect('equal', adjustable='box')
+    plt.xticks(np.arange(12), np.arange(1, 13))
+    plt.xlim(-0.7, 11.7)
+    plt.ylim(-0.7, 7.7)
+    plt.yticks(np.arange(len(row_letters)), reversed(row_letters))
 
     ax.add_collection(PatchCollection(nan_patches, facecolors='r'))
 
-    if infected_list is not None:
+    if outlier_dict is not None:
+        outlier_dict = {get_well(well): str(description) for well, description in outlier_dict.items()}
         # add red circles around infected patients
         infected_marker_patches = []
-        for well in infected_list:
-            well_position = get_well(well)
+        for well_position in outlier_dict:
             center = well_position[1], 7 - well_position[0]
             infected_marker_patches.append(Wedge(center, radius,
                                                  0, 360,
@@ -193,22 +209,48 @@ def well_plot(data_dict, infected_list=None,
         infected_marker_patches = PatchCollection(infected_marker_patches, facecolors='r')
         ax.add_collection(infected_marker_patches)
 
+    def add_superscript(string, supscript):
+        if supscript is None or supscript == '':
+            return string
+        return string + '$^{' + supscript + '}$'
+
     if print_medians:
+        description_to_label = OUTLIER_TYPE_DICT.copy()
         for well_position, values in per_well_dict.items():
             center = well_position[1], 7 - well_position[0]
+            if outlier_dict is not None and well_position in outlier_dict:
+                superscript = []
+                for description in outlier_dict[well_position].split(';'):
+                    if description not in description_to_label:
+                        description_to_label[description] = str(len(description_to_label) + 1)
+                    superscript.append(description_to_label[description])
+                superscript = ','.join(superscript)
+            else:
+                superscript = None
             median = np.median(values)
-            t = plt.annotate(f'{median:4.3f}', center, ha='center', va='center')
+            t = plt.annotate(add_superscript(f'{median:4.2f}', superscript), center, ha='center', va='center')
             t.set_bbox(dict(edgecolor='white', facecolor='white', alpha=0.3))
 
-    plt.gca().set_aspect('equal', adjustable='box')
-    plt.xticks(np.arange(12), np.arange(1, 13))
-    plt.xlim(-0.7, 11.7)
-    plt.ylim(-0.7, 7.7)
-    plt.yticks(np.arange(len(row_letters)), reversed(row_letters))
+    legend_elements = [
+        Line2D([0], [0], marker='o', color='w', label='outlier wells',
+               markerfacecolor=None, markeredgecolor='r', markersize=10, markeredgewidth=2),
+
+    ]
+    legend_elements.extend([Line2D([0], [0], marker=f'${label}$', color='w', label=description,
+                                   markerfacecolor='k', markeredgecolor='None', markersize=None)
+                            for description, label in description_to_label.items()])
+
+    plt.gca().legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=2)
     if title is not None:
         plt.title(title)
+
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="3%", pad=0.1)
+    fig.colorbar(coll, cax=cax)
+
+    plt.tight_layout()
     if outfile is not None:
-        plt.savefig(outfile, dpi=300, quality=75, optimize=True)
+        plt.savefig(outfile, dpi=300, quality=75, optimize=True, bbox_inches='tight')
         plt.close()
 
 
@@ -315,7 +357,7 @@ colorbar_threshold_dict = {
 
 
 def all_plots(table_path, out_folder, table_key, stat_names, identifier,
-              outlier_table_key='wells/outliers', bg_dict=None, **well_plot_kwargs):
+              outlier_table_key='wells/default', bg_dict=None, **well_plot_kwargs):
     if not isinstance(stat_names, (list, tuple)):
         raise ValueError(f"stat_names must be either list or tuple, got {type(stat_names)}")
     os.makedirs(out_folder, exist_ok=True)
@@ -334,16 +376,6 @@ def all_plots(table_path, out_folder, table_key, stat_names, identifier,
         unknown_stats = ", ".join(unknown_stats)
         raise ValueError(f"Did not find the names {unknown_stats} in the table columns")
 
-    # get outliers. for now, only well-wise outliers are supported
-    if outlier_table_key is not None:
-        with open_file(table_path, 'r') as f:
-            outlier_column_names, outlier_table = read_table(f, outlier_table_key)
-            outlier_list = [key
-                            for key, value in get_column_dict(outlier_column_names, outlier_table, 'is_outlier').items()
-                            if value]
-
-    plate_name = os.path.split(os.path.split(table_path)[0])[1]
-
     def name_to_channel_name(name):
         if 'IgG' in name:
             return 'serum_IgG'
@@ -352,6 +384,26 @@ def all_plots(table_path, out_folder, table_key, stat_names, identifier,
         if 'IgM' in name:
             return 'serum_IgM'
         raise ValueError(f"Invald name: {name}")
+
+    # get outliers. for now, only well-wise outliers are supported
+    if outlier_table_key is not None:
+        with open_file(table_path, 'r') as f:
+            outlier_column_names, outlier_table = read_table(f, outlier_table_key)
+            # iterate over e.g. ['IgA', 'IgG']
+            outlier_type_dict_per_channel = dict()
+            for channel in {c.split('_')[0] for c in outlier_column_names if 'outlier' in c and c.startswith('Ig')}:
+                outlier_type_dict = get_column_dict(outlier_column_names, outlier_table,
+                                                    channel + '_outlier_type')
+                outlier_dict = get_column_dict(outlier_column_names, outlier_table,
+                                               channel + '_is_outlier')
+                outlier_dict = {key: outlier_type_dict.get(key, '')
+                                for key, is_outlier in outlier_dict.items()
+                                if is_outlier}
+                outlier_type_dict_per_channel[name_to_channel_name(channel)] = outlier_dict
+    else:
+        outlier_type_dict_per_channel = dict()
+
+    plate_name = os.path.split(os.path.split(table_path)[0])[1]
 
     for name in tqdm(stat_names, desc='making plots'):
         try:
@@ -366,17 +418,17 @@ def all_plots(table_path, out_folder, table_key, stat_names, identifier,
         stats_per_file = dict(zip(image_or_well_names, table[:, stat_id].astype('float')))
 
         title = f'{plate_name}\n{name}_{identifier}'
+        channel_name = name_to_channel_name(name)
         if bg_dict is not None:
-            channel_name = name_to_channel_name(name)
             bg_info = bg_dict[channel_name]
             title += f'\n{bg_info}'
 
         outfile = os.path.join(out_folder, f"{plate_name}_{name}_{identifier}.jpg")
         well_plot(stats_per_file,
-                  infected_list=outlier_list,
+                  outlier_dict=outlier_type_dict_per_channel.get(channel_name, {}),
                   print_medians=True,
                   outfile=outfile,
-                  figsize=(11, 6),
+                  figsize=(10, 10),
                   title=title,
                   cmap=cmap,
                   colorbar_range=colorbar_range,
@@ -386,7 +438,7 @@ def all_plots(table_path, out_folder, table_key, stat_names, identifier,
 if __name__ == '__main__':
     result_dir = '/export/home/rremme/Datasets/antibodies/covid-data-vibor/20200406_210102_953/'
     well_plot({name: np.random.rand(1)[0]
-               for name in os.listdir(result_dir)},
+               for name in os.listdir(result_dir) if name.endswith('.tiff')},
               sort=True, wedge_width=0.2, title='test_title', print_medians=True,
               figsize=(14, 8))
     plt.show()
