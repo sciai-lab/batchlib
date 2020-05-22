@@ -230,6 +230,10 @@
     "serum_IgA": 1800.0,
     "serum_IgG": 1300.0
   },
+  "scheme5": {
+    "serum_IgM": "plate/backgrounds",
+    "serum_IgG": 1300.0
+  },
   "test": {
     "serum_IgA": 1800.0,
     "serum_IgG": 1300.0
