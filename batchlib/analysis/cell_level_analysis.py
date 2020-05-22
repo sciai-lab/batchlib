@@ -220,10 +220,15 @@ def _get_bg_correction_dict(table_path, key_in_table, column_name, in_files):
         column_names, table = ['plate_name', column_name], np.array([['dummy_plate', key_in_table]])
     else:
         with open_file(table_path, 'r') as f:
+            if not has_table(f, key_in_table):
+                msg = f"Could not find table {key_in_table} in {table_path}"
+                raise RuntimeError(msg)
             column_names, table = read_table(f, key_in_table)
+
     column_names, table = to_image_table((column_names, table), list(map(in_file_to_image_name, in_files)))
-    assert column_name in column_names, \
-        f'Did not find column {column_name} in background table columns {column_names}'
+    if column_name not in column_names:
+        msg = f'Did not find column {column_name} in background table columns {column_names} for {table_path}'
+        raise RuntimeError(msg)
 
     image_names = table[:, column_names.index('image_name')]
     bg_values = table[:, column_names.index(column_name)]
