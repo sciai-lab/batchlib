@@ -188,7 +188,8 @@ def add_background_estimation(job_list, seg_key, channel_keys, identifier=None):
          ExtractBackground, {
             'build': {'channel_keys': channel_keys,
                       'identifier': identifier,
-                      'cell_seg_key': seg_key}}
+                      'cell_seg_key': seg_key},
+            'run': {'force_recompute': None}}
     ))
     return job_list
 
