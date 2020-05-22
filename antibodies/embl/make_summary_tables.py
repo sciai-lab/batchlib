@@ -10,7 +10,7 @@ from batchlib.analysis.merge_tables import MergeAnalysisTables
 from batchlib.reporting.export_tables import export_tables_for_plate
 from batchlib.preprocessing import get_serum_keys
 
-ROOT = '/g/kreshuk/data/covid/data-processed-scratch'
+ROOT = '/g/kreshuk/data/covid/data-processed'
 
 
 def make_summary_tables(folder, root, redo_tables, marker_name, cell_seg_name):

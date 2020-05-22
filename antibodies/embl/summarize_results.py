@@ -14,8 +14,7 @@ from batchlib.util.plate_visualizations import all_plots
 from batchlib.workflows.cell_analysis import bg_dict_for_plots, default_bg_parameters
 from process_for_manuscript import all_kinder_plates, all_manuscript_plates
 
-# ROOT_OUT = '/g/kreshuk/data/covid/data-processed'
-ROOT_OUT = '/g/kreshuk/data/covid/data-processed-scratch'
+ROOT_OUT = '/g/kreshuk/data/covid/data-processed'
 
 
 def summarize_manuscript_experiment(root, token, clean_up, ignore_incomplete, metadata_repository):
