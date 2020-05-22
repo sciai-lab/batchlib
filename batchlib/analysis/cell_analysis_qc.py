@@ -319,7 +319,7 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
                     continue
                 if val < 0.:
                     is_outlier = 1
-                    outlier_type += f'{name} is negative'
+                    outlier_type += f'{name} is negative;'
 
         if outlier_type == '':
             outlier_type = 'none'
