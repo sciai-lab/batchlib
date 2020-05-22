@@ -82,7 +82,8 @@ def export_cell_tables(folder, output_path, table_name, output_format=None, skip
         with open_file(path, 'r') as f:
             this_columns, this_table = read_table(f, table_name)
 
-            if has_table(f, props_table_name):
+            has_props_table = has_table(f, props_table_name)
+            if has_props_table:
                 prop_cols, prop_table = read_table(f, props_table_name)
                 anchors = np.concatenate([prop_table[:, prop_cols.index('anchor_x')][:, None],
                                           prop_table[:, prop_cols.index('anchor_y')][:, None]], axis=1)
@@ -92,6 +93,15 @@ def export_cell_tables(folder, output_path, table_name, output_format=None, skip
 
         if columns is None:
             columns = initial_columns + this_columns
+
+        if len(anchors) != len(this_table):
+            assert has_props_table
+            label_ids1 = this_table[:, this_columns.index('label_id')]
+            label_ids2 = prop_table[:, prop_cols.index('label_id')]
+            assert len(label_ids2) > len(label_ids1)
+            # we assume it's sorted by label ids !
+            keep_anchors = np.isin(label_ids2, label_ids1)
+            anchors = anchors[keep_anchors]
 
         image_name = os.path.splitext(os.path.split(path)[1])[0]
         well_name = image_name_to_well_name(image_name)
@@ -131,7 +141,10 @@ def export_tables_for_plate(folder,
     well_out = os.path.join(folder, f'{plate_name}_well_table{ext}')
     export_default_table(table_file, 'wells/default', well_out, skip_existing=skip_existing)
 
-    # export the cell segmentation tables
+    # export the cell segmentation tables (if the name is given)
+    if cell_table_name is None:
+        return
+
     im_file = glob(os.path.join(folder, '*.h5'))[0]
     cell_tables_key = f'tables/{cell_table_name}'
     with open_file(im_file, 'r') as f:

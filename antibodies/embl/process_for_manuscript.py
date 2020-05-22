@@ -4,7 +4,7 @@ import os
 from glob import glob
 
 ROOT_IN = '/g/kreshuk/data/covid/covid-data-vibor'
-ROOT_OUT = '/g/kreshuk/data/covid/data-processed-scratch'
+ROOT_OUT = '/g/kreshuk/data/covid/data-processed'
 
 
 def is_processed(folder):

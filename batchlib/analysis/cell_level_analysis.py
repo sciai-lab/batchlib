@@ -5,6 +5,7 @@ from concurrent import futures
 
 import numpy as np
 import skimage.morphology
+from scipy.stats import ttest_ind
 from tqdm.auto import tqdm
 from glob import glob
 
@@ -100,6 +101,12 @@ def compute_ratios(not_infected_properties, infected_properties, channel_name_di
         mad = not_infected_global_properties[serum_key][f'mad_of_cell_{sums_or_means}']
         return (inf - not_inf) / mad
 
+    @nan_on_exception
+    def p_value(key, key2, serum_key):
+        return ttest_ind(not_infected_properties[serum_key][key],
+                         infected_properties[serum_key][key2],
+                         equal_var=False)[1]
+
     # For now, I removed 'means_over_pixels'.
     # If we want to look at this, we should also consider the same with median / quantiles
     for table_key, channel_key in channel_name_dict.items():
@@ -108,11 +115,12 @@ def compute_ratios(not_infected_properties, infected_properties, channel_name_di
                 [f'mean_of_{sums_or_means}', f'mean_of_cell_{sums_or_means}', f'mean_of_cell_{sums_or_means}'],
                 [f'q0.5_of_{sums_or_means}', f'q0.5_of_cell_{sums_or_means}', f'q0.5_of_cell_{sums_or_means}'],
                 [f'q0.7_vs_q0.3_of_{sums_or_means}', f'q0.7_of_cell_{sums_or_means}', f'q0.3_of_cell_{sums_or_means}'],
-                [f'q0.3_vs_q0.7_of_{sums_or_means}', f'q0.3_of_cell_{sums_or_means}', f'q0.7_of_cell_{sums_or_means}'],
+                [f'q0.3_vs_q0.7_of_{sums_or_means}', f'q0.3_of_cell_{sums_or_means}', f'q0.7_of_cell_{sums_or_means}']
             ]:
                 result[f'{table_key}_ratio_of_{key_result}'] = serum_ratio(key1, key2, channel_key)
                 result[f'{table_key}_dos_of_{key_result}'] = diff_over_sum(key1, key2, channel_key)
                 result[f'{table_key}_diff_of_{key_result}'] = diff(key1, key2, channel_key)
+                result[f'{table_key}_pvalue_of_{key_result}'] = p_value(key1, key2, channel_key)
 
             result[f'{table_key}_robust_z_score_{sums_or_means}'] = robust_z_score(sums_or_means, channel_key)
 
@@ -220,10 +228,15 @@ def _get_bg_correction_dict(table_path, key_in_table, column_name, in_files):
         column_names, table = ['plate_name', column_name], np.array([['dummy_plate', key_in_table]])
     else:
         with open_file(table_path, 'r') as f:
+            if not has_table(f, key_in_table):
+                msg = f"Could not find table {key_in_table} in {table_path}"
+                raise RuntimeError(msg)
             column_names, table = read_table(f, key_in_table)
+
     column_names, table = to_image_table((column_names, table), list(map(in_file_to_image_name, in_files)))
-    assert column_name in column_names, \
-        f'Did not find column {column_name} in background table columns {column_names}'
+    if column_name not in column_names:
+        msg = f'Did not find column {column_name} in background table columns {column_names} for {table_path}'
+        raise RuntimeError(msg)
 
     image_names = table[:, column_names.index('image_name')]
     bg_values = table[:, column_names.index(column_name)]

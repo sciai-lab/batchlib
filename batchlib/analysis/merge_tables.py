@@ -13,9 +13,9 @@ logger = get_logger('Workflow.BatchJob.MergeAnalysisTables')
 # - reference table:  score, number of cells and outliers
 # see also https://github.com/hci-unihd/batchlib/issues/91
 DEFAULT_COMMON_NAME_PATTERNS = ('ratio_of_q0.5', 'robust_z_score', 'mad', 'q0.5_of_cell',
-                                'ratio_of_mean', 'mean_of_cell')
+                                'ratio_of_mean', 'mean_of_cell', 'pvalue_of_mean', 'is_outlier', 'outlier_type')
 DEFAULT_REFERENCE_NAME_PATTERNS = ('score', 'n_cells', 'n_infected', 'n_control', 'n_outlier_cells',
-                                   'fraction_infected', 'is_outlier', 'outlier_type')
+                                   'fraction_infected')
 
 
 # we need to remove the first occurrence of the feature identifier if
