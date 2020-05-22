@@ -203,7 +203,7 @@ class MergeAnalysisTables(BatchJobOnContainer):
         if any(pattern in name for pattern in dont_add_prefix_patterns) and not override_:
             return name.replace('serum', '').replace('of_cell_', '')
         else:
-            return prefix + name.replace('serum', '').replace('of_cell_', '')
+            return prefix + '_' + name.replace('serum', '').replace('of_cell_', '').lstrip('_')
 
     def _get_table_prefix(self, table_name):
         return table_name.replace('serum_', '')
