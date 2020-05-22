@@ -33,7 +33,7 @@ def parse_channel_names(input_name):
 def get_serum_keys(folder):
     mapping_file = os.path.join(folder, 'channel_mapping.json')
     if not os.path.exists(mapping_file):
-        raise ValueError("The input folder %s does not contain channel_mapping.json" % mapping_file)
+        raise ValueError("The input folder %s does not contain channel_mapping.json" % folder)
     with open(mapping_file) as f:
         channel_mapping = json.load(f)
     names = list(channel_mapping.values())
