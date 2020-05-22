@@ -115,12 +115,12 @@ def compute_ratios(not_infected_properties, infected_properties, channel_name_di
                 [f'mean_of_{sums_or_means}', f'mean_of_cell_{sums_or_means}', f'mean_of_cell_{sums_or_means}'],
                 [f'q0.5_of_{sums_or_means}', f'q0.5_of_cell_{sums_or_means}', f'q0.5_of_cell_{sums_or_means}'],
                 [f'q0.7_vs_q0.3_of_{sums_or_means}', f'q0.7_of_cell_{sums_or_means}', f'q0.3_of_cell_{sums_or_means}'],
-                [f'q0.3_vs_q0.7_of_{sums_or_means}', f'q0.3_of_cell_{sums_or_means}', f'q0.7_of_cell_{sums_or_means}'],
-                [f'p-value_{sums_or_means}', sums_or_means, sums_or_means],
+                [f'q0.3_vs_q0.7_of_{sums_or_means}', f'q0.3_of_cell_{sums_or_means}', f'q0.7_of_cell_{sums_or_means}']
             ]:
                 result[f'{table_key}_ratio_of_{key_result}'] = serum_ratio(key1, key2, channel_key)
                 result[f'{table_key}_dos_of_{key_result}'] = diff_over_sum(key1, key2, channel_key)
                 result[f'{table_key}_diff_of_{key_result}'] = diff(key1, key2, channel_key)
+                result[f'{table_key}_pvalue_of_{key_result}'] = p_value(key1, key2, channel_key)
 
             result[f'{table_key}_robust_z_score_{sums_or_means}'] = robust_z_score(sums_or_means, channel_key)
 
