@@ -214,13 +214,13 @@ def get_barrel_corrector_folder(config):
     def isU(plate_name):
         return 'plateU' in plate_name
 
-    def isRecentT(folder):
+    def isRecentT(plate_name):
         isT = 'plateT' in plate_name
         if isT:
             try:
-                plate_id = int(plate_name[pre_len:pre_len+1])
-            except ValueError:
                 plate_id = int(plate_name[pre_len:pre_len+2])
+            except ValueError:
+                plate_id = int(plate_name[pre_len:pre_len+1])
             return plate_id > 8
         else:
             return False
