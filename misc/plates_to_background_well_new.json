@@ -84,7 +84,7 @@
   },
   "plate8rep2_20200502_182438_996": {
     "serum_IgG": 1500,
-    "serum_IgM": "plates/background"
+    "serum_IgM": "plates/backgrounds"
   },
   "plate9_2rep1_20200506_163349_413": [
     "H01"
