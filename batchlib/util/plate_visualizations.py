@@ -344,6 +344,15 @@ def all_plots(table_path, out_folder, table_key, stat_names, identifier,
 
     plate_name = os.path.split(os.path.split(table_path)[0])[1]
 
+    def name_to_channel_name(name):
+        if 'IgG' in name:
+            return 'serum_IgG'
+        if 'IgA' in name:
+            return 'serum_IgA'
+        if 'IgM' in name:
+            return 'serum_IgM'
+        raise ValueError(f"Invald name: {name}")
+
     for name in tqdm(stat_names, desc='making plots'):
         try:
             cmap, colorbar_range = make_colormap_absolute(colorbar_threshold_dict[name])
@@ -358,7 +367,7 @@ def all_plots(table_path, out_folder, table_key, stat_names, identifier,
 
         title = f'{plate_name}\n{name}_{identifier}'
         if bg_dict is not None:
-            channel_name = 'serum_IgG' if 'IgG' in name else 'serum_IgA'
+            channel_name = name_to_channel_name(name)
             bg_info = bg_dict[channel_name]
             title += f'\n{bg_info}'
 
