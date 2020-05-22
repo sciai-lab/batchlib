@@ -50,6 +50,18 @@ def size_filter(seg, min_size=100):
     return seg
 
 
+def get_invert(plate_name, base_name):
+    if (plate_name == "20200417_172611_193_IgG" and
+            base_name == "WellC06_PointC06_0003_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0201"):
+        return True
+
+    if (plate_name == "plate7rep1_20200426_103425_693_IgG" and
+            base_name == "WellA09_PointA09_0008_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0080"):
+        return True
+
+    return False
+
+
 def merge_gt_volume(data_path, seg_gt_path, infected_gt_path,
                     out_path, plate_name, base_name,
                     check=False, raw_keys=DEFAULT_RAW_KEYS):
@@ -79,8 +91,7 @@ def merge_gt_volume(data_path, seg_gt_path, infected_gt_path,
     assert infected_mask.shape == shape
 
     print("Map infected labels ...")
-    invert_infected = (plate_name == "20200417_172611_193_IgG" and
-                       base_name == "WellC06_PointC06_0003_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0201")
+    invert_infected = get_invert(plate_name, base_name)
     (new_infected_mask,
      infected_labels_cols,
      infected_labels_table) = get_infected_labels(seg, infected_mask,
@@ -185,8 +196,7 @@ if __name__ == '__main__':
     gt_root_path = '/home/pape/Work/covid/antibodies-nuclei/groundtruth'
     data_path = '/home/pape/Work/covid/antibodies-nuclei/groundtruth/data'
     out_folder = 'merged_gt'
-    check = False
+    check = True
 
-    # TODO make sure we have everything and then set skip missing to false
-    check_files(gt_root_path, skip_mising=True)
+    check_files(gt_root_path, skip_mising=False)
     merge_all(gt_root_path, out_folder, data_path, check=check)
