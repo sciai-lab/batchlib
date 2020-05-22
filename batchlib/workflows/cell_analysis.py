@@ -42,6 +42,10 @@ DEFAULT_PLOT_NAMES = ['ratio_of_q0.5_of_means',
                       'robust_z_score_sums',
                       'robust_z_score_means']
 
+# the intensity thresholds are derived from 3 * mad background, see
+# https://github.com/hci-unihd/antibodies-analysis-issues/issues/84#issuecomment-632658726
+MIN_SERUM_INTENSITIES = {'serum_IgG': 301.23, 'serum_IgA': 392.76}
+
 
 def get_analysis_parameter(config, background_parameters):
     # collect all relevant analysis paramter, so that we can
@@ -418,6 +422,11 @@ def core_workflow_tasks(config, name, feature_identifier):
                 'feature_identifier': feature_identifier,
                 'identifier': identifier}
         }))
+
+        well_qc_criteria = DEFAULT_WELL_OUTLIER_CRITERIA.copy()
+        min_infected_intensity_for_channel = MIN_SERUM_INTENSITIES.get(serum_key, None)
+        well_qc_criteria.update({'min_infected_intensity': min_infected_intensity_for_channel})
+
         job_list.append((WellLevelQC, {
             'build': {
                 'cell_seg_key': config.seg_key,
@@ -426,6 +435,7 @@ def core_workflow_tasks(config, name, feature_identifier):
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'feature_identifier': feature_identifier,
+                'outlier_criteria': well_qc_criteria,
                 'identifier': identifier}
         }))
         job_list.append((CellLevelAnalysis, {

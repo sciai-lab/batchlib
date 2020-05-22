@@ -28,7 +28,8 @@ DEFAULT_IMAGE_OUTLIER_CRITERIA = {'max_number_cells': 1000,
 
 DEFAULT_WELL_OUTLIER_CRITERIA = {'min_number_control_cells': 100,  # preprint final
                                  'min_fraction_of_control_cells': None,  # redundant
-                                 'check_ratios': True}
+                                 'check_ratios': True,
+                                 'min_infected_intensity': None}  # will be set per channel
 
 
 class CellLevelQC(CellLevelAnalysisBase):
@@ -317,9 +318,19 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
             for name, val in ratios.items():
                 if not name.startswith('ratio'):
                     continue
-                if val < 0.:
+                if val < 0. or np.isnan(val):
                     is_outlier = 1
                     outlier_type += f'{name} is negative'
+
+        min_infected_intensity = self.outlier_criteria['min_infected_intensity']
+        if min_infected_intensity is not None:
+            # TODO is this the correct stat?
+            intensity_key = f'{self.serum_key}_means'
+            # TODO do we take the median ?
+            infected_intensity = np.median(infected_stats[intensity_key])
+            if infected_intensity < min_infected_intensity:
+                is_outlier = 1
+                outlier_type += "too low infected cell intensity"
 
         if outlier_type == '':
             outlier_type = 'none'
