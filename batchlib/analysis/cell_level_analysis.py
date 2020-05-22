@@ -5,6 +5,7 @@ from concurrent import futures
 
 import numpy as np
 import skimage.morphology
+from scipy.stats import ttest_ind
 from tqdm.auto import tqdm
 from glob import glob
 
@@ -100,6 +101,12 @@ def compute_ratios(not_infected_properties, infected_properties, channel_name_di
         mad = not_infected_global_properties[serum_key][f'mad_of_cell_{sums_or_means}']
         return (inf - not_inf) / mad
 
+    @nan_on_exception
+    def p_value(key, key2, serum_key):
+        return ttest_ind(not_infected_properties[serum_key][key],
+                         infected_properties[serum_key][key2],
+                         equal_var=False)[1]
+
     # For now, I removed 'means_over_pixels'.
     # If we want to look at this, we should also consider the same with median / quantiles
     for table_key, channel_key in channel_name_dict.items():
@@ -109,6 +116,7 @@ def compute_ratios(not_infected_properties, infected_properties, channel_name_di
                 [f'q0.5_of_{sums_or_means}', f'q0.5_of_cell_{sums_or_means}', f'q0.5_of_cell_{sums_or_means}'],
                 [f'q0.7_vs_q0.3_of_{sums_or_means}', f'q0.7_of_cell_{sums_or_means}', f'q0.3_of_cell_{sums_or_means}'],
                 [f'q0.3_vs_q0.7_of_{sums_or_means}', f'q0.3_of_cell_{sums_or_means}', f'q0.7_of_cell_{sums_or_means}'],
+                [f'p-value_{sums_or_means}', sums_or_means, sums_or_means],
             ]:
                 result[f'{table_key}_ratio_of_{key_result}'] = serum_ratio(key1, key2, channel_key)
                 result[f'{table_key}_dos_of_{key_result}'] = diff_over_sum(key1, key2, channel_key)
