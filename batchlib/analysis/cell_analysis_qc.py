@@ -320,7 +320,7 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
                     continue
                 if val < 0. or np.isnan(val):
                     is_outlier = 1
-                    outlier_type += f'{name} is negative'
+                    outlier_type += f'{name} is negative;'
 
         min_infected_intensity = self.outlier_criteria['min_infected_intensity']
         if min_infected_intensity is not None:

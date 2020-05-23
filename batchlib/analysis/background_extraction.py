@@ -50,8 +50,8 @@ class BackgroundFromWells(CellLevelAnalysisWithTableBase):
 
         well_names = [image_name_to_well_name(in_file_to_image_name(in_file))
                       for in_file in input_files]
-        if not all(well in well_names for well in self.well_list):
-            raise RuntimeError("Could not find all min wells")
+        if not all([well in well_names for well in self.well_list]):
+            raise RuntimeError(f"Could not find all min wells")
         inputs = [in_file for in_file, well_name in zip(input_files, well_names)
                   if well_name in self.well_list]
 
