@@ -327,7 +327,7 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
             infected_intensity = np.median(infected_stats[self.serum_key]['means'])
             if infected_intensity < min_infected_intensity:
                 is_outlier = 1
-                outlier_type += "too low infected cell intensity"
+                outlier_type += "too low infected cell intensity;"
 
         if outlier_type == '':
             outlier_type = 'none'
