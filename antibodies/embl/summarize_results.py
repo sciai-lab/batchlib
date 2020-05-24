@@ -129,7 +129,7 @@ if __name__ == '__main__':
         redo_summary(args.root)
     else:
         clean_up = token is not None
-        # summarize_kinder_experiment(args.root, token, clean_up, bool(args.ignore_incomplete),
-        #                             metadata_repository=metadata_repository)
+        summarize_kinder_experiment(args.root, token, clean_up, bool(args.ignore_incomplete),
+                                    metadata_repository=metadata_repository)
         summarize_manuscript_experiment(args.root, token, clean_up, bool(args.ignore_incomplete),
                                         metadata_repository=metadata_repository)
