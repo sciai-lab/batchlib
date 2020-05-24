@@ -2,7 +2,7 @@ import csv
 import glob
 import os
 
-from batchlib.util.logging import get_logger
+from batchlib.util import get_logger
 
 logger = get_logger('Workflow.Outliers')
 

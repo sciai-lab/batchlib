@@ -99,25 +99,23 @@ def _create_wells(plate_name, plate_dir, cohort_id_parser, elisa_results_parser)
     wells = []
     for well_name, well_files in well_dict.items():
         cohort_id = plate_cohorts.get(well_name, None)
-        patient_type = None
-        IgG_value, IgA_value = None, None
-        if cohort_id is not None:
-            patient_type = cohort_id[0]
-            IgG_value, IgA_value = elisa_results_parser.get_elisa_values(cohort_id)
 
-        wells.append(
-            {
-                "name": well_name,
-                # assume all wells are valid for now
-                "outlier": 0,
-                "outlier_type": "manual",
-                "images": _create_images(well_name, well_files, outlier_predicate),
-                "cohort_id": cohort_id,
-                "patient_type": patient_type,
-                "elisa_IgG": IgG_value,
-                "elisa_IgA": IgA_value
-            }
-        )
+        well = {
+            "name": well_name,
+            # assume all wells are valid for now
+            "outlier": 0,
+            "outlier_type": "manual",
+            "images": _create_images(well_name, well_files, outlier_predicate),
+            "cohort_id": cohort_id
+        }
+
+        if cohort_id is not None:
+            well["patient_type"] = cohort_id[0]
+            test_results = elisa_results_parser.elisa_results.get(cohort_id, {})
+            for k, v in test_results.items():
+                well[k] = v
+
+        wells.append(well)
 
     return wells
 
