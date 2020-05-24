@@ -33,10 +33,11 @@ def import_elisa_results(db):
                     f"Saving elisa results for plate: {plate_name}, well: {well['name']}, cohort_id: {cohort_id}")
                 # mark doc to be replaced
                 should_replace = True
+
                 # add elisa results to the well
-                IgG_value, IgA_value = elisa_results_parser.elisa_results[cohort_id]
-                well['elisa_IgG'] = IgG_value
-                well['elisa_IgA'] = IgA_value
+                test_results = elisa_results_parser.elisa_results[cohort_id]
+                for k, v in test_results.items():
+                    well[k] = v
 
         if should_replace:
             assay_metadata.replace_one({"name": plate_name}, plate_doc)

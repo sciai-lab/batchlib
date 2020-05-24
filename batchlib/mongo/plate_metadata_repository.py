@@ -8,6 +8,12 @@ from batchlib.util import get_logger
 
 logger = get_logger('PlateMetadataRepository')
 
+TEST_NAMES = ['ELISA IgG', 'ELISA IgA', 'ELISA IgM',
+              'mpBio IgG', 'mpBio IgM',
+              'Luminex', 'NT', 'Roche', 'Abbot',
+              'Rapid test IgM', 'Rapid test IgG',
+              'IF IgG', 'IF IgA']
+
 
 class PlateMetadataRepository:
     """
@@ -88,24 +94,29 @@ class PlateMetadataRepository:
 
         return result
 
-    def get_elisa_results(self, plate_name):
+    def get_elisa_results(self, plate_name, field_names=TEST_NAMES):
         """
         Returns a dict
         {
-            well1: (elisa_IgG1, elisa_IgA1),
-            well2: (elisa_IgG2, elisa_IgA2),
+            well1: [test_value1, test_value2, ...],
+            well2: [test_value1, test_value2, ...],
             ....
         }
-        where `well*` is a well name and `elisa_IgG*`, `elisa_IgA*` are values of Elisa test for IgG and IgA
-        serum respectively
+        where `well*` is a well name and `test_value*` are values of a given test (see TEST_NAMES).
         """
         wells = self._get_wells(plate_name)
         if wells is None:
             return {}
         result = {}
         for well in wells:
-            if 'elisa_IgG' in well:
-                result[well['name']] = (well['elisa_IgG'], well['elisa_IgA'])
+            test_results = []
+            for fn in field_names:
+                v = None
+                if fn in well:
+                    v = well[fn]
+                test_results.append(v)
+
+            result[well['name']] = test_results
 
         return result
 

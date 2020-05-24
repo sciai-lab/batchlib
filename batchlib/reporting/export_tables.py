@@ -4,6 +4,7 @@ from glob import glob
 import numpy as np
 import pandas as pd
 
+from batchlib.mongo.plate_metadata_repository import TEST_NAMES
 from batchlib.util import (get_logger, read_table, open_file, has_table,
                            image_name_to_site_name, image_name_to_well_name)
 
@@ -197,17 +198,17 @@ def _get_db_metadata(well_names, metadata_repository, plate_name):
 
     assert len(well_names) > 0 and isinstance(well_names[0], str)
     cohort_ids = metadata_repository.get_cohort_ids(plate_name)
-    elisa_results = metadata_repository.get_elisa_results(plate_name)
-
-    additional_values = []
+    elisa_results = metadata_repository.get_elisa_results(plate_name, TEST_NAMES)
     for well_name in well_names:
         cohort_id = cohort_ids.get(well_name, None)
         if cohort_id is None:
             logger.warning(f'Plate: {plate_name}, well: {well_name} has no cohort_id metadata')
         cohort = _get_cohort(cohort_id)
         cohort_type = _get_cohort_type(cohort_id)
-        elisa_IgG, elisa_IgA = elisa_results.get(well_name, (None, None))
-        additional_values.append([cohort_id, cohort, elisa_IgG, elisa_IgA, cohort_type])
+        additional_values = [cohort_id, cohort, cohort_type]
+        # add results from Elisa, Roche, Abbot, Luminex tests
+        test_results = elisa_results.get(well_name, [None] * len(TEST_NAMES))
+        additional_values.extend(test_results)
 
     return np.array(additional_values)
 
@@ -239,7 +240,7 @@ def export_scores(folder_list, output_path,
 
     # append cohort_id, elisa results and cohort_type (positive/control/unknow) if we have db
     if metadata_repository is not None:
-        db_metadata = ['cohort_id', 'cohort', 'elisa_IgG', 'elisa_IgA', 'cohort_type']
+        db_metadata = ['cohort_id', 'cohort', 'cohort_type'] + TEST_NAMES
         columns += db_metadata
 
     # second pass: load the tables

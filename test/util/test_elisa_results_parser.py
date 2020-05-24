@@ -8,27 +8,33 @@ class TestElisaResultsParser(unittest.TestCase):
     def test_elisa_results_parsing(self):
         elisa_results_parser = ElisaResultsParser()
 
-        igg, iga = elisa_results_parser.get_elisa_values('C14d')
-        assert igg == 0.96
-        assert iga == 0.39
+        results = elisa_results_parser.get_elisa_values('C14d', test_names=['ELISA IgG', 'ELISA IgA'])
+        assert results[0] == 0.96
+        assert results[1] == 0.39
 
-        igg, iga = elisa_results_parser.get_elisa_values('C23i')
-        assert igg == 6.36
-        assert iga == 6.16
+        results = elisa_results_parser.get_elisa_values('C23i', test_names=['ELISA IgG', 'ELISA IgA'])
+        assert results[0] == 6.36
+        assert results[1] == 6.16
 
-        igg, iga = elisa_results_parser.get_elisa_values('Z24')
-        assert igg == 0.05
-        assert math.isnan(iga)
+        results = elisa_results_parser.get_elisa_values('Z24', test_names=['ELISA IgG', 'ELISA IgA'])
+        assert results[0] == 0.05
+        assert results[1] is None
 
+        results = elisa_results_parser.get_elisa_values('A9', test_names=['ELISA IgG', 'ELISA IgA'])
+        assert results[0] == 0.14
+        assert results[1] == 0.12
 
-        igg, iga = elisa_results_parser.get_elisa_values('A9')
-        assert igg == 0.14
-        assert iga == 0.12
+        results = elisa_results_parser.get_elisa_values('P12', test_names=['ELISA IgG', 'ELISA IgA'])
+        assert results[0] == 7.81
+        assert results[1] == 11
 
-        igg, iga = elisa_results_parser.get_elisa_values('P12')
-        assert igg == 7.81
-        assert iga == 11
+        results = elisa_results_parser.get_elisa_values('3-0010 K', test_names=['ELISA IgG', 'ELISA IgA'])
+        assert results[0] == 0.24
+        assert results[1] is None
 
-        igg, iga = elisa_results_parser.get_elisa_values('3-0010 K')
-        assert igg == 0.24
-        assert math.isnan(iga)
+        results = elisa_results_parser.get_elisa_values('K97', test_names=['IF IgG', 'IF IgA', 'Roche', 'Abbot', 'Luminex'])
+        assert results[0] == 1.07
+        assert results[1] == 1.13
+        assert results[2] == 'pos'
+        assert results[3] == 'neg'
+        assert results[4] == 'neg'
