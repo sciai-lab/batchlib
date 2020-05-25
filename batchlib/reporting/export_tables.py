@@ -17,6 +17,15 @@ DEFAULT_SCORE_PATTERNS = ('IgG_robust_z_score_means', 'IgG_ratio_of_q0.5_of_mean
 logger = get_logger('TableExporter')
 
 
+def _round_column(col, decim=2):
+    def _round(x):
+        if isinstance(x, float):
+            return round(x, decim)
+        return x
+
+    return col.apply(_round)
+
+
 def format_to_extension(format_):
     if format_ not in SUPPORTED_TABLE_FORMATS:
         supported_formats = list(SUPPORTED_TABLE_FORMATS.keys())
@@ -44,6 +53,8 @@ def export_table(columns, table, output_path, output_format=None):
         raise ValueError(f"Format {output_format} is not supported, expect one of {supported_formats}")
 
     df = pd.DataFrame(table, columns=columns)
+    # round floats to 2 decimal places
+    df = df.apply(_round_column)
     if output_format == 'excel':
         df.to_excel(output_path, index=False)
     elif output_format == 'csv':
