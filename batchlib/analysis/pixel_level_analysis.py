@@ -5,7 +5,7 @@ import numpy as np
 from tqdm import tqdm
 import scipy.stats
 
-from batchlib.util.logging import get_logger
+from batchlib.util.logger import get_logger
 from ..base import BatchJobWithSubfolder
 from ..util.io import open_file
 

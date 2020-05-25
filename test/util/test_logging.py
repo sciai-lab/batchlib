@@ -2,7 +2,7 @@ import tempfile
 import unittest
 import os
 
-from batchlib.util.logging import get_logger, add_file_handler
+from batchlib.util.logger import get_logger, add_file_handler
 
 
 class TestLogging(unittest.TestCase):

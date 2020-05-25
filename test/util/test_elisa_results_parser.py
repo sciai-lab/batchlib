@@ -38,3 +38,7 @@ class TestElisaResultsParser(unittest.TestCase):
         assert results[2] == 'pos'
         assert results[3] == 'neg'
         assert results[4] == 'neg'
+
+        results = elisa_results_parser.get_elisa_values('P21', test_names=['ELISA IgG', 'ELISA IgA'])
+        assert results[0] == 2.14
+        assert results[1] == 2.08
