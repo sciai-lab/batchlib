@@ -22,6 +22,13 @@ DEFAULT_REFERENCE_NAME_PATTERNS = ('score', 'n_cells', 'n_infected', 'n_control'
 # we get it twice, because of stuff we do to the table key beforehand ...
 def modify_column_names(col_names, feature_identifiers):
     def modify_name(name):
+
+        # special case for the outlier columns
+        if 'outlier' in name:
+            for idf in feature_identifiers:
+                name = name.replace(f'{idf}_', '')
+            return name
+
         counts = 0
         begins = {}
         for idf in feature_identifiers:
@@ -35,7 +42,8 @@ def modify_column_names(col_names, feature_identifiers):
             to_remove = [idf for idf, beg in begins.items() if beg == begin]
             assert len(to_remove) == 1
             to_remove = to_remove[0] + '_'
-            return name.replace(to_remove, '')
+            name = name[:begin] + name[begin+len(to_remove):]
+            return name
         else:
             return name
 
