@@ -9,7 +9,7 @@ from scipy.stats import ttest_ind
 from tqdm.auto import tqdm
 from glob import glob
 
-from batchlib.util.logging import get_logger
+from batchlib.util.logger import get_logger
 from ..base import BatchJobOnContainer
 from ..util.image import seg_to_edges
 from ..util.io import (open_file, image_name_to_site_name, image_name_to_well_name, get_column_dict,

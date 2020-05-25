@@ -24,6 +24,7 @@ def _validate_elisa_value(elisa_value):
             if '>' in v:
                 v = v[v.find('>') + 1:]
             try:
+                v = v.replace(',', '.')
                 return float(v)
             except Exception:
                 return float('nan')
@@ -48,7 +49,9 @@ def _default_converter(value):
 VALUE_CONVERTERS = {
     'ELISA IgG': _validate_elisa_value,
     'ELISA IgA': _validate_elisa_value,
-    'ELISA IgM': _validate_elisa_value
+    'ELISA IgM': _validate_elisa_value,
+    'IF IgG': _validate_elisa_value,
+    'IF IgA': _validate_elisa_value
 }
 
 
