@@ -1,8 +1,11 @@
 import os
+from concurrent import futures
+from functools import partial
 from glob import glob
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 from batchlib.mongo.plate_metadata_repository import TEST_NAMES
 from batchlib.util import (get_logger, read_table, open_file, has_table,
@@ -65,7 +68,8 @@ def export_default_table(table_file, table_name, output_path, output_format=None
     export_table(columns, table, output_path, output_format)
 
 
-def export_cell_tables(folder, output_path, table_name, output_format=None, skip_existing=True):
+def export_cell_tables(folder, output_path, table_name,
+                       output_format=None, skip_existing=True, n_jobs=1):
     if os.path.exists(output_path) and skip_existing:
         return
 
@@ -74,12 +78,12 @@ def export_cell_tables(folder, output_path, table_name, output_format=None, skip
 
     plate_name = os.path.split(folder)[1]
     initial_columns = ['plate_name', 'well_name', 'site_name', 'anchor_x', 'anchor_y']
-
-    columns = None
-    table = []
-
     props_table_name = 'cell_segmentation/properties'
-    for path in files:
+
+    def _load_table(path, columns=None):
+
+        return_cols = columns is None
+
         with open_file(path, 'r') as f:
             this_columns, this_table = read_table(f, table_name)
 
@@ -116,9 +120,22 @@ def export_cell_tables(folder, output_path, table_name, output_format=None, skip
                                     site_col[:, None],
                                     anchors,
                                     this_table], axis=1)
-        table.append(res_table)
+        if return_cols:
+            return res_table, columns
+        else:
+            return res_table
 
-    table = np.concatenate(table, axis=0)
+    table0, columns = _load_table(files[0])
+    tables = [table0]
+
+    _load_tab = partial(_load_table, columns=columns)
+
+    with futures.ThreadPoolExecutor(n_jobs) as tp:
+        tables += list(tqdm(tp.map(_load_tab, files[1:]),
+                            total=len(files) - 1,
+                            desc=f"Loading {table_name} cell tables"))
+
+    table = np.concatenate(tables, axis=0)
     export_table(columns, table, output_path, output_format)
 
 
