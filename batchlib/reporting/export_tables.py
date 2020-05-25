@@ -199,16 +199,18 @@ def _get_db_metadata(well_names, metadata_repository, plate_name):
     assert len(well_names) > 0 and isinstance(well_names[0], str)
     cohort_ids = metadata_repository.get_cohort_ids(plate_name)
     elisa_results = metadata_repository.get_elisa_results(plate_name, TEST_NAMES)
+    additional_values = []
     for well_name in well_names:
         cohort_id = cohort_ids.get(well_name, None)
         if cohort_id is None:
             logger.warning(f'Plate: {plate_name}, well: {well_name} has no cohort_id metadata')
         cohort = _get_cohort(cohort_id)
         cohort_type = _get_cohort_type(cohort_id)
-        additional_values = [cohort_id, cohort, cohort_type]
+        cohort_row = [cohort_id, cohort, cohort_type]
         # add results from Elisa, Roche, Abbot, Luminex tests
         test_results = elisa_results.get(well_name, [None] * len(TEST_NAMES))
-        additional_values.extend(test_results)
+        cohort_row.extend(test_results)
+        additional_values.append(cohort_row)
 
     return np.array(additional_values)
 
