@@ -94,10 +94,12 @@ The workflow logger (named `Workflow`) is where all of the file/console handlers
 logger is a child of the `Workflow` logger, e.g. `Workflow.MyJob`. All log events in the child loggers will automatically
 be propagated to the parent `Workfow` logger. As an example:
 ```python
-log1 = get_logger('Workflow') # get root logger
-add_file_handler(log1, 'work_dir', 'workflow_name')
+from batchlib.util.logger import add_file_handler, get_logger
+
+root_logger = get_logger('Workflow') # get root logger
+add_file_handler(root_logger, 'work_dir', 'workflow_name') # add file handler to a given workflow
 
 # in the job class or somewhere else
-l2 = get_logger('Workflow.Job1') # this is the child logger of the 'Workfow' logger
-l2.info('some message') # the message will be propagated to all the handlers registered in the parent logger
+logger = get_logger('Workflow.Job1') # this is the child logger of the 'Workfow' logger
+logger.info('some message') # the message will be propagated to all the handlers registered in the parent logger, i.e. STDOUT and FILE
 ```
