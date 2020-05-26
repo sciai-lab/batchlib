@@ -720,13 +720,13 @@ filename,label
 
 "WellE01_PointE01_0008_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0359.tiff",0
 
-"WellE02_PointE02_0000_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0360.tiff",0
+"WellE02_PointE02_0000_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0360.tiff",1
 
-"WellE02_PointE02_0001_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0361.tiff",0
+"WellE02_PointE02_0001_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0361.tiff",1
 
 "WellE02_PointE02_0002_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0362.tiff",0
 
-"WellE02_PointE02_0003_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0363.tiff",0
+"WellE02_PointE02_0003_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0363.tiff",1
 
 "WellE02_PointE02_0004_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0364.tiff",0
 
@@ -882,7 +882,7 @@ filename,label
 
 "WellF01_PointF01_0008_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0512.tiff",0
 
-"WellF02_PointF02_0000_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0495.tiff",0
+"WellF02_PointF02_0000_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0495.tiff",1
 
 "WellF02_PointF02_0001_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0496.tiff",0
 
@@ -1334,9 +1334,9 @@ filename,label
 
 "WellH09_PointH09_0000_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0594.tiff",0
 
-"WellH09_PointH09_0001_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0595.tiff",0
+"WellH09_PointH09_0001_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0595.tiff",1
 
-"WellH09_PointH09_0002_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0596.tiff",0
+"WellH09_PointH09_0002_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0596.tiff",1
 
 "WellH09_PointH09_0003_ChannelDAPI,WF_GFP,TRITC,WF_Cy5,DIA_Seq0597.tiff",0
 
