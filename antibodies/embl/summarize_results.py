@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 from datetime import date
 from glob import glob
@@ -12,28 +13,18 @@ from batchlib.mongo.plate_metadata_repository import PlateMetadataRepository
 from batchlib.reporting import make_and_upload_summary, SlackSummaryWriter
 from batchlib.util.plate_visualizations import all_plots
 from batchlib.workflows.cell_analysis import bg_dict_for_plots, default_bg_parameters
-from process_for_manuscript import all_kinder_plates, all_manuscript_plates
+
+import process_for_manuscript as plates
+# from process_for_manuscript import all_kinder_plates, all_manuscript_plates
 
 ROOT_OUT = '/g/kreshuk/data/covid/data-processed'
+EXPERIMENT_NAMES = ['kinder', 'manuscript']
 
 
-def summarize_manuscript_experiment(root, token, clean_up, ignore_incomplete, metadata_repository):
-    plate_names = all_manuscript_plates()
-    folders = [os.path.join(root, name) for name in plate_names]
-
+def summarize_experiment(folders, name, root, token, clean_up,
+                         ignore_incomplete, metadata_repository):
     today = date.today().strftime('%Y%m%d')
-    experiment = f'manuscript_plates_{today}'
-    make_and_upload_summary(folders, experiment, token=token, clean_up=clean_up,
-                            ignore_incomplete=ignore_incomplete,
-                            metadata_repository=metadata_repository)
-
-
-def summarize_kinder_experiment(root, token, clean_up, ignore_incomplete, metadata_repository):
-    plate_names = all_kinder_plates()
-    folders = [os.path.join(root, name) for name in plate_names]
-
-    today = date.today().strftime('%Y%m%d')
-    experiment = f'kinder_study_plates_{today}'
+    experiment = f'{name}_plates_{today}'
     make_and_upload_summary(folders, experiment, token=token, clean_up=clean_up,
                             ignore_incomplete=ignore_incomplete,
                             metadata_repository=metadata_repository)
@@ -94,8 +85,37 @@ def redo_summary(root):
             continue
 
 
+def summarize_results(inputs, root, token, clean_up, ignore_incomplete, metadata_repository):
+    if inputs is None:
+        inputs = EXPERIMENT_NAMES
+
+    # validate the inputs
+    for inp in inputs:
+        if os.path.exists(inp):
+            with open(inp) as f:
+                paths = json.load(f)
+            assert all(os.path.exists(path) for path in paths)
+        else:
+            assert inp in EXPERIMENT_NAMES
+
+    for inp in inputs:
+        if os.path.exists(inp):
+            with open(inp) as f:
+                paths = json.load(f)
+            plate_names = [os.path.split(path)[1] for path in paths]
+            name = os.path.splitext(os.path.split(inp)[1])[0]
+        else:
+            name = inp
+            plate_names = getattr(plates, f'all_{name}_plates')()
+
+        folders = [os.path.join(ROOT_OUT, plate_name) for plate_name in plate_names]
+        summarize_experiment(folders, name, root, token, clean_up, ignore_incomplete,
+                             metadata_repository=metadata_repository)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--inputs', type=str, nargs='+', default=None)
     parser.add_argument('--token', type=str, default=None)
     parser.add_argument('--redo', type=int, default=0)
     parser.add_argument('--ignore_incomplete', type=int, default=0)
@@ -126,10 +146,9 @@ if __name__ == '__main__':
         metadata_repository = PlateMetadataRepository(db)
 
     if redo:
+        # TODO accept the inputs here as well
         redo_summary(args.root)
     else:
         clean_up = token is not None
-        summarize_kinder_experiment(args.root, token, clean_up, bool(args.ignore_incomplete),
-                                    metadata_repository=metadata_repository)
-        summarize_manuscript_experiment(args.root, token, clean_up, bool(args.ignore_incomplete),
-                                        metadata_repository=metadata_repository)
+        summarize_results(args.inputs, args.root, token, clean_up, bool(args.ignore_incomplete),
+                          metadata_repository=metadata_repository)
