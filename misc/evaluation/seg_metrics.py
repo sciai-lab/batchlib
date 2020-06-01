@@ -114,11 +114,15 @@ class MeanAveragePrecision:
     def __init__(self):
         self.iou_range = np.linspace(0.50, 0.95, 10)
 
-    def __call__(self, input_seg, gt_seg):
+    def __call__(self, input_seg, gt_seg, average=True):
         # compute contingency_table
         sm = SegmentationMetrics(gt_seg, input_seg)
         # compute accuracy for each threshold
-        # WARN: here we use the correct term 'accuracy', whereas they call it 'precision' on Kaggle: https://www.kaggle.com/c/data-science-bowl-2018/overview/evaluation
+        # WARN: here we use the correct term 'accuracy', whereas they call it 'precision' on Kaggle:
+        # https://www.kaggle.com/c/data-science-bowl-2018/overview/evaluation
         acc = [sm.metrics(iou)['accuracy'] for iou in self.iou_range]
         # return the average
-        return np.mean(acc)
+        if average:
+            return np.mean(acc)
+        else:
+            return {iou: val for iou, val in zip(self.iou_range, acc)}
