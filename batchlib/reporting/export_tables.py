@@ -15,7 +15,8 @@ SUPPORTED_TABLE_FORMATS = {'excel': '.xlsx',
                            'csv': '.csv',
                            'tsv': '.tsv'}
 DEFAULT_SCORE_PATTERNS = ('IgG_robust_z_score_means', 'IgG_ratio_of_q0.5_of_means',
-                          'IgA_robust_z_score_means', 'IgA_ratio_of_q0.5_of_means')
+                          'IgA_robust_z_score_means', 'IgA_ratio_of_q0.5_of_means',
+                          'IgM_robust_z_score_means', 'IgM_ratio_of_q0.5_of_means')
 
 logger = get_logger('TableExporter')
 
