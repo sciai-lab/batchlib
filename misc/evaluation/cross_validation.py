@@ -3,6 +3,7 @@ import json
 import os
 
 import h5py
+import numpy as np
 import yaml
 
 from batchlib.segmentation import SeededWatershed
@@ -180,11 +181,19 @@ def find_diff(misc_folder):
     print(data_paths_exp - data_paths)
 
 
+def mean_accuracy():
+    with open('./seg_eval_results.json') as f:
+        res = json.load(f).values()
+    res = [re['0.5'] for re in res]
+    print(np.mean(res), "+-", np.std(res))
+
+
 if __name__ == '__main__':
     default_misc = '/home/pape/Work/covid/antibodies-nuclei'
     parser = argparse.ArgumentParser()
     parser.add_argument('--misc_folder', type=str, default=default_misc)
     args = parser.parse_args()
 
+    mean_accuracy()
     # find_diff(args.misc_folder)
-    evaluation_cross_validation(args.misc_folder)
+    # evaluation_cross_validation(args.misc_folder)
