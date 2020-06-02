@@ -152,7 +152,7 @@ def evaluation_cross_validation(misc_folder):
 
 
 def find_diff(misc_folder):
-    data_folder = os.path.join(misc_folder, 'groundtruth/data')
+    data_folder = os.path.join(misc_folder, 'groundtruth/segmentation')
     model_root = os.path.join(misc_folder, 'unet_segmentation')
 
     data_paths_exp = []
@@ -160,7 +160,7 @@ def find_diff(misc_folder):
         config = os.path.join(model_root, f'lou_config{cv_id}',
                               f'train_fg_and_boundaries{cv_id}.yml')
         val_path = get_val_path(config)
-        data_path = get_data_path(data_folder, val_path)
+        data_path = get_gt_path(data_folder, val_path)
         data_paths_exp.append(data_path)
 
     data_paths = []
@@ -173,12 +173,20 @@ def find_diff(misc_folder):
     data_paths = set(data_paths)
     data_paths_exp = set(data_paths_exp)
 
-    print(len(data_paths))
-    print(len(data_paths_exp))
+    unmatched = list(data_paths - data_paths_exp)
+    print("Missing:")
+    print(list(data_paths_exp - data_paths))
 
-    print(data_paths - data_paths_exp)
-    print()
-    print(data_paths_exp - data_paths)
+    import napari
+    for pp in unmatched:
+        with napari.gui_qt():
+            print(pp)
+            with h5py.File(pp, 'r') as f:
+                raw = read_image(f, 'raw')
+                seg = read_image(f, 'cells')
+            viewer = napari.Viewer(title=pp)
+            viewer.add_image(raw, name='raw')
+            viewer.add_labels(seg, name='seg')
 
 
 def mean_accuracy():
