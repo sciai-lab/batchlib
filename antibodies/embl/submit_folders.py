@@ -1,3 +1,5 @@
+# /g/kreshuk/software/miniconda3/envs/antibodies-gpu/bin/python
+
 import argparse
 import json
 import os

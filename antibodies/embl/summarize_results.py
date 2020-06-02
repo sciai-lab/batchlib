@@ -1,3 +1,5 @@
+# /g/kreshuk/software/miniconda3/envs/antibodies-gpu/bin/python
+
 import argparse
 import json
 import os
@@ -15,7 +17,6 @@ from batchlib.util.plate_visualizations import all_plots
 from batchlib.workflows.cell_analysis import bg_dict_for_plots, default_bg_parameters
 
 import process_for_manuscript as plates
-# from process_for_manuscript import all_kinder_plates, all_manuscript_plates
 
 ROOT_OUT = '/g/kreshuk/data/covid/data-processed'
 EXPERIMENT_NAMES = ['kinder', 'manuscript']
