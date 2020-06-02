@@ -9,12 +9,12 @@ DEFAULT_EXCEL_DIR = os.path.join(os.path.split(__file__)[0], '../../misc/cohort_
 
 PLATE_NAME_MAP = {
     # manuscript plates
-    "Plate 1": "plate1rep3_20200505_100837_821",
-    "Plate 2": "plate2rep3_20200507_094942_519",
+    "Plate 1": ["plate1rep3_20200505_100837_821", "plate1_IgM_20200527_125952_707", "plate1rep4_20200526_083626_191"],
+    "Plate 2": ["plate2rep3_20200507_094942_519", "plate2_IgM_20200527_155923_897", "plate2rep4_20200526_101902_924"],
     "Plate 3": "plate3",
     "Plate 4": "plate4",
-    "Plate 5": "plate5rep3_20200507_113530_429",
-    "Plate 6": "plate6rep2_wp_20200507_131032_010",
+    "Plate 5": ["plate5rep3_20200507_113530_429", "plate5_IgM_20200528_094947_410", "plate5rep4_20200526_120907_785"],
+    "Plate 6": ["plate6rep2_wp_20200507_131032_010", "plate6_IgM_20200528_111507_585", "plate6rep4_20200526_133304_599"],
     "Plate 7": "plate7rep1_20200426_103425_693",
     "Plate 8": ["plate8rep1_20200425_162127_242", "plate8rep2_20200502_182438_996"],
     "Plate 9": "plate9rep1_20200430_144438_974",
