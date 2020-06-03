@@ -401,6 +401,10 @@ def core_workflow_tasks(config, name, feature_identifier):
     write_summary_images = config.write_summary_images
     # NOTE currently the QC tasks will not be rerun if the feature identifier changes
     for serum_key, identifier in zip(serum_ana_in_keys, table_identifiers):
+
+        image_outlier_table = f'images/outliers_{serum_key}'
+        well_outlier_table = f'wells/outliers_{serum_key}'
+
         job_list.append((CellLevelQC, {
             'build': {
                 'cell_seg_key': config.seg_key,
@@ -420,6 +424,7 @@ def core_workflow_tasks(config, name, feature_identifier):
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'outlier_predicate': outlier_predicate,
                 'feature_identifier': feature_identifier,
+                'table_out_key': image_outlier_table,
                 'identifier': identifier}
         }))
 
@@ -436,6 +441,7 @@ def core_workflow_tasks(config, name, feature_identifier):
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'feature_identifier': feature_identifier,
                 'outlier_criteria': well_qc_criteria,
+                'table_out_key': well_outlier_table,
                 'identifier': identifier},
             'run': {'force_recompute': None}
         }))
@@ -449,6 +455,8 @@ def core_workflow_tasks(config, name, feature_identifier):
                 'write_summary_images': write_summary_images,
                 'scale_factors': config.scale_factors,
                 'feature_identifier': feature_identifier,
+                'image_outlier_table': image_outlier_table,
+                'well_outlier_table': well_outlier_table,
                 'identifier': identifier},
             'run': {'force_recompute': None}}))
         write_summary_images = False
