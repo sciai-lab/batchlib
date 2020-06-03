@@ -4,7 +4,7 @@ from tqdm import tqdm
 
 from .cell_level_analysis import (CellLevelAnalysisBase, CellLevelAnalysisWithTableBase,
                                   compute_ratios, load_cell_outlier_dict)
-from ..util import open_file, image_name_to_site_name, get_logger
+from ..util import open_file, image_name_to_site_name, get_logger, read_table
 
 logger = get_logger('Workflow.BatchJob.CellLevelAnalysis')
 
@@ -259,6 +259,7 @@ class ImageLevelQC(CellLevelAnalysisWithTableBase):
 class WellLevelQC(CellLevelAnalysisWithTableBase):
     """ Heuristic quality control for wells
     """
+    min_bg_factor = 3
 
     @staticmethod
     def validate_outlier_criteria(outlier_criteria):
@@ -298,7 +299,7 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
     def load_cell_outliers(self, input_file):
         return load_cell_outlier_dict(input_file, self.cell_outlier_table, self.name)
 
-    def outlier_heuristics(self, in_files, well_name):
+    def outlier_heuristics(self, in_files, well_name, min_infected_intensity):
         infected_stats, control_stats = self.load_per_cell_statistics(in_files)
         n_control = len(control_stats[self.serum_key]['label_id'])
 
@@ -323,7 +324,6 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
                     is_outlier = 1
                     outlier_type += f'{name} is negative;'
 
-        min_infected_intensity = self.outlier_criteria['min_infected_intensity']
         if min_infected_intensity is not None:
             infected_intensity = np.median(infected_stats[self.serum_key]['means'])
             if infected_intensity < min_infected_intensity:
@@ -339,6 +339,13 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
             outlier_type = outlier_type[:-1]
         return is_outlier, outlier_type
 
+    def load_min_intensity_from_table(self, table_key):
+        with open_file(self.table_out_path, 'r') as f:
+            table, cols = read_table(f, table_key)
+        channel_mad_key = f'{self.serum_key}_mad'
+        mad = table[cols.index(channel_mad_key)]
+        return self.min_bg_factor * mad
+
     def write_well_outlier_table(self, input_files):
         column_names = ['well_name', 'is_outlier', 'outlier_type']
         input_files_per_well = self.group_images_by_well(input_files)
@@ -351,13 +358,15 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
             logger.info(f"{self.name}: checking for negative ratios")
 
         min_intensity = self.outlier_criteria['min_infected_intensity']
+        if isinstance(min_intensity, str):
+            min_intensity = self.load_min_intensity_from_table(min_intensity)
         if min_intensity is not None:
             logger.info(f"{self.name}: checking for min serum intensity: {min_intensity}")
 
         table = []
         for well_name, in_files_for_current_well in tqdm(input_files_per_well.items(),
                                                          desc='Well level quality control'):
-            outlier, outlier_type = self.outlier_heuristics(in_files_for_current_well, well_name)
+            outlier, outlier_type = self.outlier_heuristics(in_files_for_current_well, well_name, min_intensity)
             if outlier not in (-1, 0, 1):
                 raise ValueError(f"Invalid value for outlier {outlier}")
             table.append([well_name, outlier, outlier_type])

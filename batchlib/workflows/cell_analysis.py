@@ -42,9 +42,11 @@ DEFAULT_PLOT_NAMES = ['ratio_of_q0.5_of_means',
                       'robust_z_score_sums',
                       'robust_z_score_means']
 
+# these are the default min serum intensities that are used for QC, if we DO NOT have
+# empty wells.
 # the intensity thresholds are derived from 3 * mad background, see
 # https://github.com/hci-unihd/antibodies-analysis-issues/issues/84#issuecomment-632658726
-MIN_SERUM_INTENSITIES = {'serum_IgG': 301.23, 'serum_IgA': 392.76}
+DEFAULT_MIN_SERUM_INTENSITIES = {'serum_IgG': 301.23, 'serum_IgA': 392.76, 'serum_IgM': None}
 
 
 def get_analysis_parameter(config, background_parameters):
@@ -428,8 +430,14 @@ def core_workflow_tasks(config, name, feature_identifier):
                 'identifier': identifier}
         }))
 
+        # if we have wells without serum, we use them to determine the min infected intensity
+        # otherwise, we use the preset values determined on multiple plates
+        # Note: the min intensity is set to 3 times the MAD
         well_qc_criteria = DEFAULT_WELL_OUTLIER_CRITERIA.copy()
-        min_infected_intensity_for_channel = MIN_SERUM_INTENSITIES.get(serum_key, None)
+        if len(bg_wells) > 0:
+            min_infected_intensity_for_channel = 'plate/backgrounds_min_well'
+        else:
+            min_infected_intensity_for_channel = DEFAULT_MIN_SERUM_INTENSITIES.get(serum_key, None)
         well_qc_criteria.update({'min_infected_intensity': min_infected_intensity_for_channel})
 
         job_list.append((WellLevelQC, {
