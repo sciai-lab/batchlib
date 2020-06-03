@@ -436,7 +436,8 @@ def core_workflow_tasks(config, name, feature_identifier):
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'feature_identifier': feature_identifier,
                 'outlier_criteria': well_qc_criteria,
-                'identifier': identifier}
+                'identifier': identifier},
+            'run': {'force_recompute': None}
         }))
         job_list.append((CellLevelAnalysis, {
             'build': {

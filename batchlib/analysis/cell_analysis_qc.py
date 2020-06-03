@@ -27,7 +27,6 @@ DEFAULT_IMAGE_OUTLIER_CRITERIA = {'max_number_cells': 1000,
                                   'min_number_cells': 10}
 
 DEFAULT_WELL_OUTLIER_CRITERIA = {'min_number_control_cells': 100,  # preprint final
-                                 'min_fraction_of_control_cells': None,  # redundant
                                  'check_ratios': True,
                                  'min_infected_intensity': None}  # will be set per channel
 
@@ -86,11 +85,13 @@ class CellLevelQC(CellLevelAnalysisBase):
         if max_size is None:
             outlier_max = np.zeros(n_ids, dtype='bool')
         else:
+            logger.info(f"{self.name}: max size threshold for {seg_key}: {max_size}")
             outlier_max = sizes > max_size
 
         if min_size is None:
             outlier_min = np.zeros(n_ids, dtype='bool')
         else:
+            logger.info(f"{self.name}: min size threshold for {seg_key}: {min_size}")
             outlier_min = sizes < min_size
 
         is_outlier = np.logical_or(outlier_max, outlier_min).astype('uint8')
@@ -190,11 +191,13 @@ class ImageLevelQC(CellLevelAnalysisWithTableBase):
         if min_n_cells is not None and n_cells < min_n_cells:
             is_outlier = 1
             outlier_type += 'too few cells;'
+            logger.debug(f"{self.name}: {in_file} has too few cells; {n_cells} < {min_n_cells}")
 
         max_n_cells = self.outlier_criteria['max_number_cells']
         if min_n_cells is not None and n_cells > max_n_cells:
             is_outlier = 1
             outlier_type += 'too many cells;'
+            logger.debug(f"{self.name}: {in_file} has too many cells; {n_cells} > {max_n_cells}")
 
         if outlier_type == '':
             outlier_type = 'none'
@@ -206,6 +209,12 @@ class ImageLevelQC(CellLevelAnalysisWithTableBase):
     def write_image_outlier_table(self, input_files):
         column_names = ['image_name', 'site_name', 'is_outlier', 'outlier_type']
         table = []
+
+        if self.outlier_criteria['min_number_cells'] is not None:
+            logger.info(f"{self.name}: min number of cells per image: {self.outlier_criteria['min_number_cells']}")
+
+        if self.outlier_criteria['max_number_cells'] is not None:
+            logger.info(f"{self.name}: max number of cells per image: {self.outlier_criteria['max_number_cells']}")
 
         for in_file in tqdm(input_files, desc="Image level quality control"):
             image_name = os.path.splitext(os.path.split(in_file)[1])[0]
@@ -289,12 +298,9 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
     def load_cell_outliers(self, input_file):
         return load_cell_outlier_dict(input_file, self.cell_outlier_table, self.name)
 
-    def outlier_heuristics(self, in_files):
+    def outlier_heuristics(self, in_files, well_name):
         infected_stats, control_stats = self.load_per_cell_statistics(in_files)
-
-        n_infected = len(infected_stats[self.serum_key]['label_id'])
         n_control = len(control_stats[self.serum_key]['label_id'])
-        n_cells = n_infected + n_control
 
         outlier_type = ''
         is_outlier = 0
@@ -303,12 +309,6 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
         if min_control is not None and n_control < min_control:
             is_outlier = 1
             outlier_type += 'too few control cells;'
-
-        control_fraction = float(n_control) / n_cells
-        min_fraction = self.outlier_criteria['min_fraction_of_control_cells']
-        if min_fraction is not None and control_fraction < min_fraction:
-            is_outlier = 1
-            outlier_type += 'too small fraction of control cells;'
 
         # check for negative ratios
         if self.outlier_criteria['check_ratios']:
@@ -319,6 +319,7 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
                 if not name.startswith('ratio'):
                     continue
                 if val < 0. or np.isnan(val):
+                    logger.debug(f"{self.name}: {well_name} has negative ratio for {name}")
                     is_outlier = 1
                     outlier_type += f'{name} is negative;'
 
@@ -328,6 +329,8 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
             if infected_intensity < min_infected_intensity:
                 is_outlier = 1
                 outlier_type += "too low infected cell intensity;"
+                msg = f"{self.name}: {well_name} has too low intensity: {infected_intensity} < {min_infected_intensity}"
+                logger.debug(msg)
 
         if outlier_type == '':
             outlier_type = 'none'
@@ -340,10 +343,21 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
         column_names = ['well_name', 'is_outlier', 'outlier_type']
         input_files_per_well = self.group_images_by_well(input_files)
 
+        min_n_control = self.outlier_criteria['min_number_control_cells']
+        if min_n_control is not None:
+            logger.info(f"{self.name}: min number of control cells per well: {min_n_control}")
+
+        if self.outlier_criteria['check_ratios']:
+            logger.info(f"{self.name}: checking for negative ratios")
+
+        min_intensity = self.outlier_criteria['min_infected_intensity']
+        if min_intensity is not None:
+            logger.info(f"{self.name}: checking for min serum intensity: {min_intensity}")
+
         table = []
         for well_name, in_files_for_current_well in tqdm(input_files_per_well.items(),
                                                          desc='Well level quality control'):
-            outlier, outlier_type = self.outlier_heuristics(in_files_for_current_well)
+            outlier, outlier_type = self.outlier_heuristics(in_files_for_current_well, well_name)
             if outlier not in (-1, 0, 1):
                 raise ValueError(f"Invalid value for outlier {outlier}")
             table.append([well_name, outlier, outlier_type])
