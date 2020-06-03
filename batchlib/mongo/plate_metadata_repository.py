@@ -20,7 +20,6 @@ class PlateMetadataRepository:
     Simple Monogo API used to get the positive (cohort: C) and control (cohort: B) wells for a given plate
     as well as Elisa test results if available.
 
-    TODO: we're currently using only cohort B as control, we could potentially include A and X... to be discussed with Vibor
     """
 
     def __init__(self, db):
@@ -58,7 +57,7 @@ class PlateMetadataRepository:
             set of control wells
         """
 
-        _filter = lambda w: w.get('patient_type', None) == 'B'
+        _filter = lambda w: w.get('patient_type', None) in ['B', 'A', 'X']
 
         return self._filter_wells(plate_name, _filter)
 

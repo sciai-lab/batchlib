@@ -42,9 +42,11 @@ DEFAULT_PLOT_NAMES = ['ratio_of_q0.5_of_means',
                       'robust_z_score_sums',
                       'robust_z_score_means']
 
+# these are the default min serum intensities that are used for QC, if we DO NOT have
+# empty wells.
 # the intensity thresholds are derived from 3 * mad background, see
 # https://github.com/hci-unihd/antibodies-analysis-issues/issues/84#issuecomment-632658726
-MIN_SERUM_INTENSITIES = {'serum_IgG': 301.23, 'serum_IgA': 392.76}
+DEFAULT_MIN_SERUM_INTENSITIES = {'serum_IgG': 301.23, 'serum_IgA': 392.76, 'serum_IgM': None}
 
 
 def get_analysis_parameter(config, background_parameters):
@@ -401,6 +403,10 @@ def core_workflow_tasks(config, name, feature_identifier):
     write_summary_images = config.write_summary_images
     # NOTE currently the QC tasks will not be rerun if the feature identifier changes
     for serum_key, identifier in zip(serum_ana_in_keys, table_identifiers):
+
+        image_outlier_table = f'images/outliers_{serum_key}'
+        well_outlier_table = f'wells/outliers_{serum_key}'
+
         job_list.append((CellLevelQC, {
             'build': {
                 'cell_seg_key': config.seg_key,
@@ -420,11 +426,18 @@ def core_workflow_tasks(config, name, feature_identifier):
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'outlier_predicate': outlier_predicate,
                 'feature_identifier': feature_identifier,
+                'table_out_key': image_outlier_table,
                 'identifier': identifier}
         }))
 
+        # if we have wells without serum, we use them to determine the min infected intensity
+        # otherwise, we use the preset values determined on multiple plates
+        # Note: the min intensity is set to 3 times the MAD
         well_qc_criteria = DEFAULT_WELL_OUTLIER_CRITERIA.copy()
-        min_infected_intensity_for_channel = MIN_SERUM_INTENSITIES.get(serum_key, None)
+        if len(bg_wells) > 0 and config.use_mad_from_bg_wells:
+            min_infected_intensity_for_channel = 'plate/backgrounds_min_well'
+        else:
+            min_infected_intensity_for_channel = DEFAULT_MIN_SERUM_INTENSITIES.get(serum_key, None)
         well_qc_criteria.update({'min_infected_intensity': min_infected_intensity_for_channel})
 
         job_list.append((WellLevelQC, {
@@ -436,7 +449,9 @@ def core_workflow_tasks(config, name, feature_identifier):
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'feature_identifier': feature_identifier,
                 'outlier_criteria': well_qc_criteria,
-                'identifier': identifier}
+                'table_out_key': well_outlier_table,
+                'identifier': identifier},
+            'run': {'force_recompute': None}
         }))
         job_list.append((CellLevelAnalysis, {
             'build': {
@@ -448,6 +463,8 @@ def core_workflow_tasks(config, name, feature_identifier):
                 'write_summary_images': write_summary_images,
                 'scale_factors': config.scale_factors,
                 'feature_identifier': feature_identifier,
+                'image_outlier_table': image_outlier_table,
+                'well_outlier_table': well_outlier_table,
                 'identifier': identifier},
             'run': {'force_recompute': None}}))
         write_summary_images = False
@@ -645,6 +662,7 @@ def cell_analysis_parser(config_folder, default_config_name):
     # background subtraction values for the individual channels
     # if None, all backgrounds will be computed from the data and the plate background will be used
     parser.add("--background_dict", default=None)
+    parser.add("--use_mad_from_bg_wells", default=False)
 
     # arguments for the nucleus dilation used for the serum intensity qc
     parser.add("--qc_dilation", type=int, default=5)

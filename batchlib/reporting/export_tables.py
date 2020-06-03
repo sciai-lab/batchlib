@@ -212,7 +212,7 @@ def _get_db_metadata(well_names, metadata_repository, plate_name):
 
         if patient_type == 'c':
             return 'positive'
-        elif patient_type == 'b':
+        elif patient_type in ['b', 'a', 'x']:
             return 'control'
         else:
             return 'unknown'

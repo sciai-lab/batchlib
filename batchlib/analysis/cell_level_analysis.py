@@ -611,7 +611,6 @@ class CellLevelAnalysis(CellLevelAnalysisWithTableBase):
         self.score_name = score_name
         self.write_summary_images = write_summary_images
 
-        # FIXME this does not take the identifier into account
         self.image_outlier_table = image_outlier_table
         self.well_outlier_table = well_outlier_table
 
