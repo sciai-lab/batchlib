@@ -38,7 +38,6 @@ class DummyConfig:
 
 def redo_summary(root):
     folder_names = os.listdir(root)
-    # folder_names = ['titration_plate_20200403_154849']
 
     def redo_folder(folder):
         plot_folder = os.path.join(folder, 'plots')
@@ -108,6 +107,9 @@ def summarize_results(inputs, root, token, clean_up, ignore_incomplete, metadata
         else:
             name = inp
             plate_names = getattr(plates, f'all_{name}_plates')()
+
+        print("Summarize results for plates:")
+        print("\n".join(plate_names))
 
         folders = [os.path.join(ROOT_OUT, plate_name) for plate_name in plate_names]
         summarize_experiment(folders, name, root, token, clean_up, ignore_incomplete,
