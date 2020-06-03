@@ -662,7 +662,7 @@ def cell_analysis_parser(config_folder, default_config_name):
     # background subtraction values for the individual channels
     # if None, all backgrounds will be computed from the data and the plate background will be used
     parser.add("--background_dict", default=None)
-    parser.add("--use_mad_from_bg_wells", default=False)
+    parser.add("--use_mad_from_bg_wells", default=True)
 
     # arguments for the nucleus dilation used for the serum intensity qc
     parser.add("--qc_dilation", type=int, default=5)

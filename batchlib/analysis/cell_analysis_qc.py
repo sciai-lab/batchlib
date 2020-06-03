@@ -343,7 +343,7 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
         with open_file(self.table_out_path, 'r') as f:
             table, cols = read_table(f, table_key)
         channel_mad_key = f'{self.serum_key}_mad'
-        mad = table[cols.index(channel_mad_key)]
+        mad = table[:, cols.index(channel_mad_key)]
         return self.min_bg_factor * mad
 
     def write_well_outlier_table(self, input_files):
@@ -359,6 +359,7 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
 
         min_intensity = self.outlier_criteria['min_infected_intensity']
         if isinstance(min_intensity, str):
+            logger.info(f"{self.name}: load min intensity from table")
             min_intensity = self.load_min_intensity_from_table(min_intensity)
         if min_intensity is not None:
             logger.info(f"{self.name}: checking for min serum intensity: {min_intensity}")
