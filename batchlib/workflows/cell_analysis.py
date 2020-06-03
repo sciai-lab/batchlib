@@ -434,7 +434,7 @@ def core_workflow_tasks(config, name, feature_identifier):
         # otherwise, we use the preset values determined on multiple plates
         # Note: the min intensity is set to 3 times the MAD
         well_qc_criteria = DEFAULT_WELL_OUTLIER_CRITERIA.copy()
-        if len(bg_wells) > 0:
+        if len(bg_wells) > 0 and config.use_mad_from_bg_wells:
             min_infected_intensity_for_channel = 'plate/backgrounds_min_well'
         else:
             min_infected_intensity_for_channel = DEFAULT_MIN_SERUM_INTENSITIES.get(serum_key, None)
@@ -662,6 +662,7 @@ def cell_analysis_parser(config_folder, default_config_name):
     # background subtraction values for the individual channels
     # if None, all backgrounds will be computed from the data and the plate background will be used
     parser.add("--background_dict", default=None)
+    parser.add("--use_mad_from_bg_wells", default=False)
 
     # arguments for the nucleus dilation used for the serum intensity qc
     parser.add("--qc_dilation", type=int, default=5)
