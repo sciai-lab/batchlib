@@ -244,11 +244,34 @@ def _get_db_metadata(well_names, metadata_repository, plate_name):
     return np.array(additional_values)
 
 
+def outliers_to_nan(table, column_names, score_patterns):
+    for score_name in score_patterns:
+        try:
+            score_col = column_names.index(score_name)
+        except ValueError:
+            score_col = -1
+        if score_col == -1:
+            continue
+
+        serum_name = score_name[:3]
+        outlier_col_name = f'{serum_name}_is_outlier'
+        outlier_col = column_names.index(outlier_col_name)
+        assert outlier_col > 0
+        outliers = table[:, outlier_col] == 1
+
+        table[:, score_col][outliers] = np.nan
+
+    return table
+
+
 # consider making our score names more succinct
 def export_scores(folder_list, output_path,
                   score_patterns=DEFAULT_SCORE_PATTERNS,
-                  table_name='wells/default',
-                  metadata_repository=None):
+                  table_name='wells/default', metadata_repository=None,
+                  filter_outliers=True):
+    """
+    """
+
     def name_matches_score(name):
         return any(pattern in name for pattern in score_patterns)
 
@@ -282,6 +305,11 @@ def export_scores(folder_list, output_path,
         with open_file(table_path, 'r') as f:
             this_result_columns, this_result_table = read_table(f, table_name)
 
+        if filter_outliers:
+            this_result_table = outliers_to_nan(this_result_table,
+                                                this_result_columns,
+                                                score_patterns)
+
         this_len = len(this_result_table)
         plate_col = np.array([plate_name] * this_len)
 
@@ -289,6 +317,7 @@ def export_scores(folder_list, output_path,
                    for name in result_columns]
         this_table = [np.array([None] * this_len)[:, None] if col_id == -1 else
                       this_result_table[:, col_id:col_id + 1] for col_id in col_ids]
+
         this_table = np.concatenate([plate_col[:, None]] + this_table, axis=1)
 
         # extend table with the values from DB
