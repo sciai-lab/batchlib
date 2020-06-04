@@ -12,7 +12,7 @@ TEST_NAMES = ['ELISA IgG', 'ELISA IgA', 'ELISA IgM',
               'mpBio IgG', 'mpBio IgM',
               'Luminex', 'NT', 'Roche', 'Abbot',
               'Rapid test IgM', 'Rapid test IgG',
-              'IF IgG', 'IF IgA']
+              'IF IgG', 'IF IgA', 'days_after_onset']
 
 
 class PlateMetadataRepository:

@@ -42,3 +42,8 @@ class TestElisaResultsParser(unittest.TestCase):
         results = elisa_results_parser.get_elisa_values('P21', test_names=['ELISA IgG', 'ELISA IgA'])
         assert results[0] == 2.14
         assert results[1] == 2.08
+
+        results = elisa_results_parser.get_elisa_values('C2b', test_names=['ELISA IgG', 'ELISA IgA', 'days_after_onset'])
+        assert results[0] == 1.68
+        assert results[1] == 4.36
+        assert results[2] == 12
