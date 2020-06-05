@@ -1,6 +1,6 @@
 import unittest
 
-from batchlib.util.cohort_parser import CohortIdParser
+from batchlib.util.cohort_parser import CohortIdParser, get_cohort
 
 
 class TestCohortIdParser(unittest.TestCase):
@@ -35,3 +35,19 @@ class TestCohortIdParser(unittest.TestCase):
         plate_cohorts = cohort_id_parser.get_cohorts_for_plate('plateU13_T9rep1_20200516_105403_122')
         assert plate_cohorts['A02'] == '02-0486-V'
         assert plate_cohorts['G04'] == '02-0497-M'
+
+        plate_cohorts = cohort_id_parser.get_cohorts_for_plate('plate9_4rep1_20200604_175423_514')
+        assert plate_cohorts['D11'] == 'CMV 7'
+        assert plate_cohorts['G08'] == 'C4k'
+
+        plate_cohorts = cohort_id_parser.get_cohorts_for_plate('plate9_5rep1_20200604_225512_896')
+        assert plate_cohorts['A08'] == 'C209'
+        assert plate_cohorts['H06'] == 'EBV 59'
+
+    def test_cohort_extractor(self):
+        assert get_cohort('CMV 20') == 'CMV'
+        assert get_cohort('EBV 20') == 'EBV'
+        assert get_cohort('C4k') == 'C'
+        assert get_cohort('2-2100 K') == 'K'
+        assert get_cohort('3-2100 K') == 'K'
+        assert get_cohort('02-2100 V') == 'V'

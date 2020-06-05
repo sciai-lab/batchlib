@@ -1,13 +1,12 @@
+import argparse
 import os
 from glob import glob
 
 import h5py
-from batchlib.reporting.export_tables import export_cell_tables
+from batchlib.reporting.export_tables import export_cell_tables, export_scores
 
 
-# TODO also export image and well tables
-def export_single_plate(folder):
-
+def cell_tables(folder):
     plate_name = os.path.split(folder)[1]
 
     path = glob(os.path.join(folder, '*.h5'))[0]
@@ -30,6 +29,16 @@ def export_single_plate(folder):
         export_cell_tables(folder, output_path, table_name, n_jobs=32)
 
 
+def score_tables(folder):
+    export_scores([folder], os.path.join(folder, 'scores.xlsx'))
+
+
+# TODO also export image and well tables
 if __name__ == '__main__':
-    folder = '/g/kreshuk/data/covid/sandbox/manuscript/20200417_152052_943'
-    export_single_plate(folder)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('folder', type=str)
+    args = parser.parse_args()
+
+    folder = args.folder
+    score_tables(folder)
+    # cell_tables(folder)

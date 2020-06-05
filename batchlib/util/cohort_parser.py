@@ -14,12 +14,15 @@ PLATE_NAME_MAP = {
     "Plate 3": "plate3",
     "Plate 4": "plate4",
     "Plate 5": ["plate5rep3_20200507_113530_429", "plate5_IgM_20200528_094947_410", "plate5rep4_20200526_120907_785"],
-    "Plate 6": ["plate6rep2_wp_20200507_131032_010", "plate6_IgM_20200528_111507_585", "plate6rep4_20200526_133304_599"],
+    "Plate 6": ["plate6rep2_wp_20200507_131032_010", "plate6_IgM_20200528_111507_585",
+                "plate6rep4_20200526_133304_599"],
     "Plate 7": "plate7rep1_20200426_103425_693",
     "Plate 8": ["plate8rep1_20200425_162127_242", "plate8rep2_20200502_182438_996"],
     "Plate 9": "plate9rep1_20200430_144438_974",
     "Plate 9_2": ["plate9_2rep1_20200506_163349_413", "plate9_2rep2_20200515_230124_149"],
     "Plate 9_3": "plate9_3rep1_20200513_160853_327",
+    "Plate 9_4": ["plate9_4_IgM_20200604_212451_328", "plate9_4rep1_20200604_175423_514"],
+    "Plate 9_5": ["plate9_5_IgM_20200605_084742_832", "plate9_5rep1_20200604_225512_896"],
     # K plates
     "Plate K10": "plateK10rep1_20200429_122048_065",
     "Plate K11": "plateK11rep1_20200429_140316_208",
@@ -49,8 +52,15 @@ PLATE_NAME_MAP = {
     "Plate U13_T9": "plateU13_T9rep1_20200516_105403_122"
 }
 
-# cohort_id pattern for standard and Tuebingen cohorts
-COHORT_PATTERNS = [re.compile('[A-Z]\\d+'), re.compile('3-.+'), re.compile('02-.+')]
+# cohort_id pattern for standard and Tuebingen cohorts together with the cohort_type extractor (e.g. `Cf4` has a cohort_type of `C`, `3-0320 K` has a cohort_type of `K`)
+COHORT_PATTERNS = {
+    re.compile('CMV.+'): lambda x: x[:3],
+    re.compile('EBV.+'): lambda x: x[:3],
+    re.compile('3-.+'): lambda x: x[-1],
+    re.compile('2-.+'): lambda x: x[-1],
+    re.compile('02-.+'): lambda x: x[-1],
+    re.compile('[A-Z]\\d+'): lambda x: x[0]
+}
 
 
 def _contains_well_name(row):
@@ -178,3 +188,27 @@ class CohortIdParser:
         for row in plate_cohorts:
             result.update(dict(row))
         return result
+
+
+def get_cohort_type(cohort_letter):
+    if cohort_letter is None:
+        return None
+    assert isinstance(cohort_letter, str)
+    # make sure that the comparison is not case sensitive
+    cohort_letter = cohort_letter.lower()
+
+    if cohort_letter == 'c':
+        return 'positive'
+    elif cohort_letter in ['b', 'a', 'x', 'z']:
+        return 'control'
+    else:
+        return 'unknown'
+
+
+def get_cohort(cohort_id):
+    if cohort_id is None:
+        return None
+
+    for p, cohort_extractor in COHORT_PATTERNS.items():
+        if p.match(cohort_id):
+            return cohort_extractor(cohort_id)
