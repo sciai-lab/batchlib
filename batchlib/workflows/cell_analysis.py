@@ -214,33 +214,21 @@ def add_background_estimation_from_min_well(job_list, config, wells, channel_key
     return job_list
 
 
-# TODO get a complete list of old plates instead
 def get_barrel_corrector_folder(config):
-    pre_len = len('plateT')
-
-    def isU(plate_name):
-        return 'plateU' in plate_name
-
-    def isRecentT(plate_name):
-        isT = 'plateT' in plate_name
-        if isT:
-            try:
-                plate_id = int(plate_name[pre_len:pre_len+2])
-            except ValueError:
-                plate_id = int(plate_name[pre_len:pre_len+1])
-            return plate_id > 8
-        else:
-            return False
+    barrel_corrector_root = os.path.join(config.misc_folder, 'barrel_correctors')
+    with open(os.path.join(barrel_corrector_root, 'plates_with_old_setup.json')) as f:
+        plates_with_old_setup = json.load(f)
 
     plate_name = os.path.split(config.input_folder)[1]
-
-    if plate_name == 'plateU13_T9rep1_20200516_105403_122':
+    if plate_name in plates_with_old_setup:
         subfolder = 'old_microscope'
-    elif isU(plate_name) or isRecentT(plate_name):
-        subfolder = 'new_microscope'
     else:
-        subfolder = 'old_microscope'
-    return os.path.join(config.misc_folder, 'barrel_correctors', subfolder)
+        subfolder = 'new_microscope'
+
+    barrel_corrector_folder = os.path.join(barrel_corrector_root, subfolder)
+    assert os.path.exists(barrel_corrector_folder)
+
+    return barrel_corrector_folder
 
 
 def core_workflow_tasks(config, name, feature_identifier):
