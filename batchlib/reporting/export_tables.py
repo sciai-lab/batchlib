@@ -10,6 +10,7 @@ from tqdm import tqdm
 from batchlib.mongo.plate_metadata_repository import TEST_NAMES
 from batchlib.util import (get_logger, read_table, open_file, has_table,
                            image_name_to_site_name, image_name_to_well_name)
+from batchlib.util.cohort_parser import get_cohort_type, get_cohort
 
 SUPPORTED_TABLE_FORMATS = {'excel': '.xlsx',
                            'csv': '.csv',
@@ -204,27 +205,6 @@ def _get_db_metadata(well_names, metadata_repository, plate_name):
         additional metadata DB
     """
 
-    def _get_cohort_type(c_id):
-        if c_id is None:
-            return None
-        assert isinstance(c_id, str)
-        patient_type = c_id[0].lower()
-
-        if patient_type == 'c':
-            return 'positive'
-        elif patient_type in ['b', 'a', 'x']:
-            return 'control'
-        else:
-            return 'unknown'
-
-    def _get_cohort(cohort_id):
-        if cohort_id is None:
-            return None
-
-        if cohort_id.startswith('3-'):
-            return cohort_id[-1]
-        return cohort_id[0]
-
     assert len(well_names) > 0 and isinstance(well_names[0], str)
     cohort_ids = metadata_repository.get_cohort_ids(plate_name)
     elisa_results = metadata_repository.get_elisa_results(plate_name, TEST_NAMES)
@@ -233,8 +213,8 @@ def _get_db_metadata(well_names, metadata_repository, plate_name):
         cohort_id = cohort_ids.get(well_name, None)
         if cohort_id is None:
             logger.warning(f'Plate: {plate_name}, well: {well_name} has no cohort_id metadata')
-        cohort = _get_cohort(cohort_id)
-        cohort_type = _get_cohort_type(cohort_id)
+        cohort = get_cohort(cohort_id)
+        cohort_type = get_cohort_type(cohort)
         cohort_row = [cohort_id, cohort, cohort_type]
         # add results from Elisa, Roche, Abbot, Luminex tests
         test_results = elisa_results.get(well_name, [None] * len(TEST_NAMES))
