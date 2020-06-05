@@ -27,6 +27,7 @@ DEFAULT_IMAGE_OUTLIER_CRITERIA = {'max_number_cells': 1000,
                                   'min_number_cells': 10}
 
 DEFAULT_WELL_OUTLIER_CRITERIA = {'min_number_control_cells': 100,  # preprint final
+                                 'min_number_infected_cells': None,  # need to determine this
                                  'check_ratios': True,
                                  'min_infected_intensity': None}  # will be set per channel
 
@@ -301,6 +302,7 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
 
     def outlier_heuristics(self, in_files, well_name, min_infected_intensity):
         infected_stats, control_stats = self.load_per_cell_statistics(in_files)
+        n_infected = len(infected_stats[self.serum_key]['label_id'])
         n_control = len(control_stats[self.serum_key]['label_id'])
 
         outlier_type = ''
@@ -310,6 +312,11 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
         if min_control is not None and n_control < min_control:
             is_outlier = 1
             outlier_type += 'too few control cells;'
+
+        min_infected = self.outlier_criteria['min_number_infected_cells']
+        if min_infected is not None and n_infected < min_infected:
+            is_outlier = 1
+            outlier_type += 'too few infected cells;'
 
         # check for negative ratios
         if self.outlier_criteria['check_ratios']:
@@ -354,6 +361,10 @@ class WellLevelQC(CellLevelAnalysisWithTableBase):
         min_n_control = self.outlier_criteria['min_number_control_cells']
         if min_n_control is not None:
             logger.info(f"{self.name}: min number of control cells per well: {min_n_control}")
+
+        min_n_infected = self.outlier_criteria['min_number_infected_cells']
+        if min_n_infected is not None:
+            logger.info(f"{self.name}: min number of infected cells per well: {min_n_infected}")
 
         if self.outlier_criteria['check_ratios']:
             logger.info(f"{self.name}: checking for negative ratios")
