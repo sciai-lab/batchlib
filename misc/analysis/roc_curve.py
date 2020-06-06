@@ -132,8 +132,8 @@ def plot_score_vs_time(score_data):
         ax.scatter(times, scores, label=score_name)
 
     ax.legend(loc='upper right')
-    ax.set_ylabel('time of infection')
-    ax.set_xlabel(score_name)
+    ax.set_xlabel('time of infection')
+    ax.set_ylabel(score_name)
     plt.savefig(f'All_INFECT.png')
 
 
