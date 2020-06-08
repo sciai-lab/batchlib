@@ -57,7 +57,7 @@ class PlateMetadataRepository:
             set of control wells
         """
 
-        _filter = lambda w: w.get('patient_type', None) in ['B', 'A', 'X', 'Z', 'E']
+        _filter = lambda w: w.get('patient_type', None) in ['B', 'A', 'X', 'Z', 'E', 'CMV', 'EBV']
 
         return self._filter_wells(plate_name, _filter)
 

@@ -199,7 +199,7 @@ def get_cohort_type(cohort_letter):
 
     if cohort_letter == 'c':
         return 'positive'
-    elif cohort_letter in ['b', 'a', 'x', 'z', 'e']:
+    elif cohort_letter in ['b', 'a', 'x', 'z', 'e', 'cmv', 'ebv']:
         return 'control'
     else:
         return 'unknown'
