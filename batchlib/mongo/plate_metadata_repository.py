@@ -6,7 +6,7 @@ from pymongo import MongoClient
 from batchlib.mongo.utils import ASSAY_METADATA
 from batchlib.util import get_logger
 
-logger = get_logger('PlateMetadataRepository')
+logger = get_logger('Workflow.PlateMetadataRepository')
 
 TEST_NAMES = ['ELISA IgG', 'ELISA IgA', 'ELISA IgM',
               'mpBio IgG', 'mpBio IgM',

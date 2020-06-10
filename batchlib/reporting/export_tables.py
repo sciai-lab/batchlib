@@ -19,7 +19,7 @@ DEFAULT_SCORE_PATTERNS = ('IgG_robust_z_score_means', 'IgG_ratio_of_q0.5_of_mean
                           'IgA_robust_z_score_means', 'IgA_ratio_of_q0.5_of_means',
                           'IgM_robust_z_score_means', 'IgM_ratio_of_q0.5_of_means')
 
-logger = get_logger('TableExporter')
+logger = get_logger('Workflow.TableExporter')
 
 
 def _round_column(col, decim=2):

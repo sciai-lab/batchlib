@@ -1,10 +1,10 @@
 import json
-import logging
 import os
 from glob import glob
 from tqdm import tqdm
 
-from batchlib.util import add_file_handler, remove_file_handler, get_commit_id, get_file_lock, get_logger, open_file
+from batchlib.util import remove_file_handler, get_commit_id, get_file_lock, open_file
+from batchlib.util.logger import setup_logger
 
 
 def write_commit_id(folder, commit_id):
@@ -70,21 +70,10 @@ def run_workflow(name, folder, job_dict, input_folder=None, force_recompute=None
         enable_logging - whether to log to stdout and a log file (default: True)
         skip_processed - whether to check if we need to recompute anything for processed jobs (default: False)
     """
-    if enable_logging:
-        logger = get_logger('Workflow')
-    else:
-        logger = logging.getLogger('Workflow')
-        logger.addHandler(logging.NullHandler())
-
     work_dir = os.path.join(folder, 'batchlib')
     os.makedirs(work_dir, exist_ok=True)
-    # register workflow's log file
-    if enable_logging:
-        fh = add_file_handler(logger, work_dir, name)
-        # add file handler to tensorboard logger
-        logging.getLogger('tensorflow').addHandler(fh)
-    else:
-        logger.addHandler(logging.NullHandler())
+
+    logger = setup_logger(enable_logging, work_dir, name)
 
     # lock the git commit
     commit_id = get_commit_id()
