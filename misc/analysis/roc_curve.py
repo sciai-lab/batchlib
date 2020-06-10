@@ -29,6 +29,7 @@ time_thresholds = ((0, 10), (11, 14), (15, 10000))
 time_thresholds_roc = ((15, 10000), )
 
 cr2marker = {1: "<",
+             2: "*",
              10: "*"}
 
 remove_IgA_for_quality_control = ("B92", "B60", "B22", "B103", "CMV11", "CMV30", "EBV32", "EBV51", "EBV54", "EBV59")
@@ -53,20 +54,22 @@ def get_time_label(t_low, t_high):
     return label
 
 
-def remove_unlabeled(score_data):
-    unlabeled = score_data[~score_data['cohort'].isin(('A', 'B', 'C', 'Z'))]
+def restrict_to_cohort(score_data, cohorts):
+    unlabeled = score_data[~score_data['cohort'].isin(cohorts)]
     score_data.drop(unlabeled.index, inplace=True)
 
 
 def remove_longitudinal_study(score_data):
     # unlabeled = score_data[~score_data['cohort'].isin(('A', 'B', 'E', 'C', 'Z'))]
-    longitudinal = score_data[ctype_name].str.contains('C[0-9]*$')
+    longitudinal = score_data[ctype_name].str.contains('C.*[0-9]$')
     score_data.drop(score_data[longitudinal].index, inplace=True)
 
 
 def remove_plates45(score_data):
-    plates45 = score_data[plate_name].str.contains('^plate9_[4-5]')
-    score_data.drop(score_data[plates45].index, inplace=True)
+    plates4 = score_data[plate_name].str.startswith('plate9_4')
+    score_data.drop(score_data[plates4].index, inplace=True)
+    plates5 = score_data[plate_name].str.startswith('plate9_5')
+    score_data.drop(score_data[plates5].index, inplace=True)
 
 
 def add_ytrue(score_data):
@@ -76,7 +79,12 @@ def add_ytrue(score_data):
     score_data['ytrue'] = score_data[label_name].replace(label_dictionary)
 
 
-def remove_double_igg_entries(score_data):
+def remove_iga_and_igg_from_igm_plates(score_data):
+    igm_plates = score_data[plate_name].str.contains('IgM')
+    score_data.loc[score_data[igm_plates].index, [IgA_name, IgG_name]] = np.nan
+
+
+def remove_double_entries(score_data):
     report = dict((sn, {}) for sn in score_names)
 
     for patient in score_data[ctype_name].unique():
@@ -93,8 +101,8 @@ def remove_double_igg_entries(score_data):
                 score_data.loc[keep_index, sn] = np.mean(selection[sn])
                 score_data.loc[remove_index, sn] = np.nan
 
-                if len(selection) > 2 or (len(selection) > 1 and sn != IgG_name):
-                    report[sn][patient] = len(selection)
+                # if len(selection) > 2 or (len(selection) > 1 and sn != IgG_name):
+                report[sn][patient] = selection[plate_name]
 
                 # make sure we have edited the database and not a copy
                 assert(len(score_data[score_data[ctype_name] == patient][sn].dropna()) == 1)
@@ -115,11 +123,14 @@ def parse_csv(file, score_names):
                                               score_data[ctype_name].isin(remove_IgA_for_quality_control)]
     score_data.loc[quality_control_iga_outliers.index, IgA_name] = np.nan
 
-    remove_unlabeled(score_data)
+    restrict_to_cohort(score_data, ('A', 'B', 'C', 'Z'))
     remove_longitudinal_study(score_data)
+    remove_iga_and_igg_from_igm_plates(score_data)
     remove_plates45(score_data)
     add_ytrue(score_data)
-    remove_double_igg_entries(score_data)
+    remove_double_entries(score_data)
+
+    import pdb; pdb.set_trace()
 
     return score_data
 
@@ -291,14 +302,70 @@ def plot_roc(score_data, score_name, time_thresholds, cost_ratios):
     ax.set_xlabel('False Positive Rate')
     plt.savefig(f'{score_name[:4]}_ROC.png')
 
+    return optimal_thresholds
+
 score_data = parse_csv(analysis_file, score_names)
-score_data.to_csv('used_data.csv', index=False)
+print(score_data[plate_name].str.startswith('plate9_5').sum())
+score_data.to_excel('used_data.xlsx', index=False)
+
+control_cohorts = ("EBV", "CMV")
+control_data = pandas.read_csv(analysis_file)
+restrict_to_cohort(control_data, control_cohorts)
+# remove_longitudinal_study(control_data)
+remove_iga_and_igg_from_igm_plates(control_data)
+
+remove_double_entries(control_data)
 
 plot_score_vs_time(score_data)
+
+tabel1_data = {"cohort": ["B", "A", "Z", "E", "EBV", "CMV"],
+               "num samples IgA": [],
+               "num samples IgM": [],
+               "num samples IgG": [],
+               "threshold IgA": [],
+               "threshold IgM": [],
+               "threshold IgG": [],
+               "IF IgM": [],
+               "IF IgA": [],
+               "IF IgG": [],
+               "ELISA IgA": [7, 1, 2, 10, np.nan, np.nan],
+               "ELISA IgG": [5, 1, 0, 1, np.nan, np.nan]}
+
 for score_name in score_names:
     plot_histograms(score_name, score_data, time_thresholds)
 
-    plot_roc(score_data,
-             score_name,
-             time_thresholds=time_thresholds_roc,
-             cost_ratios=cost_ratios)
+    optimal_thresholds = plot_roc(score_data,
+                                  score_name,
+                                  time_thresholds=time_thresholds_roc,
+                                  cost_ratios=cost_ratios)
+
+    m = cost_ratios[0]
+
+    def qqq(cohort, data, score_name, optimal_thresholds, table):
+        cohort_data = data[data["cohort"] == cohort]
+        cohort_values = cohort_data[score_name].dropna()
+        th = optimal_thresholds["all patients"][m][0]
+        fp = np.array(th < cohort_values).sum()
+        fpr = np.array(th < cohort_values).mean()
+        fp_names = ",".join(cohort_data.loc[cohort_values[th < cohort_values].index][ctype_name])
+        table[f"IF {score_name[:3]}"].append(f"{fp} ({fp_names})")
+        table[f"num samples {score_name[:3]}"].append(len(cohort_values))
+        table[f"threshold {score_name[:3]}"].append(th)
+        print(score_name, cohort, len(cohort_values), fp, fpr)
+
+    for cohort in tabel1_data["cohort"]:
+        if cohort in ["EBV", "CMV"]:
+            qqq(cohort, control_data, score_name, optimal_thresholds, tabel1_data)
+        else:
+            qqq(cohort, score_data, score_name, optimal_thresholds, tabel1_data)
+
+print(tabel1_data)
+pandas.DataFrame(data=tabel1_data).to_excel('table1.xlsx', index=False)
+
+#     tabel1_data.append(len(score_data))
+
+#     th = optimal_thresholds["all patients"][m][0]
+#     control_values = control_data[score_name].dropna()
+#     fpr = np.array(th <= control_values).mean()
+
+#     print(f"false positive control for {score_name:3} (m={m}): {fpr}")
