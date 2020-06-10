@@ -1,6 +1,6 @@
 import argparse
 import urllib.parse
-
+import os
 from pymongo import MongoClient
 
 from batchlib.mongo.utils import ASSAY_METADATA
@@ -10,15 +10,15 @@ from batchlib.util import get_logger
 logger = get_logger('OutlierImporter')
 
 
-def import_outliers(db):
+def import_outliers(db, outlier_dir):
+    assert outlier_dir is not None
     # get metadata collection
     assay_metadata = db[ASSAY_METADATA]
 
     # iterate over all plates
     for plate_doc in assay_metadata.find({}):
         plate_name = plate_doc['name']
-        # FIXME @wolny this needs to come from somewhere else now
-        outlier_predicate = OutlierPredicate(DEFAULT_OUTLIER_DIR, plate_name)
+        outlier_predicate = OutlierPredicate(outlier_dir, plate_name)
 
         should_replace = False
         for well in plate_doc['wells']:
@@ -47,6 +47,9 @@ if __name__ == '__main__':
     parser.add_argument('--password', type=str, help='MongoDB password', required=True)
 
     parser.add_argument('--db', type=str, help='Default database', default='covid')
+    parser.add_argument('--outlier_dir', type=str, help='Path to the directory containing the outlier csv files',
+                        default=os.path.join(os.path.split(__file__)[0], '../../misc/tagged_outliers'))
+
     args = parser.parse_args()
 
     # escape username and password to be URL friendly
@@ -62,4 +65,4 @@ if __name__ == '__main__':
 
     logger.info(f'Getting database: {args.db}')
 
-    import_outliers(client[args.db])
+    import_outliers(client[args.db], args.outlier_dir)

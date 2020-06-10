@@ -80,9 +80,10 @@ def _create_images(well_name, well_files, outlier_predicate):
     return images
 
 
-def _create_wells(plate_name, plate_dir, cohort_id_parser, elisa_results_parser):
-    # FIXME @wolny this needs to come from somewhere else now
-    outlier_predicate = OutlierPredicate(DEFAULT_OUTLIER_DIR, plate_name)
+def _create_wells(plate_name, plate_dir, cohort_id_parser, elisa_results_parser, outlier_dir=None):
+    if outlier_dir is None:
+        outlier_dir = os.path.join(os.path.split(__file__)[0], '../../misc/tagged_outliers')
+    outlier_predicate = OutlierPredicate(outlier_dir, plate_name)
     plate_cohorts = cohort_id_parser.get_cohorts_for_plate(plate_name)
 
     file_names = []
