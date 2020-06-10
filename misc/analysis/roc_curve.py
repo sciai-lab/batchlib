@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics.ranking import _binary_clf_curve
 import sys
 import pandas
+from matplotlib import rc
 
 if len(sys.argv) < 2:
     print("please specify csv file as the first argument")
@@ -25,22 +26,18 @@ time_name = "days_after_onset"
 ctype_name = "cohort_id"
 
 time_thresholds = ((0, 10), (11, 14), (15, 10000))
-
-manuscript_plates = ['plate1_IgM_20200527_125952_707',
-                     '20200417_132123_311',
-                     'plate2_IgM_20200527_155923_897',
-                     '20200417_152052_943',
-                     '20200417_172611_193',
-                     '20200420_152417_316']
+time_thresholds_roc = ((15, 10000), )
 
 cr2marker = {1: "<",
-             10: ">"}
+             10: "*"}
 
-remove_for_quality_control = ("B92", "B60", "B22", "B103")
+remove_IgA_for_quality_control = ("B92", "B60", "B22", "B103", "CMV11", "CMV30", "EBV32", "EBV51", "EBV54", "EBV59")
 
-histogram_bins = bins = np.linspace(1., 5, 20)
+
+histogram_bins = bins = np.linspace(1., 5, 30)
 prior_probability_of_disease = 0.5
-cost_ratios = [1, 10]
+# cost_ratios = [1, 10]
+cost_ratios = [10]
 
 
 def label_of_cohort(cohort_type):
@@ -48,26 +45,18 @@ def label_of_cohort(cohort_type):
 
 
 def get_time_label(t_low, t_high):
-    label = f'for time of infection {t_low}-{t_high} days'
+    label = f'{t_low}-{t_high} days post symptom onset'
     if t_high == 10000:
-        label = f'time of infection >{t_low-1} days'
+        label = f'>{t_low-1} days post symptom onset'
     elif t_low == 0:
-        label = f'time of infection <{t_high+1} days'
+        label = f'<{t_high+1} days post symptom onset'
 
     return label
 
 
 def remove_unlabeled(score_data):
-    unlabeled = score_data[~score_data['cohort'].isin(('A', 'B', 'C', 'Z'))]
+    unlabeled = score_data[~score_data['cohort'].isin(('A', 'B', 'E', 'C', 'Z'))]
     score_data.drop(unlabeled.index, inplace=True)
-
-
-def restrict_to_manuscript_plates(score_data):
-    plate_pos_not_man_plate = score_data[((~score_data[plate_name].isin(manuscript_plates)) &
-                                          (score_data[label_name] == 'positive'))]
-
-    score_data[score_data[label_name] == 'positive']
-    score_data.drop(plate_pos_not_man_plate.index, inplace=True)
 
 
 def add_ytrue(score_data):
@@ -78,27 +67,33 @@ def add_ytrue(score_data):
 
 
 def remove_double_igg_entries(score_data):
-    # We have measured IgG ratios twice and want to reduce it to 1 per patient
-    # If both values are available use measurements
-     # taken together with IgA measurement and not IgM
+    report = dict((sn, {}) for sn in score_names)
+
     for patient in score_data[ctype_name].unique():
+
         patient_data = score_data[score_data[ctype_name] == patient]
-        selection = (score_data[score_data[ctype_name] == patient]).index
 
-        if len(selection) > 1:
+        for sn in score_names:
 
-            if len(patient_data[IgG_name].dropna()) > 1:
-                # multiple patient measurements found for IgG
+            selection = patient_data[patient_data[sn].notnull()]
 
-                # remove entry that also has a IgM measurement
-                igm_index = patient_data[IgM_name].dropna().index
-                if len(igm_index) == 0:
-                    igm_index = selection[1:]
+            if len(selection) > 1:
+                keep_index = selection.index[:1]
+                remove_index = selection.index[1:]
+                score_data.loc[keep_index, sn] = np.mean(selection[sn])
+                score_data.loc[remove_index, sn] = np.nan
 
-                # remove entries
-                score_data.loc[igm_index, IgG_name] = np.nan
+                if len(selection) > 2 or (len(selection) > 1 and sn != IgG_name):
+                    report[sn][patient] = len(selection)
 
-        assert(len(score_data[score_data[ctype_name] == patient][IgG_name].dropna()) == 1)
+                # make sure we have edited the database and not a copy
+                assert(len(score_data[score_data[ctype_name] == patient][sn].dropna()) == 1)
+
+    print("channel cohort_id number_of_measurements")
+    for k1 in report:
+        for k2 in report[k1]:
+            print(k1[:3], k2, report[k1][k2])
+    print("-------------------------------------")
 
 
 def parse_csv(file, score_names):
@@ -106,14 +101,11 @@ def parse_csv(file, score_names):
 
     # quality control by Vibor
     # Vibor: I did however manually cleaned the IgA results by removing those with dotty pattern
-    # (these were 4 cases - B92, B60, B22 and B103)
-    quality_control_outliers = score_data[score_data["IgA_ratio_of_q0.5_of_means"].notnull() &
-                                          score_data[ctype_name].isin(remove_for_quality_control)]
-    print("removing ", quality_control_outliers)
-    score_data.drop(quality_control_outliers.index, inplace=True)
+    quality_control_iga_outliers = score_data[score_data[IgA_name].notnull() &
+                                              score_data[ctype_name].isin(remove_IgA_for_quality_control)]
+    score_data.loc[quality_control_iga_outliers.index, IgA_name] = np.nan
 
     remove_unlabeled(score_data)
-    restrict_to_manuscript_plates(score_data)
     add_ytrue(score_data)
     remove_double_igg_entries(score_data)
 
@@ -132,7 +124,7 @@ def plot_score_vs_time(score_data):
         ax.scatter(times, scores, label=score_name)
 
     ax.legend(loc='upper right')
-    ax.set_xlabel('time of infection')
+    ax.set_xlabel('days post symptom onset')
     ax.set_ylabel(score_name)
     plt.savefig(f'All_INFECT.png')
 
@@ -161,8 +153,6 @@ def plot_histograms(score_name, score_data, time_thresholds):
         positives.append(scores_outside_of_timebin[score_name].dropna())
         pos_labels.append(f"{prefix} unknown infection time")
 
-    print(positives)
-
     ax.hist(positives, bins, alpha=1., label=pos_labels, stacked=True)
     ax.hist(negative_scores, bins, alpha=1., label='control', ec='0.', fc='none', histtype='step', lw=3)
 
@@ -180,8 +170,8 @@ def plot_histograms(score_name, score_data, time_thresholds):
     ttl.set_weight('bold')
     ttl.set_size(20)
 
-    ax.set_ylabel('Number of Samples')
-    ax.set_xlabel(score_name)
+    ax.set_ylabel('Patients')
+    ax.set_xlabel(f"r({score_name[:3]})")
 
     ax.legend(loc='upper right')
     plt.savefig(f'{score_name[:4]}_HIST.png')
@@ -219,7 +209,7 @@ def plot_thresholds(optimal_thresholds, colors, ax):
             ax.scatter(fpr_at_th, tpr_at_th,
                        marker=cr2marker[cr],
                        color=colors[k],
-                       label=f"{k}\noptimal threshold {th} for FPC / FNC = {cr}",
+                       label=f"{k}\noptimal threshold $r^*={th:0.2f}$ for m = {cr}",
                        # label=f"optimal threshold {opt_th} \nfor (false positive cost) / (false negative cost) = {cr}",
                        s=100.,
                        zorder=1000)
@@ -233,7 +223,7 @@ def plot_roc(score_data, score_name, time_thresholds, cost_ratios):
     roc_data = score_data[['ytrue', score_name]].dropna()
 
     fig, ax = plt.subplots(figsize=(8, 8))
-    ax.set_title(f'Receiver Operating Characteristic for \n {score_name}')
+    ax.set_title(f'Receiver Operating Characteristic for {score_name[:3]}')
 
     fpr, tpr, threshold, roc_auc = compute_roc(roc_data['ytrue'], roc_data[score_name])
     color = plot_roc_curve(fpr, tpr, roc_auc, ax, "all patients")
@@ -276,7 +266,7 @@ def plot_roc(score_data, score_name, time_thresholds, cost_ratios):
     # tweak the title
     ttl = ax.title
     ttl.set_weight('bold')
-    ttl.set_size(20)
+    ttl.set_size(16)
 
     ax.legend(loc='lower right')
     plt.plot([0, 1], [0, 1], 'r--')
@@ -287,9 +277,6 @@ def plot_roc(score_data, score_name, time_thresholds, cost_ratios):
     plt.savefig(f'{score_name[:4]}_ROC.png')
 
 score_data = parse_csv(analysis_file, score_names)
-
-print(score_data[time_name])
-print(score_data['ytrue'])
 score_data.to_csv('used_data.csv', index=False)
 
 plot_score_vs_time(score_data)
@@ -298,5 +285,5 @@ for score_name in score_names:
 
     plot_roc(score_data,
              score_name,
-             time_thresholds=time_thresholds,
+             time_thresholds=time_thresholds_roc,
              cost_ratios=cost_ratios)
