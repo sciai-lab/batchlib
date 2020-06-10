@@ -33,6 +33,7 @@ from batchlib.reporting import (SlackSummaryWriter,
                                 export_tables_for_plate,
                                 WriteBackgroundSubtractedImages)
 from batchlib.util import get_logger, open_file, read_table, has_table
+from batchlib.util.logger import setup_logger
 from batchlib.util.plate_visualizations import all_plots
 
 logger = get_logger('Workflow.CellAnalysis')
@@ -242,6 +243,10 @@ def core_workflow_tasks(config, name, feature_identifier):
         config.folder = config.input_folder.replace('covid-data-vibor', config.output_root_name)
         if config.use_unique_output_folder:
             config.folder += '_' + name
+
+    work_dir = os.path.join(config.folder, 'batchlib')
+    os.makedirs(work_dir, exist_ok=True)
+    logger = setup_logger(True, work_dir, name)
 
     model_root = os.path.join(config.misc_folder, 'models/stardist')
     model_name = '2D_dsb2018'

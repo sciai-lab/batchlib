@@ -87,3 +87,19 @@ def remove_file_handler(logger, workflow_name):
         logger.removeHandler(fh)
         fh.close()
     return fh
+
+
+def setup_logger(enable_logging, work_dir, name):
+    if enable_logging:
+        logger = get_logger('Workflow')
+    else:
+        logger = logging.getLogger('Workflow')
+        logger.addHandler(logging.NullHandler())
+    # register workflow's log file
+    if enable_logging:
+        fh = add_file_handler(logger, work_dir, name)
+        # add file handler to tensorboard logger
+        logging.getLogger('tensorflow').addHandler(fh)
+    else:
+        logger.addHandler(logging.NullHandler())
+    return logger
