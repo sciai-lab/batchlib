@@ -4,7 +4,7 @@ import urllib.parse
 from pymongo import MongoClient
 
 from batchlib.mongo.utils import ASSAY_METADATA
-from batchlib.outliers.outlier import OutlierPredicate, DEFAULT_OUTLIER_DIR
+from batchlib.outliers.outlier import OutlierPredicate
 from batchlib.util import get_logger
 
 logger = get_logger('OutlierImporter')
@@ -17,6 +17,7 @@ def import_outliers(db):
     # iterate over all plates
     for plate_doc in assay_metadata.find({}):
         plate_name = plate_doc['name']
+        # FIXME @wolny this needs to come from somewhere else now
         outlier_predicate = OutlierPredicate(DEFAULT_OUTLIER_DIR, plate_name)
 
         should_replace = False

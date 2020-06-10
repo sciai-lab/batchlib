@@ -6,21 +6,20 @@ from batchlib.util import get_logger
 
 logger = get_logger('Workflow.Outliers')
 
-DEFAULT_OUTLIER_DIR = os.path.join(os.path.split(__file__)[0], '../../misc/tagged_outliers')
-
 
 def get_outlier_predicate(config):
-    if hasattr(config, 'misc_folder') and config.misc_folder is not None:
-        outliers_dir = os.path.join(config.misc_folder, 'tagged_outliers')
-    else:
-        outliers_dir = DEFAULT_OUTLIER_DIR
+    if not hasattr(config, 'misc_folder') or config.misc_folder is None:
+        raise ValueError("Invalid config passed to 'get_outlier_predicate', needs 'misc_folder' attribute")
+    outliers_dir = os.path.join(config.misc_folder, 'tagged_outliers')
+    if not os.path.exists(outliers_dir):
+        raise ValueError(f"The outliers directory {outliers_dir} does not exist")
 
     logger.info(f"Trying to parse 'plate_name' from the input folder: {config.input_folder}")
-    plate_name = plate_name_from_input_folder(config.input_folder)
+    plate_name = plate_name_from_input_folder(config.input_folder, outliers_dir)
     if plate_name is not None:
         logger.info(f"plate_name found: {plate_name}")
     else:
-        logger.info(f"Cannot parse plate_name. Outlier detection will be skipped")
+        logger.warning(f"Did not find outliers for {config.input_folder}. Outlier detection will be skipped")
         # no plate name was given and it cannot be parsed from the config.input_folder
         # so we skip outlier detection, i.e. assign outlier: -1 to each of the images
         return lambda im: -1
@@ -28,12 +27,13 @@ def get_outlier_predicate(config):
     return OutlierPredicate(root_table_dir=outliers_dir, plate_name=plate_name)
 
 
-def plate_name_from_input_folder(input_folder):
-    for csv_file in glob.glob(os.path.join(DEFAULT_OUTLIER_DIR, '*.csv')):
+def plate_name_from_input_folder(input_folder, outliers_dir):
+    input_plate_name = os.path.split(input_folder)[1]
+    for csv_file in glob.glob(os.path.join(outliers_dir, '*.csv')):
         plate_name = os.path.split(csv_file)[1]
         plate_name = plate_name[:plate_name.find('_tagger')]
 
-        if plate_name == input_folder:
+        if plate_name == input_plate_name:
             return plate_name
     return None
 

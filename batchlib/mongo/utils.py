@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime
 
-from batchlib.outliers.outlier import OutlierPredicate, DEFAULT_OUTLIER_DIR
+from batchlib.outliers.outlier import OutlierPredicate
 from batchlib.util import get_logger
 from batchlib.util.cohort_parser import CohortIdParser
 from batchlib.util.elisa_results_parser import ElisaResultsParser
@@ -81,6 +81,7 @@ def _create_images(well_name, well_files, outlier_predicate):
 
 
 def _create_wells(plate_name, plate_dir, cohort_id_parser, elisa_results_parser):
+    # FIXME @wolny this needs to come from somewhere else now
     outlier_predicate = OutlierPredicate(DEFAULT_OUTLIER_DIR, plate_name)
     plate_cohorts = cohort_id_parser.get_cohorts_for_plate(plate_name)
 
