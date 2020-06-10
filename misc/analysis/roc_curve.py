@@ -33,7 +33,6 @@ cr2marker = {1: "<",
 
 remove_IgA_for_quality_control = ("B92", "B60", "B22", "B103", "CMV11", "CMV30", "EBV32", "EBV51", "EBV54", "EBV59")
 
-
 histogram_bins = bins = np.linspace(1., 5, 30)
 prior_probability_of_disease = 0.5
 # cost_ratios = [1, 10]
@@ -55,8 +54,17 @@ def get_time_label(t_low, t_high):
 
 
 def remove_unlabeled(score_data):
-    unlabeled = score_data[~score_data['cohort'].isin(('A', 'B', 'E', 'C', 'Z'))]
+    unlabeled = score_data[~score_data['cohort'].isin(('A', 'B', 'C', 'Z'))]
     score_data.drop(unlabeled.index, inplace=True)
+
+def remove_longitudinal_study(score_data):
+    # unlabeled = score_data[~score_data['cohort'].isin(('A', 'B', 'E', 'C', 'Z'))]
+    longitudinal = score_data[ctype_name].str.contains('C[0-9]*$')
+    score_data.drop(score_data[longitudinal].index, inplace=True)
+
+def remove_plates45(score_data):
+    plates45 = score_data[plate_name].str.contains('^plate9_[4-5]')
+    score_data.drop(score_data[plates45].index, inplace=True)
 
 
 def add_ytrue(score_data):
@@ -106,6 +114,8 @@ def parse_csv(file, score_names):
     score_data.loc[quality_control_iga_outliers.index, IgA_name] = np.nan
 
     remove_unlabeled(score_data)
+    remove_longitudinal_study(score_data)
+    remove_plates45(score_data)
     add_ytrue(score_data)
     remove_double_igg_entries(score_data)
 
@@ -213,7 +223,6 @@ def plot_thresholds(optimal_thresholds, colors, ax):
                        # label=f"optimal threshold {opt_th} \nfor (false positive cost) / (false negative cost) = {cr}",
                        s=100.,
                        zorder=1000)
-
 
 def plot_roc(score_data, score_name, time_thresholds, cost_ratios):
 
