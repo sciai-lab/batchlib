@@ -57,10 +57,12 @@ def remove_unlabeled(score_data):
     unlabeled = score_data[~score_data['cohort'].isin(('A', 'B', 'C', 'Z'))]
     score_data.drop(unlabeled.index, inplace=True)
 
+
 def remove_longitudinal_study(score_data):
     # unlabeled = score_data[~score_data['cohort'].isin(('A', 'B', 'E', 'C', 'Z'))]
     longitudinal = score_data[ctype_name].str.contains('C[0-9]*$')
     score_data.drop(score_data[longitudinal].index, inplace=True)
+
 
 def remove_plates45(score_data):
     plates45 = score_data[plate_name].str.contains('^plate9_[4-5]')
@@ -188,7 +190,7 @@ def plot_histograms(score_name, score_data, time_thresholds):
 
 
 def compute_roc(ytrue, scores):
-    fpr, tpr, threshold = metrics.roc_curve(ytrue, scores)
+    fpr, tpr, threshold = metrics.roc_curve(ytrue, scores, drop_intermediate=False)
     roc_auc = metrics.auc(fpr, tpr)
     return fpr, tpr, threshold, roc_auc
 
@@ -202,12 +204,15 @@ def get_optimal_thresholds(fpr, tpr, threshold, cost_ratios):
 
     optimal_thresholds = {}
 
-    for cr in cost_ratios:
-        m = ((1 - prior_probability_of_disease) / prior_probability_of_disease) * cr
+    for m in cost_ratios:
         utility = tpr - m * (fpr)
         best_th_index = np.argmax(utility)
-        optimal_thresholds[cr] = (threshold[best_th_index])
-        optimal_thresholds[cr] = (threshold[best_th_index], tpr[best_th_index], fpr[best_th_index])
+        # use the optimal decision threshold lies between two critical data points
+        # i.e. threshold[best_th_index+1] and threshold[best_th_index]
+        opt_th = threshold[best_th_index + 1]
+        opt_tpr = tpr[best_th_index]
+        opt_fpr = fpr[best_th_index]
+        optimal_thresholds[m] = (opt_th, opt_tpr, opt_fpr)
 
     return optimal_thresholds
 
@@ -223,6 +228,7 @@ def plot_thresholds(optimal_thresholds, colors, ax):
                        # label=f"optimal threshold {opt_th} \nfor (false positive cost) / (false negative cost) = {cr}",
                        s=100.,
                        zorder=1000)
+
 
 def plot_roc(score_data, score_name, time_thresholds, cost_ratios):
 
