@@ -45,9 +45,9 @@ class TestCohortIdParser(unittest.TestCase):
         assert plate_cohorts['H06'] == 'EBV 59'
 
     def test_cohort_extractor(self):
-        assert get_cohort('CMV 20') == 'CMV'
-        assert get_cohort('EBV 20') == 'EBV'
+        assert get_cohort('CMV 20') == 'E'
+        assert get_cohort('EBV 20') == 'E'
         assert get_cohort('C4k') == 'C'
         assert get_cohort('2-2100 K') == 'K'
         assert get_cohort('3-2100 K') == 'K'
-        assert get_cohort('02-2100 V') == 'V'
+        assert get_cohort('02-2100 V') == 'V?'

@@ -54,11 +54,12 @@ PLATE_NAME_MAP = {
 
 # cohort_id pattern for standard and Tuebingen cohorts together with the cohort_type extractor (e.g. `Cf4` has a cohort_type of `C`, `3-0320 K` has a cohort_type of `K`)
 COHORT_PATTERNS = {
-    re.compile('CMV.+'): lambda x: x[:3],
-    re.compile('EBV.+'): lambda x: x[:3],
+    re.compile('CMV.+'): lambda x: 'E',
+    re.compile('EBV.+'): lambda x: 'E',
     re.compile('3-.+'): lambda x: x[-1],
     re.compile('2-.+'): lambda x: x[-1],
-    re.compile('02-.+'): lambda x: x[-1],
+    # TODO: what are those cohorts?
+    re.compile('02-.+'): lambda x: x[-1] + '?',
     re.compile('[A-Z]\\d+'): lambda x: x[0]
 }
 
@@ -190,7 +191,7 @@ class CohortIdParser:
         return result
 
 
-def get_cohort_type(cohort_letter):
+def get_cohort_class(cohort_letter):
     if cohort_letter is None:
         return None
     assert isinstance(cohort_letter, str)

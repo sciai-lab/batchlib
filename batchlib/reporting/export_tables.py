@@ -10,7 +10,7 @@ from tqdm import tqdm
 from batchlib.mongo.plate_metadata_repository import TEST_NAMES
 from batchlib.util import (get_logger, read_table, open_file, has_table,
                            image_name_to_site_name, image_name_to_well_name)
-from batchlib.util.cohort_parser import get_cohort_type, get_cohort
+from batchlib.util.cohort_parser import get_cohort_class, get_cohort
 
 SUPPORTED_TABLE_FORMATS = {'excel': '.xlsx',
                            'csv': '.csv',
@@ -214,8 +214,9 @@ def _get_db_metadata(well_names, metadata_repository, plate_name):
         if cohort_id is None:
             logger.warning(f'Plate: {plate_name}, well: {well_name} has no cohort_id metadata')
         cohort = get_cohort(cohort_id)
-        cohort_type = get_cohort_type(cohort)
-        cohort_row = [cohort_id, cohort, cohort_type]
+        # get positive/negative/unknown patient class based on the cohort
+        cohort_class = get_cohort_class(cohort)
+        cohort_row = [cohort_id, cohort, cohort_class]
         # add results from Elisa, Roche, Abbot, Luminex tests
         test_results = elisa_results.get(well_name, [None] * len(TEST_NAMES))
         cohort_row.extend(test_results)
