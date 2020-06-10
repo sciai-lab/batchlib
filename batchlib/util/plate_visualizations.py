@@ -353,13 +353,13 @@ colorbar_threshold_dict = {
     'IgG_robust_z_score_sums':      (0.0, 1.8, 2.5, 5),
     'IgM_robust_z_score_sums':      (0.0, 1.8, 2.5, 5),
 
-    'IgA_ratio_of_q0.5_of_means':   (0.9, 1.8, 2.5, 5),
-    'IgG_ratio_of_q0.5_of_means':   (0.9, 1.25, 1.3, 2.0),
-    'IgM_ratio_of_q0.5_of_means':   (0.9, 1.25, 1.3, 2.0),
+    'IgA_ratio_of_q0.5_of_means':   (0.9, 1.39, 1.39, 5),
+    'IgG_ratio_of_q0.5_of_means':   (0.9, 1.3, 1.3, 2.0),
+    'IgM_ratio_of_q0.5_of_means':   (0.9, 1.27, 1.27, 2.0),
 
-    'IgA_ratio_of_q0.5_of_sums':    (0.9, 1.8, 2.5, 5),
-    'IgG_ratio_of_q0.5_of_sums':    (0.9, 1.25, 1.3, 2.0),
-    'IgM_ratio_of_q0.5_of_sums':    (0.9, 1.25, 1.3, 2.0)
+    'IgA_ratio_of_q0.5_of_sums':    (0.9, 1.39, 1.39, 5),
+    'IgG_ratio_of_q0.5_of_sums':    (0.9, 1.3, 1.3, 2.0),
+    'IgM_ratio_of_q0.5_of_sums':    (0.9, 1.27, 1.27, 2.0)
 }
 
 
