@@ -1,8 +1,10 @@
 import os
+from concurrent import futures
 from glob import glob
-import h5py
 
+import h5py
 from batchlib.util import read_table
+from tqdm import tqdm
 from process_for_manuscript import all_manuscript_plates
 
 
@@ -16,12 +18,12 @@ def quantify_well_or_image(folder, name):
     plate_name = os.path.split(folder)[1]
     table_path = os.path.join(folder, f'{plate_name}_table.hdf5')
     with h5py.File(table_path, 'r') as f:
-        cols, tab = read_table(f, f'images/outliers')
+        cols, tab = read_table(f, f'{name}/default')
     n = len(tab)
-    outliers = tab[:, cols.index('is_outlier')] == 1
+    outliers = tab[:, cols.index('IgG_is_outlier')] == 1
     n_outliers = outliers.sum()
 
-    outlier_type = tab[:, cols.index('outlier_type')]
+    outlier_type = tab[:, cols.index('IgG_outlier_type')]
     n_manual = len([otype for otype in outlier_type if 'manual: 1' in otype])
 
     return n, n_outliers, n_manual
@@ -56,20 +58,20 @@ def cell_outliers_per_plate(plate):
     for imf in image_files:
         with h5py.File(imf, 'r') as f:
             cols, tab = read_table(f, outlier_tab_name)
-    n = len(tab)
-    outliers = tab[:, cols.index('is_outlier')] == 1
-    n_outliers = outliers.sum()
+        n += len(tab)
+        outliers = tab[:, cols.index('is_outlier')] == 1
+        n_outliers += outliers.sum()
     return n, n_outliers
 
 
-def quantify_cell_outliers():
+def quantify_cell_outliers(n_jobs=22):
     plates = get_manuscript_plates()
 
-    n_samples, n_outliers = 0, 0
-    for plate in plates:
-        ns, no = cell_outliers_per_plate(plate)
-        n_samples += ns
-        n_outliers += no
+    with futures.ProcessPoolExecutor(n_jobs) as pp:
+        results = list(tqdm(pp.map(cell_outliers_per_plate, plates), total=len(plates)))
+
+    n_samples = sum([res[0] for res in results])
+    n_outliers = sum([res[1] for res in results])
 
     print("Outliers per cell :")
     print(n_outliers, "/", n_samples, "=", float(n_outliers) / n_samples)
