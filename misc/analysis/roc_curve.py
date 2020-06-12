@@ -1,5 +1,5 @@
 import seaborn as sns
-sns.set(style="darkgrid")
+sns.set(style="white")
 
 import numpy as np
 from sklearn import metrics
@@ -15,11 +15,12 @@ if len(sys.argv) < 2:
 analysis_file = sys.argv[1]
 
 # all parameters
-
 IgA_name = 'IgA_ratio_of_q0.5_of_means'
 IgM_name = "IgM_ratio_of_q0.5_of_means"
 IgG_name = "IgG_ratio_of_q0.5_of_means"
+
 score_names = [IgA_name, IgG_name, IgM_name]
+
 label_name = "cohort_type"
 plate_name = "plate_name"
 time_name = "days_after_onset"
@@ -32,9 +33,10 @@ cr2marker = {1: "<",
              2: "*",
              10: "*"}
 
-remove_IgA_for_quality_control = ("B92", "B60", "B22", "B103", "CMV11", "CMV30", "EBV32", "EBV51", "EBV54", "EBV59")
+remove_IgA_for_quality_control = ("B92", "B60", "B22", "B103", "CMV 11", "CMV 30",
+                                  "EBV 32", "EBV 51", "EBV 54", "EBV 59")
 
-histogram_bins = bins = np.linspace(1., 5, 30)
+histogram_bins = bins = np.linspace(1., 22, 30)
 prior_probability_of_disease = 0.5
 # cost_ratios = [1, 10]
 cost_ratios = [10]
@@ -114,23 +116,35 @@ def remove_double_entries(score_data):
     print("-------------------------------------")
 
 
-def parse_csv(file, score_names):
-    score_data = pandas.read_csv(file)
-
+def manual_quality_control(score_data):
     # quality control by Vibor
     # Vibor: I did however manually cleaned the IgA results by removing those with dotty pattern
     quality_control_iga_outliers = score_data[score_data[IgA_name].notnull() &
                                               score_data[ctype_name].isin(remove_IgA_for_quality_control)]
     score_data.loc[quality_control_iga_outliers.index, IgA_name] = np.nan
 
+
+def read_table_data(file):
+    if file.endswith("xlsx"):
+        table_data = pandas.read_excel(file)
+    elif file.endswith("csv"):
+        table_data = pandas.read_csv(file)
+    else:
+        raise NotImplementedError("can not read extension ", file)
+
+    return table_data
+
+
+def parse_table(file):
+    score_data = read_table_data(file)
+
+    manual_quality_control(score_data)
     restrict_to_cohort(score_data, ('A', 'B', 'C', 'Z'))
     remove_longitudinal_study(score_data)
     remove_iga_and_igg_from_igm_plates(score_data)
     remove_plates45(score_data)
     add_ytrue(score_data)
     remove_double_entries(score_data)
-
-    import pdb; pdb.set_trace()
 
     return score_data
 
@@ -154,50 +168,80 @@ def plot_score_vs_time(score_data):
 
 def plot_histograms(score_name, score_data, time_thresholds):
 
+    sns.set(style="white")
+
     prefix = "positive patient with "
 
-    fig, ax = plt.subplots(figsize=(8, 8))
-    ax.set_title(f'')
-    ax.set_yscale('log')
+    # fig, ax = plt.subplots(figsize=(8, 8))
 
-    negative_scores = score_data[score_name][score_data['ytrue'] == 0]
+    f, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 8), sharex=True)
 
-    positives = []
-    pos_labels = []
-    for (t_low, t_high) in time_thresholds:
-        scores_per_timebin = score_data[((score_data[time_name] >= t_low) &
-                                         (score_data[time_name] <= t_high))]
+    for ax in [ax1, ax2]:
+
+        ax.set_title(f'')
+        # ax.set_yscale('log')
+
+        negative_scores = score_data[score_name][score_data['ytrue'] == 0]
+
+        positives = []
+        pos_labels = []
+        for (t_low, t_high) in time_thresholds:
+            scores_per_timebin = score_data[((score_data[time_name] >= t_low) &
+                                             (score_data[time_name] <= t_high))]
+            if len(scores_per_timebin) > 0:
+                positives.append(scores_per_timebin[score_name].dropna())
+                pos_labels.append(prefix + " " + get_time_label(t_low, t_high))
+
+        scores_outside_of_timebin = score_data[score_data['ytrue'] == 1 & score_data[time_name].isnull()]
         if len(scores_per_timebin) > 0:
-            positives.append(scores_per_timebin[score_name].dropna())
-            pos_labels.append(prefix + " " + get_time_label(t_low, t_high))
+            positives.append(scores_outside_of_timebin[score_name].dropna())
+            pos_labels.append(f"{prefix} unknown infection time")
 
-    scores_outside_of_timebin = score_data[score_data['ytrue'] == 1 & score_data[time_name].isnull()]
-    if len(scores_per_timebin) > 0:
-        positives.append(scores_outside_of_timebin[score_name].dropna())
-        pos_labels.append(f"{prefix} unknown infection time")
+        ax.hist(positives, bins, alpha=1., label=pos_labels, stacked=True)
+        ax.hist(negative_scores, bins, alpha=1., label='control', ec='0.', fc='none', histtype='step', lw=3)
 
-    ax.hist(positives, bins, alpha=1., label=pos_labels, stacked=True)
-    ax.hist(negative_scores, bins, alpha=1., label='control', ec='0.', fc='none', histtype='step', lw=3)
+        # tweak the axis labels
+        xlab = ax.xaxis.get_label()
+        ylab = ax.yaxis.get_label()
 
-    # tweak the axis labels
-    xlab = ax.xaxis.get_label()
-    ylab = ax.yaxis.get_label()
+        ax.set_ylim([0.1, None])
+        xlab.set_style('italic')
+        xlab.set_size(14)
+        ylab.set_style('italic')
+        ylab.set_size(14)
 
-    xlab.set_style('italic')
-    xlab.set_size(14)
-    ylab.set_style('italic')
-    ylab.set_size(14)
+        # tweak the title
+        ttl = ax.title
+        ttl.set_weight('bold')
+        ttl.set_size(20)
 
-    # tweak the title
-    ttl = ax.title
-    ttl.set_weight('bold')
-    ttl.set_size(20)
+    if "ratio" in score_name:
+        ax2.set_xlabel(f"r({score_name[:3]})")
+    else:
+        ax2.set_xlabel(f"z({score_name[:3]})")
 
-    ax.set_ylabel('Patients')
-    ax.set_xlabel(f"r({score_name[:3]})")
+    # hide the spines between ax and ax2
+    ax1.spines['bottom'].set_visible(False)
+    ax2.spines['top'].set_visible(False)
+    ax1.xaxis.tick_top()
+    ax1.tick_params(labeltop='off')  # don't put tick labels at the top
+    ax2.xaxis.tick_bottom()
 
-    ax.legend(loc='upper right')
-    plt.savefig(f'{score_name[:4]}_HIST.png')
+    d = .015  # how big to make the diagonal lines in axes coordinates
+    # arguments to pass to plot, just so we don't keep repeating them
+    kwargs = dict(transform=ax1.transAxes, color='k', clip_on=False)
+    ax1.plot((-d, +d), (-d, +d), **kwargs)        # top-left diagonal
+    ax1.plot((1 - d, 1 + d), (-d, +d), **kwargs)  # top-right diagonal
+
+    kwargs.update(transform=ax2.transAxes)  # switch to the bottom axes
+    ax2.plot((-d, +d), (1 - d, 1 + d), **kwargs)  # bottom-left diagonal
+    ax2.plot((1 - d, 1 + d), (1 - d, 1 + d), **kwargs)  # bottom-right diagonal
+
+    ax1.set_ylim(11, None)  # outliers only
+    ax2.set_ylim(0, 10)  # most of the data
+
+    ax1.legend(loc='upper right')
+    plt.savefig(f'{score_name[:10]}_HIST.png')
 
 
 def compute_roc(ytrue, scores):
@@ -243,13 +287,20 @@ def plot_thresholds(optimal_thresholds, colors, ax):
 
 def plot_roc(score_data, score_name, time_thresholds, cost_ratios):
 
+    sns.set(style="whitegrid")
+
     optimal_thresholds = {}
     colors = {}
 
     roc_data = score_data[['ytrue', score_name]].dropna()
 
     fig, ax = plt.subplots(figsize=(8, 8))
-    ax.set_title(f'Receiver Operating Characteristic for {score_name[:3]}')
+    title = f'Receiver Operating Characteristic for {score_name[:3]}'
+
+    if "_z_" in score_name:
+        title += "\nrobust z score"
+
+    ax.set_title(title)
 
     fpr, tpr, threshold, roc_auc = compute_roc(roc_data['ytrue'], roc_data[score_name])
     color = plot_roc_curve(fpr, tpr, roc_auc, ax, "all patients")
@@ -300,16 +351,17 @@ def plot_roc(score_data, score_name, time_thresholds, cost_ratios):
     ax.set_ylim([0., 1.05])
     ax.set_ylabel('True Positive Rate')
     ax.set_xlabel('False Positive Rate')
-    plt.savefig(f'{score_name[:4]}_ROC.png')
+    plt.savefig(f'{score_name[:10]}_ROC.png')
 
     return optimal_thresholds
 
-score_data = parse_csv(analysis_file, score_names)
+score_data = parse_table(analysis_file)
 print(score_data[plate_name].str.startswith('plate9_5').sum())
 score_data.to_excel('used_data.xlsx', index=False)
 
 control_cohorts = ("EBV", "CMV")
-control_data = pandas.read_csv(analysis_file)
+control_data = parse_table(analysis_file)
+manual_quality_control(control_data)
 restrict_to_cohort(control_data, control_cohorts)
 # remove_longitudinal_study(control_data)
 remove_iga_and_igg_from_igm_plates(control_data)
@@ -319,15 +371,6 @@ remove_double_entries(control_data)
 plot_score_vs_time(score_data)
 
 tabel1_data = {"cohort": ["B", "A", "Z", "E", "EBV", "CMV"],
-               "num samples IgA": [],
-               "num samples IgM": [],
-               "num samples IgG": [],
-               "threshold IgA": [],
-               "threshold IgM": [],
-               "threshold IgG": [],
-               "IF IgM": [],
-               "IF IgA": [],
-               "IF IgG": [],
                "ELISA IgA": [7, 1, 2, 10, np.nan, np.nan],
                "ELISA IgG": [5, 1, 0, 1, np.nan, np.nan]}
 
@@ -340,6 +383,10 @@ for score_name in score_names:
                                   cost_ratios=cost_ratios)
 
     m = cost_ratios[0]
+
+    tabel1_data[f"IF {score_name[:3]}"] = []
+    tabel1_data[f"num samples {score_name[:3]}"] = []
+    tabel1_data[f"threshold {score_name[:3]}"] = []
 
     def qqq(cohort, data, score_name, optimal_thresholds, table):
         cohort_data = data[data["cohort"] == cohort]
@@ -361,11 +408,3 @@ for score_name in score_names:
 
 print(tabel1_data)
 pandas.DataFrame(data=tabel1_data).to_excel('table1.xlsx', index=False)
-
-#     tabel1_data.append(len(score_data))
-
-#     th = optimal_thresholds["all patients"][m][0]
-#     control_values = control_data[score_name].dropna()
-#     fpr = np.array(th <= control_values).mean()
-
-#     print(f"false positive control for {score_name:3} (m={m}): {fpr}")
