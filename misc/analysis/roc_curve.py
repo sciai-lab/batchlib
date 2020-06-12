@@ -36,7 +36,7 @@ cr2marker = {1: "<",
 remove_IgA_for_quality_control = ("B92", "B60", "B22", "B103", "CMV 11", "CMV 30",
                                   "EBV 32", "EBV 51", "EBV 54", "EBV 59")
 
-histogram_bins = bins = np.linspace(1., 22, 30)
+histogram_bins = bins = np.linspace(1., 5, 30)
 prior_probability_of_disease = 0.5
 # cost_ratios = [1, 10]
 cost_ratios = [10]
