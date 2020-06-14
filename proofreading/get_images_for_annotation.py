@@ -1,3 +1,4 @@
+import argparse
 import os
 
 import h5py
@@ -43,7 +44,10 @@ def make_image_list(initial_table, root, root_out):
 
 
 if __name__ == '__main__':
-    initial_table = './Stacks2proofread.xlsx'
-    root = '/g/kreshuk/data/covid/data-processed'
-    root_out = '/g/kreshuk/data/covid/for_annotation/round1'
-    make_image_list(initial_table, root, root_out)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--table', default='./Stacks2proofread.xlsx')
+    parser.add_argument('--root', default='/g/kreshuk/data/covid/data-processed')
+    parser.add_argument('--root_out', default='/g/kreshuk/data/covid/for_annotation/round1')
+
+    args = parser.parse_args()
+    make_image_list(args.initial_table, args.root, args.root_out)
