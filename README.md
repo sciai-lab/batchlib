@@ -1,6 +1,7 @@
 # BatchLib
 
-Batch processing for image-analysis on high-throughput screening data; developed for covid19 antibody test set-up.
+Batch processing for image-analysis on high-throughput screening data; developed for a Covid19 IF assay.
+See [Microscopy-based assay for semi-quantitative detection of SARS-CoV-2 specific antibodies in human sera](https://www.biorxiv.org/content/10.1101/2020.06.15.152587v1) for a full description of the assay.
 
 
 ## Installation

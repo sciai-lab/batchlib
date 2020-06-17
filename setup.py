@@ -1,11 +1,12 @@
+import runpy
 from setuptools import setup, find_packages
 
-# TODO get proper version
-# TODO add all the authors
+__version__ = runpy.run_path("batchlib/__version__.py")["__version__"]
+
 setup(
     name="batchlib",
     packages=find_packages(exclude=["test"]),
-    version='0.1.0',
+    version=__version__,
     url="https://github.com/hci-unihd/batchlib.git",
-    # author="Constantin Pape"
+    author="Constantin Pape, Roman Remme, Adrian Wolny, Steffen Wolf, Lorenzo Cerrone"
 )
