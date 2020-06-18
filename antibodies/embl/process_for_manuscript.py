@@ -6,6 +6,12 @@ from glob import glob
 ROOT_IN = '/g/kreshuk/data/covid/covid-data-vibor'
 ROOT_OUT = '/g/kreshuk/data/covid/data-processed'
 
+EXCLUDE_KINDER_PLATES = [
+    "PlateK19rep1_20200506_095722_264",
+    "plateK20rep1_20200602_124031_673",
+    "plateK21rep1_20200602_145234_278"
+]
+
 
 def is_processed(folder):
     status = os.path.join(folder, 'batchlib', 'CellAnalysisWorkflow.status')
@@ -28,19 +34,21 @@ def is_processed_mean_and_sums(folder):
     return status['state'] == 'processed'
 
 
-def fixed_pattern_plates(patterns):
+def fixed_pattern_plates(patterns, exclude=None):
     inputs = []
     for pattern in patterns:
         inputs.extend(glob(os.path.join(ROOT_IN, pattern)))
     folder_names = [os.path.split(folder)[1] for folder in inputs]
     folder_names.sort()
-    folder_names = list(set(folder_names))
-    return folder_names
+    folder_names = set(folder_names)
+    if exclude is not None:
+        folder_names = folder_names - set(exclude)
+    return list(folder_names)
 
 
 def heidelberg_kinder_plates():
     patterns = ['*plateK*', '*PlateK*']
-    return fixed_pattern_plates(patterns)
+    return fixed_pattern_plates(patterns, exclude=EXCLUDE_KINDER_PLATES)
 
 
 def tubingen_kinder_plates():
@@ -49,13 +57,18 @@ def tubingen_kinder_plates():
 
 
 def ulm_kinder_plates():
-    patterns = ['*plateU*']
+    patterns = ['*U*']
+    return fixed_pattern_plates(patterns)
+
+
+def new_kinder_plates():
+    patterns = ['*RP*']
     return fixed_pattern_plates(patterns)
 
 
 def all_kinder_plates():
-    patterns = ['*plateK*', '*PlateK*', '*plateT*', '*plateU*']
-    return fixed_pattern_plates(patterns)
+    patterns = ['*plateK*', '*PlateK*', '*plateT*', '*U*', '*RP*']
+    return fixed_pattern_plates(patterns, exclude=EXCLUDE_KINDER_PLATES)
 
 
 def all_manuscript_plates():
