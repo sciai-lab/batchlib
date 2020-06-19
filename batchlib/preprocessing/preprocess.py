@@ -10,7 +10,9 @@ from tqdm import tqdm
 
 from ..base import BatchJobOnContainer
 from ..config import get_default_extension
-from ..util import barrel_correction, open_file
+from ..util import barrel_correction, open_file, get_logger
+
+logger = get_logger('Workflow.BatchJob.Preprocess')
 
 
 def parse_channel_names(input_name):
@@ -31,7 +33,7 @@ def parse_channel_names(input_name):
 def get_serum_keys(folder):
     mapping_file = os.path.join(folder, 'channel_mapping.json')
     if not os.path.exists(mapping_file):
-        raise ValueError("The input folder %s does not contain channel_mapping.json" % mapping_file)
+        raise ValueError("The input folder %s does not contain channel_mapping.json" % folder)
     with open(mapping_file) as f:
         channel_mapping = json.load(f)
     names = list(channel_mapping.values())
@@ -123,6 +125,10 @@ class Preprocess(BatchJobOnContainer):
 
         self.validate_barrel_corrector(barrel_corrector_path, channel_names, channel_mapping)
         self.barrel_corrector_path = barrel_corrector_path
+        if self.barrel_corrector_path is None:
+            logger.info(f"{self.name}: run preprocessing without a barrel corrector")
+        else:
+            logger.info(f"{self.name}: run preprocessing with a barrel corrector from {self.barrel_corrector_path}")
 
         self.channel_mapping = channel_mapping
         self.channel_names = channel_names

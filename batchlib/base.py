@@ -64,7 +64,8 @@ class BatchJob(ABC):
         name_ = self.__class__.__name__
         # if the class identifier is not None, it's added to the name
         # this allows running multiple batch jobs of the same type for one class
-        return name_ if self.identifier is None else name_ + self.identifier
+        identifier = getattr(self, 'identifier', None)
+        return name_ if identifier is None else name_ + identifier
 
     def status_file(self, folder):
         return os.path.join(folder, 'batchlib', self.name + '.status')

@@ -11,7 +11,7 @@ from batchlib.analysis import PixellevelAnalysis, all_plots
 from batchlib.outliers.outlier import get_outlier_predicate
 from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import IlastikPrediction
-from batchlib.util.logging import get_logger
+from batchlib.util.logger import get_logger
 
 logger = get_logger('Workflow.PixelAnalysis')
 

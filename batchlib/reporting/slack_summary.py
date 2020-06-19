@@ -1,16 +1,19 @@
 import os
 import shutil
 from glob import glob
+from numbers import Number
 
 from slack import WebClient
 from slack.errors import SlackApiError
 
+from ..analysis.cell_level_analysis import _get_bg_correction_dict
 from ..base import BatchJobOnContainer
-from ..util import get_logger, open_file
+from ..config import get_default_extension
+from ..util import get_logger, open_file, in_file_to_image_name
 from .export_tables import export_default_table
 
-DEFAULT_PLOT_PATTERNS = ('*ratio_of_q0.5_of_means*per-well.png',
-                         '*robust_z_score_means*per-well.png')
+DEFAULT_PLOT_PATTERNS = ('*ratio_of_q0.5_of_means*per-well.jpg',
+                         '*robust_z_score_means*per-well.jpg')
 
 DEFAULT_SLACK_CHANNEL = '#latest-results'
 # DEFAULT_SLACK_CHANNEL = '#random'
@@ -46,7 +49,7 @@ class SlackSummaryWriter(BatchJobOnContainer):
         if self.write_to_slack:
             check_path = os.path.join(self.out_folder, 'message_sent.txt')
         else:
-            check_path = os.path.join(self.out_folder, 'message.txt')
+            check_path = os.path.join(self.out_folder, 'message.md')
         return os.path.exists(check_path)
 
     def validate_output(self, path, **kwargs):
@@ -69,26 +72,53 @@ class SlackSummaryWriter(BatchJobOnContainer):
         params = {name: val for name, val in zip(param_cols, param_table.squeeze())}
         return params
 
-    def compile_message(self, out_folder, plate_name, runtime, background_dict):
-        msg_path = os.path.join(self.out_folder, 'message.txt')
+    def compile_message(self, out_folder, input_file, plate_name, runtime, background_dict):
+        msg_path = os.path.join(self.out_folder, 'message.md')
+
+        ext = '*' + get_default_extension()
+        input_pattern = os.path.join(self.input_folder, ext)
+        in_files = glob(input_pattern)
+        in_file = in_files[0]
+        im_name = in_file_to_image_name(in_file)
+
+        with open_file(in_file, 'r') as f:
+            commit_id = f.attrs['batchlib_commit']
 
         with open(msg_path, 'w') as f:
-            f.write(f"Results for plate {plate_name}:\n")
-            f.write(f"Files are stored in {self.folder}\n")
+            f.write(f"Results for plate `{plate_name}`:\n")
+            f.write(f"Files are stored in `{self.folder}`\n")
             if runtime is not None:
-                # TODO format to hours
                 f.write(f"Computation ran in {runtime} s\n")
-            f.write(f"Parameter used for the background subtraction: {background_dict}\n")
+
+            f.write(f"The files were processed using batchlib commit `{commit_id}`.\n")
+            f.write("The following values were used for the background subtraction for the individual channels:\n")
+            for channel_name, bg_key in background_dict.items():
+                if isinstance(bg_key, Number):
+                    f.write(f"`{channel_name}`: the fixed background was fixed to the value {bg_key}\n")
+                else:
+                    bg_src, bg_type = bg_key.split('/')
+                    if bg_src == 'plate':
+                        bg_col_name = f"{channel_name}_median"
+                        bg_val = _get_bg_correction_dict(input_file, bg_key, bg_col_name, in_files)[im_name]
+                        if bg_type == "backgrounds_from_min_well":
+                            well_col_name = f"{channel_name}_min_well"
+                            min_well = _get_bg_correction_dict(input_file, bg_key, well_col_name, in_files)[im_name]
+                            msg = f"the background was computed via median over the minimum well {min_well}: {bg_val}"
+                        else:
+                            msg = f"the background was computed via median over the whole plate: {bg_val}"
+                    else:
+                        msg = f"the background was computed per {bg_src}"
+                    f.write(f"`{channel_name}`: {msg}\n")
 
     def post_slack(self, out_folder):
         msg_sent_path = os.path.join(self.out_folder, 'message_sent.txt')
 
         # load the messages
-        msg_path = os.path.join(self.out_folder, 'message.txt')
+        msg_path = os.path.join(self.out_folder, 'message.md')
         with open(msg_path) as f:
             message = f.read()
 
-        image_paths = glob(os.path.join(out_folder, '*.png'))
+        image_paths = glob(os.path.join(out_folder, '*.jpg'))
         image_paths.sort()
         table_path = glob(os.path.join(out_folder, '*.xlsx'))
         assert len(table_path) == 1
@@ -97,15 +127,18 @@ class SlackSummaryWriter(BatchJobOnContainer):
         # get slack client and connect to the workspace
         client = WebClient(token=self.slack_token)
 
+        # NOTE: slack does not support multiple file upload in a single command for now,
+        # neither via BlockKit (only supports remote files, not uploading local ones)
+        # nor via files_upload (only supports a single file)
+        # this is a bit of a pity, because it make
+
         # post summary to slack
         try:
             logger.info(f"{self.name}: successfully connected to workspace")
-            # TODO would be nice to integrate the file upload in here as well,
-            # but I don't know how
             message_blocks = [
                 {
                     "type": "section",
-                    "text": {"text": message, "type": "plain_text"}
+                    "text": {"text": message, "type": "mrkdwn"}
                 }
             ]
             response = client.chat_postMessage(channel=self.slack_channel,
@@ -115,8 +148,6 @@ class SlackSummaryWriter(BatchJobOnContainer):
             for im_path in image_paths:
                 response = client.files_upload(channels=self.slack_channel, file=im_path)
                 logger.debug(f"{self.name}: posted {response} to {self.slack_channel}")
-
-            # TODO upload the table in proper format (maybe excel?)
 
             # we just write this file if the slack message was sent
             with open(msg_sent_path, 'w'):
@@ -129,6 +160,7 @@ class SlackSummaryWriter(BatchJobOnContainer):
         if len(input_files) != 1 or len(output_files) != 1:
             raise ValueError(f"{self.name}: expect only a single table file, not {len(input_files)}")
 
+        input_table = input_files[0]
         plate_name = os.path.split(self.folder)[1]
         # make the output summary folder
         out_folder = self.out_folder
@@ -141,11 +173,11 @@ class SlackSummaryWriter(BatchJobOnContainer):
 
         # copy the well table as csv to the summary folder and load the analysis parameter
         table_out_path = os.path.join(out_folder, '%s_summary.xlsx' % plate_name)
-        params = self.copy_table(input_files[0], table_out_path)
+        params = self.copy_table(input_table, table_out_path)
 
         # compile the slack message
         background_dict = {k.lstrip('background_'): v for k, v in params.items() if k.startswith('background')}
-        self.compile_message(out_folder, plate_name, runtime, background_dict)
+        self.compile_message(out_folder, input_table, plate_name, runtime, background_dict)
 
         # post to slack with the slack bot
         if self.slack_token is None:

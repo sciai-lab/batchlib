@@ -3,8 +3,10 @@ import json
 import os
 from datetime import datetime
 
-from batchlib.outliers.outlier import OutlierPredicate, DEFAULT_OUTLIER_DIR
+from batchlib.outliers.outlier import OutlierPredicate
 from batchlib.util import get_logger
+from batchlib.util.cohort_parser import CohortIdParser
+from batchlib.util.elisa_results_parser import ElisaResultsParser
 from batchlib.util.io import image_name_to_site_name
 
 ASSAY_METADATA = 'immuno-assay-metadata'
@@ -78,8 +80,11 @@ def _create_images(well_name, well_files, outlier_predicate):
     return images
 
 
-def _create_wells(plate_name, plate_dir):
-    outlier_predicate = OutlierPredicate(DEFAULT_OUTLIER_DIR, plate_name)
+def _create_wells(plate_name, plate_dir, cohort_id_parser, elisa_results_parser, outlier_dir=None):
+    if outlier_dir is None:
+        outlier_dir = os.path.join(os.path.split(__file__)[0], '../../misc/tagged_outliers')
+    outlier_predicate = OutlierPredicate(outlier_dir, plate_name)
+    plate_cohorts = cohort_id_parser.get_cohorts_for_plate(plate_name)
 
     file_names = []
     for ext in SUPPORTED_FORMATS:
@@ -95,20 +100,32 @@ def _create_wells(plate_name, plate_dir):
 
     wells = []
     for well_name, well_files in well_dict.items():
-        wells.append(
-            {
-                "name": well_name,
-                # assume all wells are valid for now
-                "outlier": 0,
-                "outlier_type": "manual",
-                "images": _create_images(well_name, well_files, outlier_predicate)
-            }
-        )
+        cohort_id = plate_cohorts.get(well_name, None)
+
+        well = {
+            "name": well_name,
+            # assume all wells are valid for now
+            "outlier": 0,
+            "outlier_type": "manual",
+            "images": _create_images(well_name, well_files, outlier_predicate),
+            "cohort_id": cohort_id
+        }
+
+        if cohort_id is not None:
+            well["patient_type"] = cohort_id[0]
+            test_results = elisa_results_parser.elisa_results.get(cohort_id, {})
+            for k, v in test_results.items():
+                well[k] = v
+
+        wells.append(well)
 
     return wells
 
 
 def create_plate_doc(plate_name, plate_dir):
+    cohort_id_parser = CohortIdParser()
+    elisa_results_parser = ElisaResultsParser()
+
     logger.info(f'Creating plate object for: {plate_name}')
     result = {
         "name": plate_name,
@@ -117,7 +134,7 @@ def create_plate_doc(plate_name, plate_dir):
         "outlier": 0,
         "outlier_type": "manual",
         "channel_mapping": _load_channel_mapping(plate_dir),
-        "wells": _create_wells(plate_name, plate_dir)
+        "wells": _create_wells(plate_name, plate_dir, cohort_id_parser, elisa_results_parser)
     }
 
     return result

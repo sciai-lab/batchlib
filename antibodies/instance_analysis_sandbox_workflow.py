@@ -17,7 +17,7 @@ from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.voronoi_ring_segmentation import VoronoiRingSegmentation
 from batchlib.segmentation.unet import UNet2D
-from batchlib.util.logging import get_logger
+from batchlib.util.logger import get_logger
 
 logger = get_logger('Workflow.InstanceAnalysis2')
 

@@ -13,15 +13,22 @@ logger = get_logger('Workflow.BatchJob.MergeAnalysisTables')
 # - reference table:  score, number of cells and outliers
 # see also https://github.com/hci-unihd/batchlib/issues/91
 DEFAULT_COMMON_NAME_PATTERNS = ('ratio_of_q0.5', 'robust_z_score', 'mad', 'q0.5_of_cell',
-                                'ratio_of_mean', 'mean_of_cell')
+                                'ratio_of_mean', 'mean_of_cell', 'pvalue_of_mean', 'is_outlier', 'outlier_type')
 DEFAULT_REFERENCE_NAME_PATTERNS = ('score', 'n_cells', 'n_infected', 'n_control', 'n_outlier_cells',
-                                   'fraction_infected', 'is_outlier', 'outlier_type')
+                                   'fraction_infected')
 
 
 # we need to remove the first occurrence of the feature identifier if
 # we get it twice, because of stuff we do to the table key beforehand ...
 def modify_column_names(col_names, feature_identifiers):
     def modify_name(name):
+
+        # special case for the outlier columns
+        if 'outlier' in name:
+            for idf in feature_identifiers:
+                name = name.replace(f'{idf}_', '')
+            return name
+
         counts = 0
         begins = {}
         for idf in feature_identifiers:
@@ -35,7 +42,8 @@ def modify_column_names(col_names, feature_identifiers):
             to_remove = [idf for idf, beg in begins.items() if beg == begin]
             assert len(to_remove) == 1
             to_remove = to_remove[0] + '_'
-            return name.replace(to_remove, '')
+            name = name[:begin] + name[begin+len(to_remove):]
+            return name
         else:
             return name
 
@@ -203,7 +211,7 @@ class MergeAnalysisTables(BatchJobOnContainer):
         if any(pattern in name for pattern in dont_add_prefix_patterns) and not override_:
             return name.replace('serum', '').replace('of_cell_', '')
         else:
-            return prefix + name.replace('serum', '').replace('of_cell_', '')
+            return prefix + '_' + name.replace('serum', '').replace('of_cell_', '').lstrip('_')
 
     def _get_table_prefix(self, table_name):
         return table_name.replace('serum_', '')
@@ -239,7 +247,8 @@ class MergeAnalysisTables(BatchJobOnContainer):
                     column_names = this_column_names
                 else:
                     if len(table) != len(this_table):
-                        raise RuntimeError(f"Invalid number of rows {len(table)}, {len(this_table)}")
+                        msg = f"Invalid number of rows {len(table)}, {len(this_table)} for table {table_name}"
+                        raise RuntimeError(msg)
                     table = [row + this_row.tolist() for row, this_row in zip(table, this_table)]
                     column_names.extend(this_column_names)
                     assert len(table[0]) == len(column_names)

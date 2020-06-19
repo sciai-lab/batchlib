@@ -6,17 +6,21 @@ from numbers import Number
 import configargparse
 
 from batchlib import run_workflow
+
 from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    DenoiseByGrayscaleOpening,
                                                    DenoiseByWhiteTophat,
-                                                   InstanceFeatureExtraction,
-                                                   FindInfectedCells,
-                                                   ExtractBackground)
+                                                   FindInfectedCells)
+from batchlib.analysis.background_extraction import (ExtractBackground,
+                                                     BackgroundFromWells)
 from batchlib.analysis.cell_analysis_qc import (CellLevelQC, ImageLevelQC, WellLevelQC,
                                                 DEFAULT_CELL_OUTLIER_CRITERIA,
                                                 DEFAULT_IMAGE_OUTLIER_CRITERIA,
                                                 DEFAULT_WELL_OUTLIER_CRITERIA)
+from batchlib.analysis.feature_extraction import (InstanceFeatureExtraction,
+                                                  SegmentationProperties)
 from batchlib.analysis.merge_tables import MergeAnalysisTables
+
 from batchlib.mongo.result_writer import DbResultWriter
 from batchlib.outliers.outlier import get_outlier_predicate
 from batchlib.preprocessing import get_barrel_corrector, get_serum_keys, Preprocess
@@ -24,11 +28,12 @@ from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
-from batchlib.segmentation.voronoi_ring_segmentation import ErodeSegmentation, VoronoiRingSegmentation
+from batchlib.segmentation.voronoi_ring_segmentation import ErodeSegmentation  # , VoronoiRingSegmentation
 from batchlib.reporting import (SlackSummaryWriter,
                                 export_tables_for_plate,
                                 WriteBackgroundSubtractedImages)
-from batchlib.util import get_logger
+from batchlib.util import get_logger, open_file, read_table, has_table
+from batchlib.util.logger import setup_logger
 from batchlib.util.plate_visualizations import all_plots
 
 logger = get_logger('Workflow.CellAnalysis')
@@ -37,6 +42,12 @@ DEFAULT_PLOT_NAMES = ['ratio_of_q0.5_of_means',
                       'ratio_of_q0.5_of_sums',
                       'robust_z_score_sums',
                       'robust_z_score_means']
+
+# these are the default min serum intensities that are used for QC, if we DO NOT have
+# empty wells.
+# the intensity thresholds are derived from 3 * mad background, see
+# https://github.com/hci-unihd/antibodies-analysis-issues/issues/84#issuecomment-632658726
+DEFAULT_MIN_SERUM_INTENSITIES = {'serum_IgG': 301.23, 'serum_IgA': 392.76, 'serum_IgM': None}
 
 
 def get_analysis_parameter(config, background_parameters):
@@ -79,18 +90,44 @@ def get_input_keys(config, serum_in_keys):
 def validate_bg_dict(bg_dict):
     excepted_vals = ('images/backgrounds',
                      'wells/backgrounds',
-                     'plate/backgrounds')
+                     'plate/backgrounds',
+                     'plate/backgrounds_from_min_well')
     for key, val in bg_dict.items():
         if not isinstance(val, Number) and val not in excepted_vals:
             raise ValueError(f"Invalid background value {val} for {key}")
+
+
+def default_bg_parameters(config, keys):
+    name = os.path.split(config.input_folder)[1]
+
+    bg_info_dict = os.path.join(config.misc_folder, 'plates_to_background_well_new.json')
+    with open(bg_info_dict) as f:
+        bg_info_dict = json.load(f)
+
+    # all new plates have H01 and G01 as empty wells for bg estimation
+    bg_info = bg_info_dict.get(name, ['H01', 'G01'])
+
+    # the bg-info can have 2 different structures:
+    # list: -> list of wells for background estimation
+    # dict: -> dict of fixed background values for the channels
+    if isinstance(bg_info, list):
+        bg_wells = bg_info
+        # NOTE: marker background needs to be estimated from the whole plate
+        bg_dict = {k: 'plate/backgrounds_min_well' if k.startswith('serum') else 'plate/backgrounds'
+                   for k in keys}
+    else:
+        bg_wells = []
+        bg_dict = {k: bg_info.get(k, 'plate/backgrounds') for k in keys}
+
+    return bg_dict, bg_wells
 
 
 def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
     keys = serum_ana_in_keys + [marker_ana_in_key]
     background_dict = config.background_dict
     if background_dict is None:
-        logger.info(f"Compute background from data and use the per plate background")
-        return {key: f'plate/backgrounds' for key in keys}
+        logger.info("Background parameter were not specified, using default values for this plate")
+        return default_bg_parameters(config, keys)
 
     if isinstance(background_dict, str):
         background_dict = json.loads(background_dict.replace('\'', '\"'))
@@ -100,19 +137,17 @@ def parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys):
     if len(set(keys) - set(background_dict.keys())) > 0:
         bg_keys = list(background_dict.keys())
         raise ValueError(f"Did not find values for all channels {keys} in {bg_keys}")
-    return background_dict
+    return background_dict, []
 
 
-def get_infected_detection_jobs(config, marker_key_for_infected_classification, feature_identifier):
+def add_infected_detection_jobs(job_list, config, marker_key, feature_identifier):
     erosion_radius = config.infected_erosion_radius
     tophat_radius = config.infected_tophat_radius
     quantile = config.infected_quantile
 
-    jobs = []
-
     if erosion_radius > 0:
         seg_key_for_infected_classification = config.seg_key + '_for_infected_classification'
-        jobs.append((ErodeSegmentation, {
+        job_list.append((ErodeSegmentation, {
             'build': {
                  'input_key': config.seg_key,
                  'output_key': seg_key_for_infected_classification,
@@ -125,14 +160,14 @@ def get_infected_detection_jobs(config, marker_key_for_infected_classification, 
     if erosion_radius > 0 \
             or tophat_radius > 0 \
             or config.ignore_nuclei_in_infected_classification != config.ignore_nuclei:
-        jobs.append((InstanceFeatureExtraction, {
+        job_list.append((InstanceFeatureExtraction, {
             'build': {
-                'channel_keys': (marker_key_for_infected_classification,),
+                'channel_keys': (marker_key,),
                 'nuc_seg_key_to_ignore': config.nuc_key if config.ignore_nuclei_in_infected_classification else None,
                 'cell_seg_key': seg_key_for_infected_classification,
                 'identifier': None,
                 'quantiles': [quantile]},
-            'run': {'gpu_id': config.gpu}
+            'run': {'gpu_id': config.gpu, 'on_cluster': config.on_cluster}
         }))
         this_feature_identifier = None
     else:
@@ -140,10 +175,10 @@ def get_infected_detection_jobs(config, marker_key_for_infected_classification, 
 
     link_out_table = config.seg_key
 
-    jobs.append(
+    job_list.append(
         (FindInfectedCells, {
          'build': {
-             'marker_key': marker_key_for_infected_classification,
+             'marker_key': marker_key,
              'cell_seg_key': seg_key_for_infected_classification,
              'scale_with_mad': config.infected_scale_with_mad,  # default: True
              'infected_threshold': config.infected_threshold,  # default: 5.4
@@ -152,36 +187,49 @@ def get_infected_detection_jobs(config, marker_key_for_infected_classification, 
              'bg_correction_key': 'plate/backgrounds',
              'link_out_table': link_out_table}})
     )
-    return jobs
+    return job_list
 
 
-def get_voronoi_jobs(config, marker_ana_in_key, serum_ana_in_keys):
-    voronoi_param_dict = config.voronoi_param_dict
-    if isinstance(voronoi_param_dict, str):
-        voronoi_param_dict = json.loads(voronoi_param_dict.replace('\'', '\"'))
+def add_background_estimation(job_list, seg_key, channel_keys, identifier=None):
+    job_list.append((
+         ExtractBackground, {
+            'build': {'channel_keys': channel_keys,
+                      'identifier': identifier,
+                      'cell_seg_key': seg_key},
+            'run': {'force_recompute': None}}
+    ))
+    return job_list
 
-    jobs = []
-    for identifier, (width, remove_nucleus) in voronoi_param_dict.items():
-        voronoi_key = config.nuc_key + f'_voronoi_{identifier}'
-        jobs.extend([
-            (VoronoiRingSegmentation, {
-                'build': {'input_key': config.nuc_key,
-                          'output_key': voronoi_key,
-                          'identifier': identifier,
-                          'ring_width': width,
-                          'remove_nucleus': remove_nucleus,
-                          'scale_factors': config.scale_factors},
-                'run': {'n_jobs': config.n_cpus}}),
-            (InstanceFeatureExtraction, {
-                'build': {
-                    'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
-                    'nuc_seg_key_to_ignore': None,
-                    'cell_seg_key': voronoi_key
-                },
-                'run': {'gpu_id': config.gpu}
-            })
-        ])
-    return jobs
+
+def add_background_estimation_from_min_well(job_list, config, wells, channel_keys):
+    # add the background estimation jobs
+    job_list.append((
+        BackgroundFromWells, {
+            'build': {'well_list': wells,
+                      'output_table': 'plate/backgrounds_min_well',
+                      'seg_key': config.seg_key,
+                      'channel_names': channel_keys},
+            "run": {"force_recompute": None}
+            }
+    ))
+    return job_list
+
+
+def get_barrel_corrector_folder(config):
+    barrel_corrector_root = os.path.join(config.misc_folder, 'barrel_correctors')
+    with open(os.path.join(barrel_corrector_root, 'plates_with_old_setup.json')) as f:
+        plates_with_old_setup = json.load(f)
+
+    plate_name = os.path.split(config.input_folder)[1]
+    if plate_name in plates_with_old_setup:
+        subfolder = 'old_microscope'
+    else:
+        subfolder = 'new_microscope'
+
+    barrel_corrector_folder = os.path.join(barrel_corrector_root, subfolder)
+    assert os.path.exists(barrel_corrector_folder)
+
+    return barrel_corrector_folder
 
 
 def core_workflow_tasks(config, name, feature_identifier):
@@ -196,17 +244,22 @@ def core_workflow_tasks(config, name, feature_identifier):
         if config.use_unique_output_folder:
             config.folder += '_' + name
 
-    misc_folder = config.misc_folder
+    work_dir = os.path.join(config.folder, 'batchlib')
+    os.makedirs(work_dir, exist_ok=True)
+    logger = setup_logger(True, work_dir, name)
 
-    model_root = os.path.join(misc_folder, 'models/stardist')
+    model_root = os.path.join(config.misc_folder, 'models/stardist')
     model_name = '2D_dsb2018'
 
-    barrel_corrector_path = get_barrel_corrector(os.path.join(misc_folder, 'barrel_correctors'),
-                                                 config.input_folder)
+    if config.barrel_corrector_folder == 'auto':
+        barrel_corrector_folder = get_barrel_corrector_folder(config)
+    else:
+        barrel_corrector_folder = config.barrel_corrector_folder
+    barrel_corrector_path = get_barrel_corrector(barrel_corrector_folder, config.input_folder)
     if not os.path.exists(barrel_corrector_path):
         raise ValueError(f"Invalid barrel corrector path {barrel_corrector_path}")
 
-    torch_model_path = os.path.join(misc_folder, 'models/torch/fg_and_boundaries_V1.torch')
+    torch_model_path = os.path.join(config.misc_folder, 'models/torch/fg_and_boundaries_V2.torch')
     torch_model_class = UNet2D
     torch_model_kwargs = {
         'in_channels': 1,
@@ -264,8 +317,13 @@ def core_workflow_tasks(config, name, feature_identifier):
             'run': {
                 'erode_mask': 20,
                 'dilate_seeds': 3,
-                'n_jobs': config.n_cpus}})
+                'n_jobs': config.n_cpus}}),
+        (SegmentationProperties, {
+            'build': {'seg_key': config.seg_key},
+            'run': {'n_jobs': config.n_cpus}})
     ]
+
+    # check whether we apply denoising to the marker before analysis
     if config.marker_denoise_radius > 0:
         job_list.append((DenoiseByGrayscaleOpening, {
             'build': {
@@ -274,70 +332,55 @@ def core_workflow_tasks(config, name, feature_identifier):
             'run': {'n_jobs': config.n_cpus}
         }))
         marker_ana_in_key = marker_ana_in_key + '_denoised'
-
     if config.infected_tophat_radius > 0:
-        marker_key_for_infected_classification = 'marker_for_infected_classification'
         job_list.append((DenoiseByWhiteTophat, {
             'build': {
                 'key_to_denoise': marker_ana_in_key,
                 'radius': config.infected_tophat_radius,
-                'output_key': marker_key_for_infected_classification},
+                'output_key': marker_ana_in_key + '_tophat'},
             'run': {'n_jobs': config.n_cpus}
         }))
-    else:
-        marker_key_for_infected_classification = marker_ana_in_key
-
-    if config.voronoi_param_dict is not None:
-        job_list.extend(get_voronoi_jobs(config, marker_ana_in_key, serum_ana_in_keys))
+        marker_ana_in_key += '_tophat'
 
     # add the tasks to extract the features from the cell instance segmentation,
     # do initial image level qc (necessary for the background extraction) and extract the quantiles
-    job_list.extend(
-        [(InstanceFeatureExtraction, {
-          'build': {
-              'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
-              'nuc_seg_key_to_ignore': None if config.ignore_nuclei else config.nuc_key,
-              'cell_seg_key': config.seg_key,
-              'quantiles': [config.infected_quantile],
-              'identifier': feature_identifier},
-          'run': {'gpu_id': config.gpu}}),
-         (ImageLevelQC, {
+    # + do the image QC necessary for the bg estimation jobs
+    job_list.extend([
+        (InstanceFeatureExtraction, {
+            'build': {'channel_keys': (*serum_ana_in_keys, marker_ana_in_key),
+                      'nuc_seg_key_to_ignore': None if config.ignore_nuclei else config.nuc_key,
+                      'cell_seg_key': config.seg_key,
+                      'quantiles': [config.infected_quantile],
+                      'identifier': feature_identifier},
+            'run': {'gpu_id': config.gpu, 'on_cluster': config.on_cluster}}),
+        (ImageLevelQC, {
           'build': {
               'cell_seg_key': config.seg_key,
               'serum_key': serum_seg_in_key,
               'marker_key': marker_ana_in_key,
               'feature_identifier': feature_identifier,
-              'outlier_predicate': outlier_predicate}}),
-         # NOTE the bg extraction is independent of the features, but we still need to pass
-         # the identifier so that the input validation passes
-         (ExtractBackground, {
-          'build': {
-              'marker_key': marker_ana_in_key,  # is ignored
-              'serum_key': serum_seg_in_key,    # is ignored
-              'actual_channels_to_use': (*serum_ana_in_keys, marker_ana_in_key) +
-                                        ((marker_key_for_infected_classification,)
-                                         if marker_key_for_infected_classification != marker_ana_in_key else tuple()),
-              'feature_identifier': feature_identifier,
-              'cell_seg_key': config.seg_key}})]
-    )
-
-    infected_detection_jobs = get_infected_detection_jobs(config, marker_key_for_infected_classification,
-                                                          feature_identifier)
-    job_list.extend(infected_detection_jobs)
+              'outlier_predicate': outlier_predicate}})
+    ])
 
     # for the background substraction, we can either use a fixed value per channel,
     # or compute it from the data. In the first case, we pass the value
     # as 'serum_bg_key' / 'marker_bg_key'. In the second case, we pass a key
     # to the table holding these values.
-    background_parameters = parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys)
+    background_parameters, bg_wells = parse_background_parameters(config, marker_ana_in_key, serum_ana_in_keys)
+
+    # we could also just add these on demand depending on what we need according to the background params
+    bg_estimation_keys = [marker_ana_in_key] + serum_ana_in_keys
+    job_list = add_background_estimation(job_list, config.seg_key, bg_estimation_keys)
+    if len(bg_wells) > 0:
+        job_list = add_background_estimation_from_min_well(job_list, config, bg_wells, bg_estimation_keys)
+
+    job_list = add_infected_detection_jobs(job_list, config, marker_ana_in_key, feature_identifier)
 
     table_path = CellLevelAnalysis.folder_to_table_path(config.folder)
     if config.write_background_images:
-        background_params = {chan_name: background_parameters[chan_name]
-                             for chan_name in serum_ana_in_keys + [marker_ana_in_key]}
         job_list.append(
             (WriteBackgroundSubtractedImages, {
-                 'build': {'background_dict': background_params,
+                 'build': {'background_dict': background_parameters,
                            'table_path': table_path,
                            'scale_factors': config.scale_factors},
                  'run': {'n_jobs': config.n_cpus,
@@ -345,16 +388,23 @@ def core_workflow_tasks(config, name, feature_identifier):
             })
         )
 
+    # we might add a second nucleus dilation task and feature extraction for image level intensity qc
+    # at some point here, but not for the preprint
+
     table_identifiers = serum_ana_in_keys if feature_identifier is None else [k + f'_{feature_identifier}'
                                                                               for k in serum_ana_in_keys]
     write_summary_images = config.write_summary_images
     # NOTE currently the QC tasks will not be rerun if the feature identifier changes
     for serum_key, identifier in zip(serum_ana_in_keys, table_identifiers):
+
+        image_outlier_table = f'images/outliers_{serum_key}'
+        well_outlier_table = f'wells/outliers_{serum_key}'
+
         job_list.append((CellLevelQC, {
             'build': {
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
-                'marker_key': marker_key_for_infected_classification,
+                'marker_key': marker_ana_in_key,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'feature_identifier': feature_identifier,
@@ -364,35 +414,52 @@ def core_workflow_tasks(config, name, feature_identifier):
             'build': {
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
-                'marker_key': marker_key_for_infected_classification,
+                'marker_key': marker_ana_in_key,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'outlier_predicate': outlier_predicate,
                 'feature_identifier': feature_identifier,
+                'table_out_key': image_outlier_table,
                 'identifier': identifier}
         }))
+
+        # if we have wells without serum, we use them to determine the min infected intensity
+        # otherwise, we use the preset values determined on multiple plates
+        # Note: the min intensity is set to 3 times the MAD
+        well_qc_criteria = DEFAULT_WELL_OUTLIER_CRITERIA.copy()
+        if len(bg_wells) > 0 and config.use_mad_from_bg_wells:
+            min_infected_intensity_for_channel = 'plate/backgrounds_min_well'
+        else:
+            min_infected_intensity_for_channel = DEFAULT_MIN_SERUM_INTENSITIES.get(serum_key, None)
+        well_qc_criteria.update({'min_infected_intensity': min_infected_intensity_for_channel})
+
         job_list.append((WellLevelQC, {
             'build': {
                 'cell_seg_key': config.seg_key,
                 'serum_key': serum_key,
-                'marker_key': marker_key_for_infected_classification,
+                'marker_key': marker_ana_in_key,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'feature_identifier': feature_identifier,
-                'identifier': identifier}
+                'outlier_criteria': well_qc_criteria,
+                'table_out_key': well_outlier_table,
+                'identifier': identifier},
+            'run': {'force_recompute': None}
         }))
         job_list.append((CellLevelAnalysis, {
             'build': {
                 'serum_key': serum_key,
-                'marker_key': marker_key_for_infected_classification,
+                'marker_key': marker_ana_in_key,
                 'cell_seg_key': config.seg_key,
                 'serum_bg_key': background_parameters[serum_key],
                 'marker_bg_key': background_parameters[marker_ana_in_key],
                 'write_summary_images': write_summary_images,
                 'scale_factors': config.scale_factors,
                 'feature_identifier': feature_identifier,
+                'image_outlier_table': image_outlier_table,
+                'well_outlier_table': well_outlier_table,
                 'identifier': identifier},
-            'run': {'force_recompute': True}}))
+            'run': {'force_recompute': None}}))
         write_summary_images = False
 
     # get a dict with all relevant analysis parameters, so that we can write it as a table and log it
@@ -415,25 +482,59 @@ def core_workflow_tasks(config, name, feature_identifier):
         'run': {'force_recompute': None}
     }))
 
-    return job_list, table_identifiers
+    return job_list, table_identifiers, background_parameters, marker_ana_in_key
 
 
-def workflow_summaries(name, config, t0, workflow_name, input_folder, stat_names):
+def bg_dict_for_plots(bg_params, table_path):
+    bg_dict = {}
+    with open_file(table_path, 'r') as f:
+        for channel_name, bg_param in bg_params.items():
+            if isinstance(bg_param, str):
+                assert has_table(f, bg_param)
+                cols, table = read_table(f, bg_param)
+                bg_src = bg_param.split('/')[-1]
+                if bg_param == 'plate/backgrounds':
+                    bg_val = table[0, cols.index(f'{channel_name}_median')]
+                    bg_msg = f' as {bg_val}'
+                elif bg_param == 'plate/backgrounds_min_well':
+                    bg_val = table[0, cols.index(f'{channel_name}_median')]
+                    bg_wells = table[0, cols.index(f'{channel_name}_min_well')]
+                    bg_src = f' the wells {bg_wells}'
+                    bg_msg = f' as {bg_val}'
+                else:
+                    bg_msg = ''
+                bg_info = f'background computed from {bg_src}{bg_msg}'
+            else:
+                bg_info = f'background fixed to {bg_param}'
+            bg_dict[channel_name] = bg_info
+    return bg_dict
+
+
+def workflow_summaries(name, config, t0, workflow_name, input_folder, stat_names,
+                       bg_params=None, marker_name='marker'):
     # run all plots on the output files
     plot_folder = os.path.join(config.folder, 'plots')
 
     table_name = 'default'
     table_path = CellLevelAnalysis.folder_to_table_path(config.folder)
+
+    if bg_params is None:
+        bg_dict = None
+    else:
+        bg_dict = bg_dict_for_plots(bg_params, table_path)
+
     all_plots(table_path, plot_folder,
               table_key=f'images/{table_name}',
               identifier='per-image',
               stat_names=stat_names,
-              wedge_width=0.3)
+              wedge_width=0.3,
+              bg_dict=bg_dict)
     all_plots(table_path, plot_folder,
               table_key=f'wells/{table_name}',
               identifier='per-well',
               stat_names=stat_names,
-              wedge_width=0)
+              wedge_width=0,
+              bg_dict=bg_dict)
 
     db_writer = DbResultWriter(
         workflow_name=workflow_name,
@@ -451,7 +552,7 @@ def workflow_summaries(name, config, t0, workflow_name, input_folder, stat_names
     summary_writer(config.folder, config.folder, runtime=t0)
 
     if config.export_tables:
-        export_tables_for_plate(config.folder)
+        export_tables_for_plate(config.folder, marker_name=marker_name)
     logger.info(f"Run {name} in {t0}s")
 
 
@@ -463,7 +564,7 @@ def run_cell_analysis(config):
     if feature_identifier is not None:
         name += f'_{feature_identifier}'
 
-    job_list, table_identifiers = core_workflow_tasks(config, name, feature_identifier)
+    job_list, table_identifiers, bg_params, marker_name = core_workflow_tasks(config, name, feature_identifier)
 
     t0 = time.time()
     run_workflow(name,
@@ -472,14 +573,16 @@ def run_cell_analysis(config):
                  input_folder=config.input_folder,
                  force_recompute=config.force_recompute,
                  ignore_invalid_inputs=config.ignore_invalid_inputs,
-                 ignore_failed_outputs=config.ignore_failed_outputs)
+                 ignore_failed_outputs=config.ignore_failed_outputs,
+                 skip_processed=bool(config.skip_processed))
 
     # only run the workflow summaries if we don't have the feature identifier
     if feature_identifier is None:
         stat_names = [idf.replace('serum_', '') + '_' + name
                       for name in DEFAULT_PLOT_NAMES for idf in table_identifiers]
         workflow_summaries(name, config, t0, workflow_name=name,
-                           input_folder=config.input_folder, stat_names=stat_names)
+                           input_folder=config.input_folder, stat_names=stat_names,
+                           bg_params=bg_params, marker_name=marker_name)
 
     return table_identifiers
 
@@ -511,6 +614,8 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add('--n_cpus', required=True, type=int, help='number of cpus')
     parser.add('--folder', required=True, type=str, default="", help=fhelp)
     parser.add('--misc_folder', required=True, type=str, help=mischelp)
+    parser.add('--barrel_corrector_folder', type=str, default='auto',
+               help='optinally specify the folder containing the files for barrel correction.')
 
     # folder options
     # this parameter is not necessary here any more, but for now we need it to be
@@ -547,12 +652,13 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--infected_threshold", type=float, default=4.8)
     parser.add("--infected_quantile", type=float, default=0.95)
 
-    # optional background subtraction values for the individual channels
+    # background subtraction values for the individual channels
     # if None, all backgrounds will be computed from the data and the plate background will be used
     parser.add("--background_dict", default=None)
+    parser.add("--use_mad_from_bg_wells", default=True)
 
-    # do we run voronoi segmentation?
-    parser.add("--voronoi_param_dict", default=None)
+    # arguments for the nucleus dilation used for the serum intensity qc
+    parser.add("--qc_dilation", type=int, default=5)
 
     #
     # more options
@@ -563,6 +669,7 @@ def cell_analysis_parser(config_folder, default_config_name):
     parser.add("--force_recompute", default=None)
     parser.add("--ignore_invalid_inputs", default=None)
     parser.add("--ignore_failed_outputs", default=None)
+    parser.add("--skip_processed", default=0, type=int)
 
     # additional image output
     parser.add("--write_summary_images", default=True)

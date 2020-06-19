@@ -10,7 +10,7 @@ from batchlib.analysis.cell_level_analysis import CellLevelAnalysis
 from batchlib.preprocessing import Preprocess
 from batchlib.segmentation import BoundaryAndMaskPrediction, SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
-from batchlib.util.logging import get_logger
+from batchlib.util.logger import get_logger
 
 logger = get_logger('Workflow.InstanceAnalysis1')
 

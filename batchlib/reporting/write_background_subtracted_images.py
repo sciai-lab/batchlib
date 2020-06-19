@@ -4,7 +4,10 @@ from tqdm import tqdm
 
 from ..analysis.cell_level_analysis import _get_bg_correction_dict
 from ..base import BatchJobOnContainer
-from ..util import open_file, in_file_to_image_name, read_viewer_settings
+from ..util import open_file, in_file_to_image_name, read_viewer_settings, get_logger
+
+
+logger = get_logger('Workflow.BatchJob.ExtractBackground')
 
 
 class WriteBackgroundSubtractedImages(BatchJobOnContainer):
@@ -22,6 +25,7 @@ class WriteBackgroundSubtractedImages(BatchJobOnContainer):
                          output_key=self.output_keys,
                          output_format=['image'] * len(self.output_keys),
                          **super_kwargs)
+        logger.info(f"{self.name}: writing background subtracted images for {self.background_dict}")
 
     def write_bg_image(self, in_file, out_file, background_dict):
         images = []

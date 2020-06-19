@@ -1,16 +1,34 @@
 import os
+from concurrent import futures
+from functools import partial
 from glob import glob
 
 import numpy as np
 import pandas as pd
-from ..util import read_table, open_file, image_name_to_site_name, image_name_to_well_name
+from tqdm import tqdm
+
+from batchlib.mongo.plate_metadata_repository import TEST_NAMES
+from batchlib.util import (get_logger, read_table, open_file, has_table,
+                           image_name_to_site_name, image_name_to_well_name)
+from batchlib.util.cohort_parser import get_cohort_class, get_cohort
 
 SUPPORTED_TABLE_FORMATS = {'excel': '.xlsx',
                            'csv': '.csv',
                            'tsv': '.tsv'}
-# TODO more scores to report?
-DEFAULT_SCORE_PATTERNS = ['robust_z_score_of_means',
-                          'ratio_of_q0.5_of_means']
+DEFAULT_SCORE_PATTERNS = ('IgG_robust_z_score_means', 'IgG_ratio_of_q0.5_of_means',
+                          'IgA_robust_z_score_means', 'IgA_ratio_of_q0.5_of_means',
+                          'IgM_robust_z_score_means', 'IgM_ratio_of_q0.5_of_means')
+
+logger = get_logger('Workflow.TableExporter')
+
+
+def _round_column(col, decim=2):
+    def _round(x):
+        if isinstance(x, float):
+            return round(x, decim)
+        return x
+
+    return col.apply(_round)
 
 
 def format_to_extension(format_):
@@ -32,7 +50,7 @@ def export_table(columns, table, output_path, output_format=None):
     if len(columns) != table.shape[1]:
         raise ValueError(f"Number of columns does not match: {len(columns)}, {table.shape[1]}")
 
-    output_format = extension_to_format(os.path.splitext(output_path)[1])\
+    output_format = extension_to_format(os.path.splitext(output_path)[1]) \
         if output_format is None else output_format
 
     if output_format not in SUPPORTED_TABLE_FORMATS:
@@ -40,6 +58,8 @@ def export_table(columns, table, output_path, output_format=None):
         raise ValueError(f"Format {output_format} is not supported, expect one of {supported_formats}")
 
     df = pd.DataFrame(table, columns=columns)
+    # round floats to 2 decimal places
+    df = df.apply(_round_column)
     if output_format == 'excel':
         df.to_excel(output_path, index=False)
     elif output_format == 'csv':
@@ -49,7 +69,6 @@ def export_table(columns, table, output_path, output_format=None):
 
 
 def export_default_table(table_file, table_name, output_path, output_format=None, skip_existing=True):
-
     if os.path.exists(output_path) and skip_existing:
         return
 
@@ -62,7 +81,8 @@ def export_default_table(table_file, table_name, output_path, output_format=None
     export_table(columns, table, output_path, output_format)
 
 
-def export_cell_tables(folder, output_path, table_name, output_format=None, skip_existing=True):
+def export_cell_tables(folder, output_path, table_name,
+                       output_format=None, skip_existing=True, n_jobs=1):
     if os.path.exists(output_path) and skip_existing:
         return
 
@@ -70,15 +90,36 @@ def export_cell_tables(folder, output_path, table_name, output_format=None, skip
     files.sort()
 
     plate_name = os.path.split(folder)[1]
-    initial_columns = ['plate_name', 'well_name', 'site_name']
-    columns = None
-    table = []
+    initial_columns = ['plate_name', 'well_name', 'site_name', 'anchor_x', 'anchor_y']
+    props_table_name = 'cell_segmentation/properties'
 
-    for path in files:
+    def _load_table(path, columns=None):
+
+        return_cols = columns is None
+
         with open_file(path, 'r') as f:
             this_columns, this_table = read_table(f, table_name)
+
+            has_props_table = has_table(f, props_table_name)
+            if has_props_table:
+                prop_cols, prop_table = read_table(f, props_table_name)
+                anchors = np.concatenate([prop_table[:, prop_cols.index('anchor_x')][:, None],
+                                          prop_table[:, prop_cols.index('anchor_y')][:, None]], axis=1)
+            else:
+                n_cells = len(this_table)
+                anchors = np.array(2 * [n_cells * [None]]).T
+
         if columns is None:
             columns = initial_columns + this_columns
+
+        if len(anchors) != len(this_table):
+            assert has_props_table
+            label_ids1 = this_table[:, this_columns.index('label_id')]
+            label_ids2 = prop_table[:, prop_cols.index('label_id')]
+            assert len(label_ids2) > len(label_ids1)
+            # we assume it's sorted by label ids !
+            keep_anchors = np.isin(label_ids2, label_ids1)
+            anchors = anchors[keep_anchors]
 
         image_name = os.path.splitext(os.path.split(path)[1])[0]
         well_name = image_name_to_well_name(image_name)
@@ -87,33 +128,34 @@ def export_cell_tables(folder, output_path, table_name, output_format=None, skip
         plate_col = np.array([plate_name] * len(this_table))
         well_col = np.array([well_name] * len(this_table))
         site_col = np.array([site_name] * len(this_table))
-        res_table = np.concatenate([plate_col[:, None], well_col[:, None], site_col[:, None], this_table], axis=1)
-        table.append(res_table)
+        res_table = np.concatenate([plate_col[:, None],
+                                    well_col[:, None],
+                                    site_col[:, None],
+                                    anchors,
+                                    this_table], axis=1)
+        if return_cols:
+            return res_table, columns
+        else:
+            return res_table
 
-    table = np.concatenate(table, axis=0)
+    table0, columns = _load_table(files[0])
+    tables = [table0]
+
+    _load_tab = partial(_load_table, columns=columns)
+
+    with futures.ThreadPoolExecutor(n_jobs) as tp:
+        tables += list(tqdm(tp.map(_load_tab, files[1:]),
+                            total=len(files) - 1,
+                            desc=f"Loading {table_name} cell tables"))
+
+    table = np.concatenate(tables, axis=0)
     export_table(columns, table, output_path, output_format)
-
-
-def export_voronoi_tables(folder, ext='.xlsx', skip_existing=True):
-    plate_name = os.path.split(folder)[1]
-    in_file = glob(os.path.join(folder, '*.h5'))[0]
-    with open_file(in_file, 'r') as f:
-        assert 'tables' in f
-        table_names = list(f['tables'].keys())
-        voronoi_tables = [name for name in table_names if 'voronoi' in name]
-        voronoi_tables = [f'{name}/{channel}' for name in voronoi_tables for channel in f['tables'][name].keys()]
-
-    for table_name in voronoi_tables:
-        out_name = f'{plate_name}_cell_table_{table_name}{ext}'.replace('/', '_')
-        out_path = os.path.join(folder, out_name)
-        export_cell_tables(folder, out_path, table_name, skip_existing=skip_existing)
 
 
 def export_tables_for_plate(folder,
                             cell_table_name='cell_segmentation',
                             marker_name='marker',
                             skip_existing=True,
-                            export_voronoi=True,
                             ext='.xlsx'):
     """ Conveneince function to export all relevant tables for a plate
     into a more common format (by default excel).
@@ -130,7 +172,10 @@ def export_tables_for_plate(folder,
     well_out = os.path.join(folder, f'{plate_name}_well_table{ext}')
     export_default_table(table_file, 'wells/default', well_out, skip_existing=skip_existing)
 
-    # export the cell segmentation tables
+    # export the cell segmentation tables (if the name is given)
+    if cell_table_name is None:
+        return
+
     im_file = glob(os.path.join(folder, '*.h5'))[0]
     cell_tables_key = f'tables/{cell_table_name}'
     with open_file(im_file, 'r') as f:
@@ -145,59 +190,68 @@ def export_tables_for_plate(folder,
         export_cell_tables(folder, cell_out, cell_table_name, skip_existing=skip_existing)
 
     # export the infected/non-infected classification
-    # cell_table_root = cell_table_name.split('/')[0]
     class_name = f'cell_classification/cell_segmentation/{marker_name}'
-    class_out = os.path.join(folder, f'{plate_name}_cell_table_infected_clasification{ext}')
+    class_out = os.path.join(folder, f'{plate_name}_cell_infected_clasification_table{ext}')
     export_cell_tables(folder, class_out, class_name, skip_existing=skip_existing)
-
-    # export voronoi tables
-    if export_voronoi:
-        export_voronoi_tables(folder, ext, skip_existing=skip_existing)
 
 
 def _get_db_metadata(well_names, metadata_repository, plate_name):
     """
     Args
+        well_names: array of well_names
         metadata_repository: instance of PlateMetadataRepository
         plate_name: name of the plate
     Returns:
         additional metadata DB
     """
 
-    def _get_cohort_type(c_id):
-        if c_id is None:
-            return None
-        assert isinstance(c_id, str)
-        patient_type = c_id[0].lower()
-
-        if patient_type == 'c':
-            return 'positive'
-        elif patient_type == 'b':
-            return 'control'
-        else:
-            return 'unknown'
-
+    assert len(well_names) > 0 and isinstance(well_names[0], str)
     cohort_ids = metadata_repository.get_cohort_ids(plate_name)
-    elisa_results = metadata_repository.get_elisa_results(plate_name)
-
+    elisa_results = metadata_repository.get_elisa_results(plate_name, TEST_NAMES)
     additional_values = []
     for well_name in well_names:
         cohort_id = cohort_ids.get(well_name, None)
-        cohort_type = _get_cohort_type(cohort_id)
-        elisa_IgG, elisa_IgA = elisa_results.get(well_name, (None, None))
-        additional_values.append([cohort_id, cohort_id, elisa_IgG, elisa_IgA, cohort_type])
+        if cohort_id is None:
+            logger.warning(f'Plate: {plate_name}, well: {well_name} has no cohort_id metadata')
+        cohort = get_cohort(cohort_id)
+        # get positive/negative/unknown patient class based on the cohort
+        cohort_class = get_cohort_class(cohort)
+        cohort_row = [cohort_id, cohort, cohort_class]
+        # add results from Elisa, Roche, Abbot, Luminex tests
+        test_results = elisa_results.get(well_name, [None] * len(TEST_NAMES))
+        cohort_row.extend(test_results)
+        additional_values.append(cohort_row)
 
     return np.array(additional_values)
 
 
-# FIXME all metadata is blank
-# FIXME the name matching triggers for unwanted scores,
-# we only want IgG and IgM
-# FIXME make score names more succinct
+def outliers_to_nan(table, column_names, score_patterns):
+    for score_name in score_patterns:
+        try:
+            score_col = column_names.index(score_name)
+        except ValueError:
+            score_col = -1
+        if score_col == -1:
+            continue
+
+        serum_name = score_name[:3]
+        outlier_col_name = f'{serum_name}_is_outlier'
+        outlier_col = column_names.index(outlier_col_name)
+        assert outlier_col > 0
+        outliers = table[:, outlier_col] == 1
+
+        table[:, score_col][outliers] = np.nan
+
+    return table
+
+
+# consider making our score names more succinct
 def export_scores(folder_list, output_path,
                   score_patterns=DEFAULT_SCORE_PATTERNS,
-                  table_name='wells/default',
-                  metadata_repository=None):
+                  table_name='wells/default', metadata_repository=None,
+                  filter_outliers=True):
+    """
+    """
 
     def name_matches_score(name):
         return any(pattern in name for pattern in score_patterns)
@@ -221,7 +275,7 @@ def export_scores(folder_list, output_path,
 
     # append cohort_id, elisa results and cohort_type (positive/control/unknow) if we have db
     if metadata_repository is not None:
-        db_metadata = ['cohort_id', 'elisa_IgG', 'elisa_IgA', 'cohort_type']
+        db_metadata = ['cohort_id', 'cohort', 'cohort_type'] + TEST_NAMES
         columns += db_metadata
 
     # second pass: load the tables
@@ -232,22 +286,30 @@ def export_scores(folder_list, output_path,
         with open_file(table_path, 'r') as f:
             this_result_columns, this_result_table = read_table(f, table_name)
 
+        if filter_outliers:
+            this_result_table = outliers_to_nan(this_result_table,
+                                                this_result_columns,
+                                                score_patterns)
+
         this_len = len(this_result_table)
         plate_col = np.array([plate_name] * this_len)
 
         col_ids = [this_result_columns.index(name) if name in this_result_columns else -1
-                   for name in result_columns[1:]]
+                   for name in result_columns]
         this_table = [np.array([None] * this_len)[:, None] if col_id == -1 else
-                      this_result_table[:, col_id:col_id+1] for col_id in col_ids]
+                      this_result_table[:, col_id:col_id + 1] for col_id in col_ids]
+
         this_table = np.concatenate([plate_col[:, None]] + this_table, axis=1)
 
         # extend table with the values from DB
         if metadata_repository is not None:
             metadata = _get_db_metadata(this_table[:, 1], metadata_repository, plate_name)
             assert len(metadata) == len(this_table)
+            assert metadata.shape[1] == len(db_metadata), f"{metadata.shape[1], len(db_metadata)}"
             this_table = np.concatenate([this_table, metadata], axis=1)
 
         table.append(this_table)
 
+    logger.info(f'Columns: {columns}')
     table = np.concatenate(table, axis=0)
     export_table(columns, table, output_path)

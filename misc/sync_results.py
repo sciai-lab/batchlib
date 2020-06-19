@@ -24,7 +24,7 @@ def sync_results(all_paths):
 
 
 def _argparse():
-    parser = argparse.ArgumentParser(description='This script syncs all png in a summary directory')
+    parser = argparse.ArgumentParser(description='This script syncs all jpg in a summary directory')
     parser.add_argument('--data', type=str,
                         help='Path to directory with the processed plates',
                         default='/home/covid19/data/data-processed/')
@@ -38,15 +38,15 @@ def _argparse():
 
 if __name__ == '__main__':
     args = _argparse()
-    all_png_paths = glob.glob(f'{args.data}/**/**/*.png')
+    all_jpg_paths = glob.glob(f'{args.data}/**/**/*.jpg')
     destination = args.results
 
     # Change this list if relevant results changes
-    main_results = ['plates_ratio_of_mean_over_mean_median.png',
-                    'plates_ratio_of_median_of_means_median.png']
+    main_results = ['plates_ratio_of_mean_over_mean_median.jpg',
+                    'plates_ratio_of_median_of_means_median.jpg']
 
     # To avoid visual clutter results that are not in 'main_results'
     # will be saved in a sub directory
     auxiliary_results_destination = 'auxiliary_results'
-    sync_results(all_png_paths)
+    sync_results(all_jpg_paths)
 
