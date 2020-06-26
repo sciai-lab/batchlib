@@ -86,7 +86,7 @@ class TestOutliers(unittest.TestCase):
             else:
                 print('Missing plate: ' + plate_name)
 
-        print(f'\nTotal outlier count (manuscript plates): {total_outlier_count / total_count}')
+        print(f'\nTotal outlier count (manuscript plates): {total_outlier_count} / {total_count}')
 
     def test_plate_name_from_input_folder(self):
         input_folder = '/home/covid19/data/20200410_145132_254'
