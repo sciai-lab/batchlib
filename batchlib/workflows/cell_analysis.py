@@ -568,7 +568,6 @@ def cell_analysis_parser(config_folder, default_config_name):
     # folder options
     # this parameter is not necessary here any more, but for now we need it to be
     # compatible with the pixel-wise workflow
-    parser.add("--root", default='/home/covid19/antibodies-nuclei')
     parser.add("--output_root_name", default='data-processed')
     parser.add("--use_unique_output_folder", default=False)
 

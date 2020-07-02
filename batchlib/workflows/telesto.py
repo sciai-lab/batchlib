@@ -4,36 +4,34 @@ import configargparse
 
 from batchlib import run_workflow
 from batchlib.segmentation.segmentation_workflows import watershed_segmentation_workflow
-from batchlib.preprocessing import Preprocess
+from batchlib.preprocessing.preprocess_telesto import PreprocessTelesto
 from batchlib.util.logger import get_logger
 
 logger = get_logger('Workflow.CellAnalysis')
 
 
-def core_ds_workflow_tasks(config, seg_in_key, nuc_seg_in_key):
-    semantic_viewer_settings = {'nuclei': {'color': 'Blue', 'visible': True},
-                                'infection marker': {'color': 'Red', 'visible': True},
-                                'infection marker2': {'color': 'Red', 'visible': False},
-                                'sensor': {'color': 'Green', 'visible': False}}
+def core_telesto_workflow_tasks(config, seg_in_key, nuc_seg_in_key):
     job_list = [
-        (Preprocess.from_folder, {
+        (PreprocessTelesto.from_folder, {
             'build': {
                 'input_folder': config.input_folder,
                 'barrel_corrector_path': None,
-                'scale_factors': config.scale_factors,
-                'semantic_settings': semantic_viewer_settings},
+                'scale_factors': config.scale_factors},
             'run': {
                 'n_jobs': config.n_cpus}})
     ]
     job_list = watershed_segmentation_workflow(config, seg_in_key, nuc_seg_in_key, job_list,
                                                erode_mask=20, dilate_seeds=3)
+    # add the feature extraction tasks
+    # job_list.extend([
+    # ])
     return job_list
 
 
-def run_drug_screen_analysis(config):
+def run_telesto_analysis(config):
     """
     """
-    name = 'DrugScreenAnalysisWorkflow'
+    name = 'TelestoAnalysisWorkflow'
 
     # to allow running on the cpu
     if config.gpu is not None and config.gpu < 0:
@@ -41,17 +39,16 @@ def run_drug_screen_analysis(config):
 
     config.input_folder = os.path.abspath(config.input_folder)
     if config.folder == "":
-        config.folder = config.input_folder.replace('covid-data-vibor', config.output_root_name)
+        config.folder = config.input_folder.replace('telesto', config.output_root_name)
         if config.use_unique_output_folder:
             config.folder += '_' + name
 
     work_dir = os.path.join(config.folder, 'batchlib')
     os.makedirs(work_dir, exist_ok=True)
 
-    # TODO we may not want to hard-code the seg in key in order to try the different infection markers
-    seg_in_key = 'sensor'
+    seg_in_key = 'serum_IgG'
     nuc_seg_in_key = 'nuclei'
-    job_list = core_ds_workflow_tasks(config, seg_in_key, nuc_seg_in_key)
+    job_list = core_telesto_workflow_tasks(config, seg_in_key, nuc_seg_in_key)
 
     t0 = time.time()
     run_workflow(name,
@@ -62,14 +59,14 @@ def run_drug_screen_analysis(config):
                  ignore_invalid_inputs=config.ignore_invalid_inputs,
                  ignore_failed_outputs=config.ignore_failed_outputs,
                  skip_processed=bool(config.skip_processed))
-    print("Run drug-screen analysis workflow in", time.time() - t0, "s")
+    print("Run telesto analysis workflow in", time.time() - t0, "s")
 
 
-def drug_screen_parser(config_folder, default_config_name):
+def telesto_parser(config_folder, default_config_name):
     """
     """
 
-    doc = """Run workflow for analysis of covid-if drug screen.
+    doc = """Run workflow for analysis of teleto if data.
     Based on UNet boundary and foreground predictions,
     stardist nucleus prediction and watershed segmentation.
     """
@@ -98,7 +95,7 @@ def drug_screen_parser(config_folder, default_config_name):
     # folder options
     # this parameter is not necessary here any more, but for now we need it to be
     # compatible with the pixel-wise workflow
-    parser.add("--output_root_name", default='data-processed')
+    parser.add("--output_root_name", default='telesto/data-processed')
     parser.add("--use_unique_output_folder", default=False)
 
     # keys for intermediate data

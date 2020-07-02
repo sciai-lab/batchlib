@@ -61,6 +61,8 @@ def get_barrel_corrector(barrel_corrector_root, input_folder, pattern='*.tiff'):
 class Preprocess(BatchJobOnContainer):
     """ Preprocess folder with tifs from high-throughput experiment
     """
+    channel_first = True
+    reader_function = 'volread'
     semantic_viewer_settings = {'nuclei': {'color': 'Blue', 'visible': True},
                                 'serum': {'color': 'Green', 'visible': True},
                                 'marker': {'color': 'Red', 'visible': True},
@@ -71,20 +73,21 @@ class Preprocess(BatchJobOnContainer):
         if path is None:
             return
         with open_file(path, 'r') as f:
-            channels_found = [name in f for name in channel_names if channel_mapping[name] is not None]
+            channels_found = [name in f for name in channel_names
+                              if channel_mapping[name] is not None]
         if not all(channels_found):
             missing_channels = ' '.join(chan for chan, found in zip(channel_names, channels_found) if not found)
-            raise ValueError("Could not find all channel names in the barrel corrector file: %s" % missing_channels)
+            raise ValueError(f"Could not find all channel names in the barrel corrector file: {missing_channels}")
 
     @classmethod
     def from_folder(cls, input_folder, output_ext=None,
                     barrel_corrector_path=None, semantic_settings=None,
-                    **super_kwargs):
+                    input_pattern='*.tiff', **super_kwargs):
 
         # load channel name -> semantic name mapping
         mapping_file = os.path.join(input_folder, 'channel_mapping.json')
         if not os.path.exists(mapping_file):
-            raise ValueError("The input folder %s does not contain channel_mapping.json" % mapping_file)
+            raise ValueError(f"The mapping file {mapping_file} does not exist.")
         with open(mapping_file, 'r') as f:
             channel_mapping = json.load(f)
 
@@ -105,11 +108,11 @@ class Preprocess(BatchJobOnContainer):
                     break
 
             if this_settings is None:
-                raise ValueError("Did not find a matching semantic channel for %s" % semantic_name)
+                raise ValueError(f"Did not find a matching semantic channel for {semantic_name}")
             viewer_settings[semantic_name] = this_settings
 
         # parse the channel names and make sure they match with the mapping
-        pattern = os.path.join(input_folder, '*.tiff')
+        pattern = os.path.join(input_folder, input_pattern)
         input_files = glob(pattern)
         channel_names = parse_channel_names(input_files[0])
         if len(set(channel_names) - set(channel_mapping.keys())) != 0:
@@ -121,11 +124,12 @@ class Preprocess(BatchJobOnContainer):
 
         return cls(channel_names, channel_mapping, viewer_settings,
                    output_ext=output_ext,
-                   barrel_corrector_path=barrel_corrector_path, **super_kwargs)
+                   barrel_corrector_path=barrel_corrector_path,
+                   input_pattern=input_pattern, **super_kwargs)
 
     def __init__(self, channel_names, channel_mapping, viewer_settings,
                  output_ext=None, barrel_corrector_path=None,
-                 **super_kwargs):
+                 input_pattern='*.tiff', **super_kwargs):
 
         output_ext = get_default_extension() if output_ext is None else output_ext
 
@@ -150,13 +154,15 @@ class Preprocess(BatchJobOnContainer):
                 continue
             viewer_settings[semantic_name].update({'channel_information': name})
 
-        super().__init__(input_pattern='*.tiff', output_ext=output_ext,
+        super().__init__(input_pattern=input_pattern, output_ext=output_ext,
                          output_key=channel_out_names,
                          output_format=['image'] * len(channel_out_names),
                          viewer_settings=viewer_settings, **super_kwargs)
 
     def preprocess_image(self, in_path, out_path, barrel_corrector):
-        im = imageio.volread(in_path)
+        # NOTE for some reason setting self.reader_function = imageio.volread etc.
+        # does not work; so we need to have this construction
+        im = getattr(imageio, self.reader_function)(in_path)
         im = np.asarray(im)
 
         # note: we don't delay the keyboard interruption here, because this code
@@ -176,7 +182,7 @@ class Preprocess(BatchJobOnContainer):
                     this_settings.update({'visible': raw_is_visible})
 
                 # save the raw image channel
-                chan = im[chan_id]
+                chan = im[chan_id] if self.channel_first else im[..., chan_id]
                 self.write_image(f, semantic_name + '_raw' if run_correction else semantic_name,
                                  chan, settings=this_settings)
 

@@ -21,8 +21,8 @@ def view_im(path, label=None):
 
 
 def check_train(folder, n_images, shuffle_ims=False):
-    im_pattern = os.path.join(folder, 'training_set/images/*.png')
-    table = os.path.join(folder, 'training_set.tsv')
+    im_pattern = os.path.join(folder, 'training_set/*.png')
+    table = os.path.join(folder, 'training_set/training_set.tsv')
     table = pd.read_csv(table, sep='\t')
     label_dict = dict(zip(table['id'], table['label']))
 
@@ -44,7 +44,7 @@ def check_train(folder, n_images, shuffle_ims=False):
 
 
 def check_test(folder, n_images, shuffle_ims=False):
-    im_pattern = os.path.join(folder, 'test_set/images/*.png')
+    im_pattern = os.path.join(folder, 'test_set/*.png')
     images = glob(im_pattern)
     images.sort()
     print("Found", len(images), "images")
