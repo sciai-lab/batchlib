@@ -62,7 +62,7 @@ def run_drug_screen_analysis(config):
                  ignore_invalid_inputs=config.ignore_invalid_inputs,
                  ignore_failed_outputs=config.ignore_failed_outputs,
                  skip_processed=bool(config.skip_processed))
-    print("Run drug-screen analysis workflow in", t0, "s")
+    print("Run drug-screen analysis workflow in", time.time() - t0, "s")
 
 
 def drug_screen_parser(config_folder, default_config_name):
