@@ -3,6 +3,7 @@ import time
 import configargparse
 
 from batchlib import run_workflow
+from batchlib.analysis.feature_extraction import InstanceFeatureExtraction
 from batchlib.segmentation.segmentation_workflows import watershed_segmentation_workflow
 from batchlib.preprocessing.preprocess_telesto import PreprocessTelesto
 from batchlib.util.logger import get_logger
@@ -22,9 +23,22 @@ def core_telesto_workflow_tasks(config, seg_in_key, nuc_seg_in_key):
     ]
     job_list = watershed_segmentation_workflow(config, seg_in_key, nuc_seg_in_key, job_list,
                                                erode_mask=20, dilate_seeds=3)
+
+    # TODO add per cell feature merging tasks
     # add the feature extraction tasks
-    # job_list.extend([
-    # ])
+    job_list.extend([
+        (InstanceFeatureExtraction, {
+            'build': {
+                'channel_keys': ('serum_IgG', 'serum_IgA'),
+                'nuc_seg_key_to_ignore': None,  # TODO for proper sum based features we would need to ignore here
+                'cell_seg_key': config.seg_key
+            },
+            'run': {
+                'gpu_id': config.gpu,
+                'on_cluster': config.on_cluster
+            }
+        })
+    ])
     return job_list
 
 
