@@ -78,7 +78,8 @@ class Preprocess(BatchJobOnContainer):
 
     @classmethod
     def from_folder(cls, input_folder, output_ext=None,
-                    barrel_corrector_path=None, **super_kwargs):
+                    barrel_corrector_path=None, semantic_settings=None,
+                    **super_kwargs):
 
         # load channel name -> semantic name mapping
         mapping_file = os.path.join(input_folder, 'channel_mapping.json')
@@ -87,13 +88,18 @@ class Preprocess(BatchJobOnContainer):
         with open(mapping_file, 'r') as f:
             channel_mapping = json.load(f)
 
+        if semantic_settings is None:
+            semantic_viewer_settings = cls.semantic_viewer_settings
+        else:
+            semantic_viewer_settings = semantic_settings
+
         viewer_settings = {}
         for chan_name, semantic_name in channel_mapping.items():
             if semantic_name is None:
                 continue
 
             this_settings = None
-            for name, settings in cls.semantic_viewer_settings.items():
+            for name, settings in semantic_viewer_settings.items():
                 if semantic_name.startswith(name):
                     this_settings = settings
                     break
