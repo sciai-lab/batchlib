@@ -130,7 +130,7 @@ def run_telesto_analysis(config):
     print("Run telesto analysis workflow in", time.time() - t0, "s")
 
     # export excel table for the image level features
-    if config.export_tables:
+    if config.export_table:
         export_image_table(config.folder)
 
 
