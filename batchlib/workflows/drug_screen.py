@@ -3,6 +3,8 @@ import time
 import configargparse
 
 from batchlib import run_workflow
+from batchlib.analysis.cell_analysis_qc import ImageLevelQC
+from batchlib.analysis.feature_extraction import InstanceFeatureExtraction
 from batchlib.segmentation.segmentation_workflows import watershed_segmentation_workflow
 from batchlib.preprocessing import Preprocess
 from batchlib.util.logger import get_logger
@@ -25,8 +27,50 @@ def core_ds_workflow_tasks(config, seg_in_key, nuc_seg_in_key):
             'run': {
                 'n_jobs': config.n_cpus}})
     ]
+    # TODO improve segmentation parameters
     job_list = watershed_segmentation_workflow(config, seg_in_key, nuc_seg_in_key, job_list,
                                                erode_mask=20, dilate_seeds=3)
+
+    image_outlier_criteria = {'max_number_cells': 1000,
+                              'min_number_cells': 25}
+
+    # add the qc and feature extraction tasks
+    job_list.extend([
+        (InstanceFeatureExtraction, {
+            'build': {
+                'channel_keys': ['infection marker',
+                                 'infection marker2'],
+                'nuc_seg_key_to_ignore': None,
+                'cell_seg_key': config.seg_key
+            },
+            'run': {
+                'gpu_id': config.gpu,
+                'on_cluster': config.on_cluster
+            }
+        }),
+        (InstanceFeatureExtraction, {
+            'build': {
+                'channel_keys': ['infection marker',
+                                 'infection marker2'],
+                'nuc_seg_key_to_ignore': None,
+                'cell_seg_key': config.nuc_key
+            },
+            'run': {
+                'gpu_id': config.gpu,
+                'on_cluster': config.on_cluster
+            }
+        }),
+        (ImageLevelQC, {
+            'build': {
+                'cell_seg_key': config.seg_key,
+                'serum_key': seg_in_key,
+                'marker_key': None,
+                'outlier_criteria': image_outlier_criteria
+            }
+        })
+    ])
+    # TODO add feature merging / summary table
+
     return job_list
 
 
@@ -48,7 +92,6 @@ def run_drug_screen_analysis(config):
     work_dir = os.path.join(config.folder, 'batchlib')
     os.makedirs(work_dir, exist_ok=True)
 
-    # TODO we may not want to hard-code the seg in key in order to try the different infection markers
     seg_in_key = 'sensor'
     nuc_seg_in_key = 'nuclei'
     job_list = core_ds_workflow_tasks(config, seg_in_key, nuc_seg_in_key)
@@ -63,6 +106,10 @@ def run_drug_screen_analysis(config):
                  ignore_failed_outputs=config.ignore_failed_outputs,
                  skip_processed=bool(config.skip_processed))
     print("Run drug-screen analysis workflow in", time.time() - t0, "s")
+
+    # TODO
+    if config.export_table:
+        pass
 
 
 def drug_screen_parser(config_folder, default_config_name):
@@ -119,15 +166,8 @@ def drug_screen_parser(config_folder, default_config_name):
     parser.add("--skip_processed", default=0, type=int)
 
     # additional image output
-    parser.add("--write_summary_images", default=True)
-    parser.add("--write_background_images", default=True)
-
-    # MongoDB client config
-    parser.add("--db_username", type=str, default='covid19')
-    parser.add("--db_password", type=str, default='')
-    parser.add("--db_host", type=str, default='localhost')
-    parser.add("--db_port", type=int, default=27017)
-    parser.add("--db_name", type=str, default='covid')
+    # parser.add("--write_summary_images", default=True)
+    # parser.add("--write_background_images", default=True)
 
     default_scale_factors = [1, 2, 4, 8, 16]
     parser.add("--scale_factors", default=default_scale_factors)
@@ -135,6 +175,6 @@ def drug_screen_parser(config_folder, default_config_name):
     # do we run on cluster?
     parser.add("--on_cluster", type=int, default=0)
     # do we export the tables for easier downstream analysis?
-    # parser.add("--export_tables", type=int, default=0)
+    parser.add("--export_table", type=int, default=0)
 
     return parser
