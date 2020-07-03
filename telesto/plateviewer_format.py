@@ -28,6 +28,7 @@ def to_output(folder, well_name, well_id, image_id):
     return path
 
 
+# TODO use the hdf5 table instead of the initial table
 def to_plate_viewer_format(input_folder, output_folder, table_path):
     os.makedirs(output_folder, exist_ok=True)
     table = pd.read_csv(table_path, sep='\t')

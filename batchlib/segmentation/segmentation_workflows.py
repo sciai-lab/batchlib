@@ -9,7 +9,8 @@ from batchlib.segmentation.unet import UNet2D
 
 # TODO model paths as optional parameter
 def watershed_segmentation_workflow(config, seg_in_key, nuc_in_key, job_list,
-                                    erode_mask=20, dilate_seeds=3, threshold=.5):
+                                    erode_mask=20, dilate_seeds=3, threshold=.5,
+                                    min_nucleus_size=None):
 
     model_root = os.path.join(config.misc_folder, 'models/stardist')
     model_name = '2D_dsb2018'
@@ -47,7 +48,8 @@ def watershed_segmentation_workflow(config, seg_in_key, nuc_in_key, job_list,
             'run': {
                 'gpu_id': config.gpu,
                 'n_jobs': config.n_cpus,
-                'on_cluster': config.on_cluster}}),
+                'on_cluster': config.on_cluster,
+                'min_size': min_nucleus_size}}),
         (SeededWatershed, {
             'build': {
                 'pmap_key': config.bd_key,

@@ -4,11 +4,19 @@ import configargparse
 
 from batchlib import run_workflow
 from batchlib.analysis.feature_extraction import InstanceFeatureExtraction
+from batchlib.analysis.telesto_analysis import ImageLevelFeatures, MergeImageLevelFeatures
 from batchlib.segmentation.segmentation_workflows import watershed_segmentation_workflow
 from batchlib.preprocessing.preprocess_telesto import PreprocessTelesto
 from batchlib.util.logger import get_logger
 
 logger = get_logger('Workflow.CellAnalysis')
+
+
+def get_initial_table(config):
+    folder = config.input_folder
+    name = os.path.split(folder)[1]
+    initial_table_path = os.path.join(folder, f'{name}.tsv')
+    return initial_table_path if os.path.exists(initial_table_path) else None
 
 
 def core_telesto_workflow_tasks(config, seg_in_key, nuc_seg_in_key):
@@ -21,15 +29,18 @@ def core_telesto_workflow_tasks(config, seg_in_key, nuc_seg_in_key):
             'run': {
                 'n_jobs': config.n_cpus}})
     ]
-    job_list = watershed_segmentation_workflow(config, seg_in_key, nuc_seg_in_key, job_list,
-                                               erode_mask=20, dilate_seeds=3)
 
-    # TODO add per cell feature merging tasks
+    # TODO find the minimal nucleus size
+    min_nuc_size = None
+    job_list = watershed_segmentation_workflow(config, seg_in_key, nuc_seg_in_key, job_list,
+                                               erode_mask=20, dilate_seeds=3, min_nucleus_size=min_nuc_size)
+
+    serum_keys = ('serum_IgG', 'serum_IgA')
     # add the feature extraction tasks
-    job_list.extend([
+    job_list.append(
         (InstanceFeatureExtraction, {
             'build': {
-                'channel_keys': ('serum_IgG', 'serum_IgA'),
+                'channel_keys': serum_keys,
                 'nuc_seg_key_to_ignore': None,  # TODO for proper sum based features we would need to ignore here
                 'cell_seg_key': config.seg_key
             },
@@ -38,7 +49,34 @@ def core_telesto_workflow_tasks(config, seg_in_key, nuc_seg_in_key):
                 'on_cluster': config.on_cluster
             }
         })
-    ])
+    )
+
+    # the initial table with metadata information.
+    # only available for the training dataset
+    initial_table_path = get_initial_table(config)
+
+    # compute the image level features for IgA and IgG
+    for serum_key in serum_keys:
+        job_list.append(
+            (ImageLevelFeatures, {
+                'build': {
+                    'cell_seg_key': config.seg_key,
+                    'serum_key': serum_key,
+                    'initial_table_path': initial_table_path
+                }
+            })
+        )
+
+    # merge the features
+    job_list.append(
+        (MergeImageLevelFeatures, {
+            'build': {
+                'input_table_names': serum_keys,
+                'initial_table_path': initial_table_path
+            }
+        })
+    )
+
     return job_list
 
 
@@ -74,6 +112,10 @@ def run_telesto_analysis(config):
                  ignore_failed_outputs=config.ignore_failed_outputs,
                  skip_processed=bool(config.skip_processed))
     print("Run telesto analysis workflow in", time.time() - t0, "s")
+
+    # TODO export excel table for the image level features
+    if config.export_tables:
+        pass
 
 
 def telesto_parser(config_folder, default_config_name):
@@ -146,6 +188,6 @@ def telesto_parser(config_folder, default_config_name):
     # do we run on cluster?
     parser.add("--on_cluster", type=int, default=0)
     # do we export the tables for easier downstream analysis?
-    # parser.add("--export_tables", type=int, default=0)
+    parser.add("--export_tables", type=int, default=0)
 
     return parser
