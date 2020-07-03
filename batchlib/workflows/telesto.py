@@ -1,12 +1,15 @@
 import os
 import time
+
 import configargparse
+import pandas as pd
 
 from batchlib import run_workflow
 from batchlib.analysis.feature_extraction import InstanceFeatureExtraction
 from batchlib.analysis.telesto_analysis import ImageLevelFeatures, MergeImageLevelFeatures
 from batchlib.segmentation.segmentation_workflows import watershed_segmentation_workflow
 from batchlib.preprocessing.preprocess_telesto import PreprocessTelesto
+from batchlib.util import open_file, read_table
 from batchlib.util.logger import get_logger
 
 logger = get_logger('Workflow.CellAnalysis')
@@ -80,6 +83,19 @@ def core_telesto_workflow_tasks(config, seg_in_key, nuc_seg_in_key):
     return job_list
 
 
+def export_image_table(folder, plate_name=None):
+    if plate_name is None:
+        plate_name = os.path.split(folder.rstrip('/'))[1]
+    in_table_path = os.path.join(folder, f'{plate_name}_table.hdf5')
+    out_table_path = os.path.join(folder, f'{plate_name}_table.xlsx')
+
+    with open_file(in_table_path, 'r') as f:
+        cols, tab = read_table(f, 'images/default')
+
+    df = pd.DataFrame(tab, columns=cols)
+    df.to_excel(out_table_path, index=False)
+
+
 def run_telesto_analysis(config):
     """
     """
@@ -113,9 +129,9 @@ def run_telesto_analysis(config):
                  skip_processed=bool(config.skip_processed))
     print("Run telesto analysis workflow in", time.time() - t0, "s")
 
-    # TODO export excel table for the image level features
+    # export excel table for the image level features
     if config.export_tables:
-        pass
+        export_image_table(config.folder)
 
 
 def telesto_parser(config_folder, default_config_name):
@@ -171,23 +187,12 @@ def telesto_parser(config_folder, default_config_name):
     parser.add("--ignore_failed_outputs", default=None)
     parser.add("--skip_processed", default=0, type=int)
 
-    # additional image output
-    parser.add("--write_summary_images", default=True)
-    parser.add("--write_background_images", default=True)
-
-    # MongoDB client config
-    parser.add("--db_username", type=str, default='covid19')
-    parser.add("--db_password", type=str, default='')
-    parser.add("--db_host", type=str, default='localhost')
-    parser.add("--db_port", type=int, default=27017)
-    parser.add("--db_name", type=str, default='covid')
-
     default_scale_factors = [1, 2, 4, 8, 16]
     parser.add("--scale_factors", default=default_scale_factors)
 
     # do we run on cluster?
     parser.add("--on_cluster", type=int, default=0)
     # do we export the tables for easier downstream analysis?
-    parser.add("--export_tables", type=int, default=0)
+    parser.add("--export_table", type=int, default=1)
 
     return parser
