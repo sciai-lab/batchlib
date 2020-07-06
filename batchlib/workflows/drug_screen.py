@@ -2,27 +2,83 @@ import os
 import time
 import configargparse
 
+import pandas as pd
+
 from batchlib import run_workflow
-from batchlib.analysis.cell_analysis_qc import ImageLevelQC
+# from batchlib.analysis.cell_analysis_qc import ImageLevelQC
+from batchlib.analysis.drug_screen_analysis import DrugScreenAnalysisCellTable
 from batchlib.analysis.feature_extraction import InstanceFeatureExtraction
 from batchlib.segmentation.segmentation_workflows import nucleus_segmentation_workflow
-from batchlib.preprocessing import Preprocess
+from batchlib.preprocessing import Preprocess, get_barrel_corrector
+from batchlib.util import open_file, read_table
 from batchlib.util.logger import get_logger
+from batchlib.workflows.cell_analysis import get_barrel_corrector_folder
 
 logger = get_logger('Workflow.CellAnalysis')
 
 
-# TODO do we need background subtraction?
+# manually measured by Vibor
+BACKGROUNDS_WF = {
+    "nuclei": 2500,
+    "sensor": 1900,
+    "infection marker": 600,
+    "infection marker2": 880
+}
+
+BACKGROUNDS_CONF = {
+    "nuclei": 900,
+    "sensor": 550,
+    "infection marker": 550,
+    "infection marker2": 680
+}
+
+
+def _barrel_corrector(config):
+    if config.barrel_corrector_folder == 'auto':
+        barrel_corrector_folder = get_barrel_corrector_folder(config)
+    else:
+        barrel_corrector_folder = config.barrel_corrector_folder
+    barrel_corrector_path = get_barrel_corrector(barrel_corrector_folder, config.input_folder)
+    if not os.path.exists(barrel_corrector_path):
+        raise ValueError(f"Invalid barrel corrector path {barrel_corrector_path}")
+    return barrel_corrector_path
+
+
+def export_cell_table(folder, plate_name=None):
+    if plate_name is None:
+        plate_name = os.path.split(folder.rstrip('/'))[1]
+    in_table_path = os.path.join(folder, f'{plate_name}_table.hdf5')
+    out_table_path = os.path.join(folder, f'{plate_name}_cells_table.xlsx')
+
+    print("Read cell table from hdf5 ...")
+    with open_file(in_table_path, 'r') as f:
+        cols, tab = read_table(f, 'cells/default')
+
+    df = pd.DataFrame(tab, columns=cols)
+    print("Write cell table to excel ...")
+    df.to_excel(out_table_path, index=False)
+
+
 def core_ds_workflow_tasks(config, nuc_seg_in_key):
     semantic_viewer_settings = {'nuclei': {'color': 'Blue', 'visible': True},
                                 'infection marker': {'color': 'Red', 'visible': True},
                                 'infection marker2': {'color': 'Red', 'visible': False},
                                 'sensor': {'color': 'Green', 'visible': False}}
+
+    # is this from the wide-field set-up?
+    is_wf = bool(config.is_wf)
+    if is_wf:
+        barrel_corrector_path = _barrel_corrector(config)
+        backgrounds = BACKGROUNDS_WF
+    else:
+        barrel_corrector_path = None
+        backgrounds = BACKGROUNDS_CONF
+
     job_list = [
         (Preprocess.from_folder, {
             'build': {
                 'input_folder': config.input_folder,
-                'barrel_corrector_path': None,
+                'barrel_corrector_path': barrel_corrector_path,
                 'scale_factors': config.scale_factors,
                 'semantic_settings': semantic_viewer_settings},
             'run': {
@@ -36,21 +92,19 @@ def core_ds_workflow_tasks(config, nuc_seg_in_key):
     job_list = nucleus_segmentation_workflow(config, nuc_seg_in_key, job_list,
                                              dilation_radius=config.dilation_radius,
                                              remove_nucleus_from_dilated=config.remove_nucleus_from_dilated,
-                                             min_nucleus_size=config.min_nucleus_size)
+                                             min_nucleus_size=config.min_nucleus_size,
+                                             erosion_radius=config.erosion_radius)
 
-    # TODO the outlier criteria need to be expanded to also capture intensities
-    image_outlier_criteria = {'max_number_cells': 1000,
-                              'min_number_cells': 25}
+    # image_outlier_criteria = {'max_number_cells': 1000,
+    #                           'min_number_cells': 25}
 
     # add the qc and feature extraction tasks
     job_list.extend([
         (InstanceFeatureExtraction, {
             'build': {
-                'channel_keys': ['infection marker',
-                                 'infection marker2',
-                                 'sensor'],
-                'nuc_seg_key_to_ignore': None,
-                'cell_seg_key': config.nuc_key
+                'channel_keys': ['sensor'],
+                'cell_seg_key': config.nuc_key_eroded,
+                'topk': []
             },
             'run': {
                 'gpu_id': config.gpu,
@@ -60,27 +114,34 @@ def core_ds_workflow_tasks(config, nuc_seg_in_key):
         (InstanceFeatureExtraction, {
             'build': {
                 'channel_keys': ['infection marker',
-                                 'infection marker2',
-                                 'sensor'],
-                'nuc_seg_key_to_ignore': None,
-                'cell_seg_key': config.nuc_key_dilated
+                                 'infection marker2'],
+                'cell_seg_key': config.nuc_key_dilated,
+                'topk': []
             },
             'run': {
                 'gpu_id': config.gpu,
                 'on_cluster': config.on_cluster
             }
         }),
-        # TODO update qc task(s)
-        (ImageLevelQC, {
+        # # need to add qc task(s) if we decide to make this assay more quantitative
+        # (ImageLevelQC, {
+        #     'build': {
+        #         'cell_seg_key': config.nuc_key_eroded,
+        #         'serum_key': 'sensor',
+        #         'marker_key': 'infection marker',
+        #         'outlier_criteria': image_outlier_criteria
+        #     }
+        # }),
+        (DrugScreenAnalysisCellTable, {
             'build': {
-                'cell_seg_key': config.nuc_key,
-                'serum_key': 'sensor',
-                'marker_key': 'infection marker',
-                'outlier_criteria': image_outlier_criteria
+                'nucleus_seg_key': config.nuc_key,
+                'backgrounds': backgrounds
+            },
+            'run': {
+                'n_jobs': config.n_cpus
             }
         })
     ])
-    # TODO add feature merging / summary table
 
     return job_list
 
@@ -117,9 +178,8 @@ def run_drug_screen_analysis(config):
                  skip_processed=bool(config.skip_processed))
     print("Run drug-screen analysis workflow in", time.time() - t0, "s")
 
-    # TODO
     if config.export_table:
-        pass
+        export_cell_table(config.folder)
 
 
 def drug_screen_parser(config_folder, default_config_name):
@@ -149,8 +209,9 @@ def drug_screen_parser(config_folder, default_config_name):
     parser.add('--n_cpus', required=True, type=int, help='number of cpus')
     parser.add('--folder', required=True, type=str, default="", help=fhelp)
     parser.add('--misc_folder', required=True, type=str, help=mischelp)
-    # parser.add('--barrel_corrector_folder', type=str, default='auto',
-    #            help='optinally specify the folder containing the files for barrel correction.')
+    parser.add('--is_wf', required=True, type=int, help="Is this widefield or confocal?")
+    parser.add('--barrel_corrector_folder', type=str, default='auto',
+               help='optinally specify the folder containing the files for barrel correction.')
 
     # folder options
     # this parameter is not necessary here any more, but for now we need it to be
@@ -163,6 +224,7 @@ def drug_screen_parser(config_folder, default_config_name):
     parser.add("--mask_key", default='mask', type=str)
     parser.add("--nuc_key", default='nucleus_segmentation', type=str)
     parser.add("--nuc_key_dilated", default='nucleus_segmentation_dilated', type=str)
+    parser.add("--nuc_key_eroded", default='nucleus_segmentation_eroded', type=str)
 
     #
     # more options
@@ -170,6 +232,7 @@ def drug_screen_parser(config_folder, default_config_name):
 
     # segmentation options
     parser.add("--dilation_radius", default=5, type=int)
+    parser.add("--erosion_radius", default=2, type=int)
     parser.add("--remove_nucleus_from_dilated", default=True)
     parser.add("--min_nucleus_size", default=50, type=int)
 
@@ -190,6 +253,6 @@ def drug_screen_parser(config_folder, default_config_name):
     # do we run on cluster?
     parser.add("--on_cluster", type=int, default=0)
     # do we export the tables for easier downstream analysis?
-    parser.add("--export_table", type=int, default=0)
+    parser.add("--export_table", type=int, default=1)
 
     return parser

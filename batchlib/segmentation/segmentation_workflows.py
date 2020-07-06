@@ -5,13 +5,14 @@ from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
-from batchlib.segmentation.voronoi_ring_segmentation import VoronoiRingSegmentation
+from batchlib.segmentation.voronoi_ring_segmentation import (ErodeSegmentation,
+                                                             VoronoiRingSegmentation)
 
 
 # TODO model paths as optional parameter
 def nucleus_segmentation_workflow(config, nuc_in_key, job_list,
                                   min_nucleus_size=None, dilation_radius=None,
-                                  remove_nucleus_from_dilated=True):
+                                  remove_nucleus_from_dilated=True, erosion_radius=None):
 
     model_root = os.path.join(config.misc_folder, 'models/stardist')
     model_name = '2D_dsb2018'
@@ -42,6 +43,21 @@ def nucleus_segmentation_workflow(config, nuc_in_key, job_list,
                     'output_key': config.nuc_key_dilated,
                     'ring_width': dilation_radius,
                     'remove_nucleus': remove_nucleus_from_dilated,
+                    'scale_factors': config.scale_factors
+                },
+                'run': {
+                    'n_jobs': config.n_cpus
+                }
+            }
+        ))
+
+    if erosion_radius is not None:
+        job_list.append((
+            ErodeSegmentation, {
+                'build': {
+                    'input_key': config.nuc_key,
+                    'output_key': config.nuc_key_eroded,
+                    'radius': erosion_radius,
                     'scale_factors': config.scale_factors
                 },
                 'run': {

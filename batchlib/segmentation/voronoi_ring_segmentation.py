@@ -91,6 +91,7 @@ class VoronoiRingSegmentation(BatchJobOnContainer):
                       desc='Computing voronoi ring segmentations'))
 
 
+# TODO add an option to preserve segments!
 class ErodeSegmentation(BatchJobOnContainer):
     """
     """
