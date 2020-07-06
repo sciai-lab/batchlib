@@ -78,10 +78,10 @@ def _size_filter(segmentation, min_size):
 
 def size_filter(segmentation, min_size, hmap=None, relabel=True):
     segmentation = _size_filter(segmentation, min_size)
-    if segmentation is not None:
+    if hmap is not None:
         # TODO size filter via watershed
         raise NotImplementedError
 
     if relabel:
-        segmentation = relabel_sequential(segmentation)
+        segmentation = relabel_sequential(segmentation)[0]
     return segmentation

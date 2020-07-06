@@ -5,14 +5,15 @@ import configargparse
 from batchlib import run_workflow
 from batchlib.analysis.cell_analysis_qc import ImageLevelQC
 from batchlib.analysis.feature_extraction import InstanceFeatureExtraction
-from batchlib.segmentation.segmentation_workflows import watershed_segmentation_workflow
+from batchlib.segmentation.segmentation_workflows import nucleus_segmentation_workflow
 from batchlib.preprocessing import Preprocess
 from batchlib.util.logger import get_logger
 
 logger = get_logger('Workflow.CellAnalysis')
 
 
-def core_ds_workflow_tasks(config, seg_in_key, nuc_seg_in_key):
+# TODO do we need background subtraction?
+def core_ds_workflow_tasks(config, nuc_seg_in_key):
     semantic_viewer_settings = {'nuclei': {'color': 'Blue', 'visible': True},
                                 'infection marker': {'color': 'Red', 'visible': True},
                                 'infection marker2': {'color': 'Red', 'visible': False},
@@ -27,10 +28,17 @@ def core_ds_workflow_tasks(config, seg_in_key, nuc_seg_in_key):
             'run': {
                 'n_jobs': config.n_cpus}})
     ]
-    # TODO improve segmentation parameters
-    job_list = watershed_segmentation_workflow(config, seg_in_key, nuc_seg_in_key, job_list,
-                                               erode_mask=20, dilate_seeds=3)
 
+    # NOTE watershed segmentation on the sensor channel doesn't work so great; for now we just run
+    # the nucleus segmentation + dilate the nuclei
+    # job_list = watershed_segmentation_workflow(config, seg_in_key, nuc_seg_in_key, job_list,
+    #                                            erode_mask=20, dilate_seeds=3)
+    job_list = nucleus_segmentation_workflow(config, nuc_seg_in_key, job_list,
+                                             dilation_radius=config.dilation_radius,
+                                             remove_nucleus_from_dilated=config.remove_nucleus_from_dilated,
+                                             min_nucleus_size=config.min_nucleus_size)
+
+    # TODO the outlier criteria need to be expanded to also capture intensities
     image_outlier_criteria = {'max_number_cells': 1000,
                               'min_number_cells': 25}
 
@@ -39,9 +47,10 @@ def core_ds_workflow_tasks(config, seg_in_key, nuc_seg_in_key):
         (InstanceFeatureExtraction, {
             'build': {
                 'channel_keys': ['infection marker',
-                                 'infection marker2'],
+                                 'infection marker2',
+                                 'sensor'],
                 'nuc_seg_key_to_ignore': None,
-                'cell_seg_key': config.seg_key
+                'cell_seg_key': config.nuc_key
             },
             'run': {
                 'gpu_id': config.gpu,
@@ -51,20 +60,22 @@ def core_ds_workflow_tasks(config, seg_in_key, nuc_seg_in_key):
         (InstanceFeatureExtraction, {
             'build': {
                 'channel_keys': ['infection marker',
-                                 'infection marker2'],
+                                 'infection marker2',
+                                 'sensor'],
                 'nuc_seg_key_to_ignore': None,
-                'cell_seg_key': config.nuc_key
+                'cell_seg_key': config.nuc_key_dilated
             },
             'run': {
                 'gpu_id': config.gpu,
                 'on_cluster': config.on_cluster
             }
         }),
+        # TODO update qc task(s)
         (ImageLevelQC, {
             'build': {
-                'cell_seg_key': config.seg_key,
-                'serum_key': seg_in_key,
-                'marker_key': None,
+                'cell_seg_key': config.nuc_key,
+                'serum_key': 'sensor',
+                'marker_key': 'infection marker',
                 'outlier_criteria': image_outlier_criteria
             }
         })
@@ -92,9 +103,8 @@ def run_drug_screen_analysis(config):
     work_dir = os.path.join(config.folder, 'batchlib')
     os.makedirs(work_dir, exist_ok=True)
 
-    seg_in_key = 'sensor'
     nuc_seg_in_key = 'nuclei'
-    job_list = core_ds_workflow_tasks(config, seg_in_key, nuc_seg_in_key)
+    job_list = core_ds_workflow_tasks(config, nuc_seg_in_key)
 
     t0 = time.time()
     run_workflow(name,
@@ -152,11 +162,16 @@ def drug_screen_parser(config_folder, default_config_name):
     parser.add("--bd_key", default='boundaries', type=str)
     parser.add("--mask_key", default='mask', type=str)
     parser.add("--nuc_key", default='nucleus_segmentation', type=str)
-    parser.add("--seg_key", default='cell_segmentation', type=str)
+    parser.add("--nuc_key_dilated", default='nucleus_segmentation_dilated', type=str)
 
     #
     # more options
     #
+
+    # segmentation options
+    parser.add("--dilation_radius", default=5, type=int)
+    parser.add("--remove_nucleus_from_dilated", default=True)
+    parser.add("--min_nucleus_size", default=50, type=int)
 
     # runtime options
     parser.add("--batch_size", default=4)

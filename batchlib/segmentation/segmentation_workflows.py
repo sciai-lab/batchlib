@@ -5,6 +5,52 @@ from batchlib.segmentation import SeededWatershed
 from batchlib.segmentation.stardist_prediction import StardistPrediction
 from batchlib.segmentation.torch_prediction import TorchPrediction
 from batchlib.segmentation.unet import UNet2D
+from batchlib.segmentation.voronoi_ring_segmentation import VoronoiRingSegmentation
+
+
+# TODO model paths as optional parameter
+def nucleus_segmentation_workflow(config, nuc_in_key, job_list,
+                                  min_nucleus_size=None, dilation_radius=None,
+                                  remove_nucleus_from_dilated=True):
+
+    model_root = os.path.join(config.misc_folder, 'models/stardist')
+    model_name = '2D_dsb2018'
+
+    job_list.extend([
+        (StardistPrediction, {
+            'build': {
+                'model_root': model_root,
+                'model_name': model_name,
+                'input_key': nuc_in_key,
+                'output_key': config.nuc_key,
+                'scale_factors': config.scale_factors},
+            'run': {
+                'gpu_id': config.gpu,
+                'n_jobs': config.n_cpus,
+                'on_cluster': config.on_cluster,
+                'min_size': min_nucleus_size}}),
+        (SegmentationProperties, {
+            'build': {'seg_key': config.nuc_key},
+            'run': {'n_jobs': config.n_cpus}})
+    ])
+
+    if dilation_radius is not None:
+        job_list.append((
+            VoronoiRingSegmentation, {
+                'build': {
+                    'input_key': config.nuc_key,
+                    'output_key': config.nuc_key_dilated,
+                    'ring_width': dilation_radius,
+                    'remove_nucleus': remove_nucleus_from_dilated,
+                    'scale_factors': config.scale_factors
+                },
+                'run': {
+                    'n_jobs': config.n_cpus
+                }
+            }
+        ))
+
+    return job_list
 
 
 # TODO model paths as optional parameter
