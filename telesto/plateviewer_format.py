@@ -69,7 +69,7 @@ def to_plate_viewer_format(input_folder, output_folder, group_size=9):
         well_name, well_id, image_id = next_name(well_name, well_id, image_id, is_next_group)
         image_name, site_name = to_names(well_name, well_id, image_id)
 
-        output_path = os.path.join(output_folder, image_name)
+        output_path = os.path.join(output_folder, image_name + '.h5')
         last_group = group
         os.symlink(input_path, output_path)
 
