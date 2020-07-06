@@ -16,5 +16,5 @@ def check_plates():
             print("Plate", name, "INCOMPLETE")
 
 
-if __name__ == '___main__':
+if __name__ == '__main__':
     check_plates()

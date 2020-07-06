@@ -11,7 +11,7 @@ from .cell_level_analysis import CellLevelAnalysisWithTableBase
 class DrugScreenAnalysisCellTable(CellLevelAnalysisWithTableBase):
     selected_feature = 'medians'
 
-    def __init__(self, nucleus_seg_key, backgrounds, **super_kwargs):
+    def __init__(self, nucleus_seg_key, backgrounds, allow_incompatible_label_ids=True, **super_kwargs):
 
         self.seg_eroded_key = nucleus_seg_key + '_eroded'
         self.seg_dilated_key = nucleus_seg_key + '_dilated'
@@ -21,6 +21,7 @@ class DrugScreenAnalysisCellTable(CellLevelAnalysisWithTableBase):
                                                     'infection marker2']}
 
         self.backgrounds = backgrounds
+        self.allow_incompatible_label_ids = allow_incompatible_label_ids
         self.table_out_key = 'cells/default'
 
         super().__init__(table_out_keys=[self.table_out_key],
@@ -57,7 +58,14 @@ class DrugScreenAnalysisCellTable(CellLevelAnalysisWithTableBase):
                     if label_ids is None:
                         label_ids = this_label_ids
                     else:
-                        assert np.array_equal(label_ids, this_label_ids)
+                        labels_agree = np.array_equal(label_ids, this_label_ids)
+                        if not labels_agree:
+                            if not self.allow_incompatible_label_ids:
+                                raise RuntimeError("Label ids do not agree")
+                            mask_a = np.isin(label_ids, this_label_ids)
+                            mask_b = np.isin(this_label_ids, label_ids)
+                            label_ids = label_ids[mask_a]
+                            features = features[mask_b]
 
                     # get rid of the and background id
                     features = features[label_ids != 0, :]
