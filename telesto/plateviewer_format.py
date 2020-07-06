@@ -37,7 +37,7 @@ def check_next_group(have_group_info, group, last_group, image_id, group_size):
         return image_id % (group_size - 1) == 0
 
 
-def to_plate_viewer_format(input_folder, output_folder, group_size=9):
+def to_plate_viewer_format(input_folder, output_folder, group_size=9, use_rel_links=True):
     os.makedirs(output_folder, exist_ok=True)
 
     plate_name = os.path.split(input_folder)[1]
@@ -71,6 +71,8 @@ def to_plate_viewer_format(input_folder, output_folder, group_size=9):
 
         output_path = os.path.join(output_folder, image_name + '.h5')
         last_group = group
+        if use_rel_links:
+            input_path = os.path.relpath(input_path, start=output_folder)
         os.symlink(input_path, output_path)
 
         new_table[:, new_column_names.index('image_name')] = image_name
@@ -88,9 +90,10 @@ def to_plate_viewer_format(input_folder, output_folder, group_size=9):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('input_folder')
+    parser.add_argument('--use_rel_links', default=1, type=int)
 
     args = parser.parse_args()
     input_folder = args.input_folder.rstrip('/')
     output_folder = input_folder + '_plateviewer'
 
-    to_plate_viewer_format(input_folder, output_folder)
+    to_plate_viewer_format(input_folder, output_folder, bool(args.use_rel_links))
