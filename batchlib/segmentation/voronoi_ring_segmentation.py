@@ -76,7 +76,7 @@ class VoronoiRingSegmentation(BatchJobOnContainer):
 
         voronoi_ring_seg = watershed(distance, input_seg)
         voronoi_ring_seg[np.invert(ring_mask)] = 0
-        return voronoi_ring_seg.astype('uint64')
+        return voronoi_ring_seg.astype(input_seg.dtype)
 
     def run(self, input_files, output_files, n_jobs=1):
 
