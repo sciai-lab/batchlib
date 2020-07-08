@@ -88,10 +88,21 @@ def to_classification_task(input_root, plate_names, res_table_path, output_folde
             os.symlink(in_file, out_path)
             id_col.append(im_name)
 
-    print("Number of images:", counter)
+    n_images = len(id_col)
+    assert len(label_col) == n_images
+
+    id_col = np.array(id_col)
+    label_col = np.array(label_col)
+
+    n_pos = (label_col == 1).sum()
+    n_neg = (label_col == 0).sum()
+    assert n_pos + n_neg == n_images
+    print("Number of images:", n_images)
+    print("Number of negative:", n_neg)
+    print("Number of positives:", n_pos)
+
     columns = ['id', 'label_i']
-    table = np.concatenate([np.array(id_col)[:, None],
-                            np.array(label_col)[:, None]], axis=1)
+    table = np.concatenate([id_col[:, None], label_col[:, None]], axis=1)
 
     out_name = os.path.split(output_folder)[1]
     table_out_path = os.path.join(output_folder, f'{out_name}.tsv')
