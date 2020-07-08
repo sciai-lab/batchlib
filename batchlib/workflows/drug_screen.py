@@ -5,7 +5,7 @@ import configargparse
 import pandas as pd
 
 from batchlib import run_workflow
-# from batchlib.analysis.cell_analysis_qc import ImageLevelQC
+from batchlib.analysis.cell_analysis_qc import ImageLevelQC, CellLevelQC
 from batchlib.analysis.drug_screen_analysis import DrugScreenAnalysisCellTable
 from batchlib.analysis.feature_extraction import InstanceFeatureExtraction
 from batchlib.segmentation.segmentation_workflows import nucleus_segmentation_workflow
@@ -95,8 +95,12 @@ def core_ds_workflow_tasks(config, nuc_seg_in_key):
                                              min_nucleus_size=config.min_nucleus_size,
                                              erosion_radius=config.erosion_radius)
 
-    # image_outlier_criteria = {'max_number_cells': 1000,
-    #                           'min_number_cells': 25}
+    cell_outlier_criteria = {'max_cell_size': 600,
+                             'min_cell_size': 125,
+                             'max_nucleus_size': None,
+                             'min_nucleus_size': None}
+    image_outlier_criteria = {'max_number_cells': 1000,
+                              'min_number_cells': 25}
 
     # add the qc and feature extraction tasks
     job_list.extend([
@@ -123,15 +127,23 @@ def core_ds_workflow_tasks(config, nuc_seg_in_key):
                 'on_cluster': config.on_cluster
             }
         }),
-        # # need to add qc task(s) if we decide to make this assay more quantitative
-        # (ImageLevelQC, {
-        #     'build': {
-        #         'cell_seg_key': config.nuc_key_eroded,
-        #         'serum_key': 'sensor',
-        #         'marker_key': 'infection marker',
-        #         'outlier_criteria': image_outlier_criteria
-        #     }
-        # }),
+        # need to update qc task(s) if we decide to make this assay more quantitative
+        (CellLevelQC, {
+            'build': {
+                'cell_seg_key': config.nuc_key,
+                'serum_key': None,
+                'marker_key': None,
+                'outlier_criteria': cell_outlier_criteria
+            }
+        }),
+        (ImageLevelQC, {
+            'build': {
+                'cell_seg_key': config.nuc_key_eroded,
+                'serum_key': 'sensor',
+                'marker_key': 'sensor',
+                'outlier_criteria': image_outlier_criteria
+            }
+        }),
         (DrugScreenAnalysisCellTable, {
             'build': {
                 'nucleus_seg_key': config.nuc_key,
