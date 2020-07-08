@@ -77,9 +77,6 @@ class DrugScreenAnalysisCellTable(CellLevelAnalysisWithTableBase):
                             label_ids = label_ids[mask_a]
                             features = features[mask_b]
 
-                    # get rid of the and background id
-                    features = features[label_ids != 0, :]
-
                     this_features = features[:, feature_names.index(self.selected_feature)][:, None]
                     bg_val = self.backgrounds[channel_key]
                     this_features -= bg_val
@@ -87,23 +84,26 @@ class DrugScreenAnalysisCellTable(CellLevelAnalysisWithTableBase):
                     n_cells = len(this_features)
                     if table is None:
                         table = np.concatenate([np.array([image_name] * n_cells)[:, None],
-                                                label_ids[label_ids != 0][:, None],
+                                                label_ids[:, None],
                                                 this_features],
                                                axis=1)
                     else:
                         assert len(table) == len(this_features), f"{len(table)}, {n_cells}"
                         table = np.concatenate([table, this_features], axis=1)
 
+            assert np.array_equal(label_ids, table[:, column_names.index('label_id')].astype('float'))
             assert table.shape[1] == len(column_names), f"{table.shape[1]}, {len(column_names)}"
 
             # filter nuclei that did not pass QC
             outlier_dict = load_cell_outlier_dict(in_file, cell_outlier_table_name, self.name)
-            outlier_ids = np.array([cell_id for cell_id, outlier_val in outlier_dict.items()
-                                    if outlier_val[0] == 1], dtype='uint32')
+            outlier_ids = [cell_id for cell_id, outlier_val in outlier_dict.items() if outlier_val[0] == 1]
+            if 0 not in outlier_ids:
+                outlier_ids.append(0)
+            outlier_ids = np.array(outlier_ids, dtype='uint32')
             logger.debug(f"{self.name}: {len(outlier_ids)} / {len(table)} cells did not pass QC")
 
-            qc_mask = ~np.isin(table[:, column_names.index('label_id')], outlier_ids)
-            table = table[qc_mask]
+            outlier_mask = np.isin(label_ids, outlier_ids)
+            table = table[~outlier_mask]
 
             return table
 
