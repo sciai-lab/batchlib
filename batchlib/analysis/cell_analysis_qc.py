@@ -92,13 +92,13 @@ class CellLevelQC(CellLevelAnalysisBase):
         if max_size is None:
             outlier_max = np.zeros(n_ids, dtype='bool')
         else:
-            logger.info(f"{self.name}: max size threshold for {seg_key}: {max_size}")
+            logger.debug(f"{self.name}: max size threshold for {seg_key}: {max_size}")
             outlier_max = sizes > max_size
 
         if min_size is None:
             outlier_min = np.zeros(n_ids, dtype='bool')
         else:
-            logger.info(f"{self.name}: min size threshold for {seg_key}: {min_size}")
+            logger.debug(f"{self.name}: min size threshold for {seg_key}: {min_size}")
             outlier_min = sizes < min_size
 
         is_outlier = np.logical_or(outlier_max, outlier_min).astype('uint8')
@@ -127,7 +127,7 @@ class CellLevelQC(CellLevelAnalysisBase):
             raise RuntimeError(f"{self.name}: cell and nucleus ids do not agree")
 
         if ids_nuclei is None:
-            logger.info(f"{self.name}: Did not compute nucleus size thresholds.")
+            logger.debug(f"{self.name}: Did not compute nucleus size thresholds.")
             is_outlier = outliers_cells
             outlier_types = types_cells
         else:

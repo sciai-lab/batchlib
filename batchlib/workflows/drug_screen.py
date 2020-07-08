@@ -151,7 +151,7 @@ def core_ds_workflow_tasks(config, nuc_seg_in_key):
             },
             'run': {
                 'n_jobs': config.n_cpus,
-                'force_recompute': True
+                'force_recompute': None
             }
         })
     ])
