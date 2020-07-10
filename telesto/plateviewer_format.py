@@ -79,7 +79,7 @@ def to_plate_viewer_format(input_folder, output_folder, group_size=9, use_rel_li
         new_table[:, new_column_names.index('site_name')] = site_name
 
     # write the new hdf5 table
-    out_table_path = os.path.join(output_folder, f'{plate_name}_table.hdf5')
+    out_table_path = os.path.join(output_folder, f'{plate_name}_plateviewer_table.hdf5')
     with h5py.File(out_table_path, 'a') as f:
         write_table(f, 'images/default', new_column_names, new_table)
 
