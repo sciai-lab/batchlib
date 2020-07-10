@@ -1,6 +1,7 @@
 import numpy as np
 from numbers import Number
 from scipy.ndimage import convolve
+from skimage.segmentation import relabel_sequential
 
 try:
     import numexpr
@@ -66,3 +67,21 @@ def seg_to_edges(segmentation):
     gy = convolve(segmentation + 1, np.array([-1., 0., 1.]).reshape(1, 3))
     gx = convolve(segmentation + 1, np.array([-1., 0., 1.]).reshape(3, 1))
     return ((gx ** 2 + gy ** 2) > 0)
+
+
+def _size_filter(segmentation, min_size):
+    seg_ids, sizes = np.unique(segmentation, return_counts=True)
+    filter_ids = seg_ids[sizes < min_size]
+    segmentation[np.isin(segmentation, filter_ids)] = 0
+    return segmentation
+
+
+def size_filter(segmentation, min_size, hmap=None, relabel=True):
+    segmentation = _size_filter(segmentation, min_size)
+    if hmap is not None:
+        # TODO size filter via watershed
+        raise NotImplementedError
+
+    if relabel:
+        segmentation = relabel_sequential(segmentation)[0]
+    return segmentation

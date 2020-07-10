@@ -17,18 +17,14 @@ from batchlib.analysis.cell_analysis_qc import (CellLevelQC, ImageLevelQC, WellL
                                                 DEFAULT_CELL_OUTLIER_CRITERIA,
                                                 DEFAULT_IMAGE_OUTLIER_CRITERIA,
                                                 DEFAULT_WELL_OUTLIER_CRITERIA)
-from batchlib.analysis.feature_extraction import (InstanceFeatureExtraction,
-                                                  SegmentationProperties)
+from batchlib.analysis.feature_extraction import InstanceFeatureExtraction
 from batchlib.analysis.merge_tables import MergeAnalysisTables
 
 from batchlib.mongo.result_writer import DbResultWriter
 from batchlib.outliers.outlier import get_outlier_predicate
 from batchlib.preprocessing import get_barrel_corrector, get_serum_keys, Preprocess
-from batchlib.segmentation import SeededWatershed
-from batchlib.segmentation.stardist_prediction import StardistPrediction
-from batchlib.segmentation.torch_prediction import TorchPrediction
-from batchlib.segmentation.unet import UNet2D
 from batchlib.segmentation.voronoi_ring_segmentation import ErodeSegmentation  # , VoronoiRingSegmentation
+from batchlib.segmentation.segmentation_workflows import watershed_segmentation_workflow
 from batchlib.reporting import (SlackSummaryWriter,
                                 export_tables_for_plate,
                                 WriteBackgroundSubtractedImages)
@@ -248,9 +244,6 @@ def core_workflow_tasks(config, name, feature_identifier):
     os.makedirs(work_dir, exist_ok=True)
     logger = setup_logger(True, work_dir, name)
 
-    model_root = os.path.join(config.misc_folder, 'models/stardist')
-    model_name = '2D_dsb2018'
-
     if config.barrel_corrector_folder == 'auto':
         barrel_corrector_folder = get_barrel_corrector_folder(config)
     else:
@@ -258,15 +251,6 @@ def core_workflow_tasks(config, name, feature_identifier):
     barrel_corrector_path = get_barrel_corrector(barrel_corrector_folder, config.input_folder)
     if not os.path.exists(barrel_corrector_path):
         raise ValueError(f"Invalid barrel corrector path {barrel_corrector_path}")
-
-    torch_model_path = os.path.join(config.misc_folder, 'models/torch/fg_and_boundaries_V2.torch')
-    torch_model_class = UNet2D
-    torch_model_kwargs = {
-        'in_channels': 1,
-        'out_channels': 2,
-        'f_maps': [32, 64, 128, 256, 512],
-        'testing': True
-    }
 
     # get keys and identifier
     serum_in_keys = get_serum_keys(config.input_folder)
@@ -282,46 +266,10 @@ def core_workflow_tasks(config, name, feature_identifier):
                 'barrel_corrector_path': barrel_corrector_path,
                 'scale_factors': config.scale_factors},
             'run': {
-                'n_jobs': config.n_cpus}}),
-        (TorchPrediction, {
-            'build': {
-                'input_key': serum_seg_in_key,
-                'output_key': [config.mask_key, config.bd_key],
-                'model_path': torch_model_path,
-                'model_class': torch_model_class,
-                'model_kwargs': torch_model_kwargs,
-                'scale_factors': config.scale_factors},
-            'run': {
-                'gpu_id': config.gpu,
-                'batch_size': config.batch_size,
-                'threshold_channels': {0: 0.5},
-                'on_cluster': config.on_cluster}}),
-        (StardistPrediction, {
-            'build': {
-                'model_root': model_root,
-                'model_name': model_name,
-                'input_key': nuc_seg_in_key,
-                'output_key': config.nuc_key,
-                'scale_factors': config.scale_factors},
-            'run': {
-                'gpu_id': config.gpu,
-                'n_jobs': config.n_cpus,
-                'on_cluster': config.on_cluster}}),
-        (SeededWatershed, {
-            'build': {
-                'pmap_key': config.bd_key,
-                'seed_key': config.nuc_key,
-                'output_key': config.seg_key,
-                'mask_key': config.mask_key,
-                'scale_factors': config.scale_factors},
-            'run': {
-                'erode_mask': 20,
-                'dilate_seeds': 3,
-                'n_jobs': config.n_cpus}}),
-        (SegmentationProperties, {
-            'build': {'seg_key': config.seg_key},
-            'run': {'n_jobs': config.n_cpus}})
+                'n_jobs': config.n_cpus}})
     ]
+    job_list = watershed_segmentation_workflow(config, serum_seg_in_key, nuc_seg_in_key, job_list,
+                                               erode_mask=20, dilate_seeds=3)
 
     # check whether we apply denoising to the marker before analysis
     if config.marker_denoise_radius > 0:
@@ -620,7 +568,6 @@ def cell_analysis_parser(config_folder, default_config_name):
     # folder options
     # this parameter is not necessary here any more, but for now we need it to be
     # compatible with the pixel-wise workflow
-    parser.add("--root", default='/home/covid19/antibodies-nuclei')
     parser.add("--output_root_name", default='data-processed')
     parser.add("--use_unique_output_folder", default=False)
 

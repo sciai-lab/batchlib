@@ -6,6 +6,7 @@ from tqdm import tqdm
 
 from batchlib.base import BatchJobOnContainer
 from batchlib.util import get_logger, open_file, normalize_percentile
+from batchlib.util.image import size_filter
 
 logger = get_logger('Workflow.BatchJob.StardistPrediction')
 
@@ -51,7 +52,7 @@ class StardistPrediction(BatchJobOnContainer):
         np.save(tmp_path_prob, prob)
         np.save(tmp_path_dist, dist)
 
-    def segment_image(self, out_path, model):
+    def segment_image(self, out_path, model, min_size):
         tmp_path_prob = os.path.splitext(out_path)[0] + '_prob.npy'
         tmp_path_dist = os.path.splitext(out_path)[0] + '_dist.npy'
 
@@ -61,13 +62,16 @@ class StardistPrediction(BatchJobOnContainer):
 
         labels = model._instances_from_prediction(shape, prob, dist)[0]
         labels = labels.astype('uint32')
+        if min_size is not None:
+            labels = size_filter(labels, min_size)
+
         with open_file(out_path, 'a') as f:
             self.write_image(f, self.output_key, labels)
 
         os.remove(tmp_path_prob)
         os.remove(tmp_path_dist)
 
-    def run(self, input_files, output_files, gpu_id=None, n_jobs=1, on_cluster=False):
+    def run(self, input_files, output_files, gpu_id=None, n_jobs=1, on_cluster=False, min_size=None):
 
         # set number of OMP threads to 1, so we can properly parallelize over
         # the segmentation via NMS properly
@@ -97,6 +101,6 @@ class StardistPrediction(BatchJobOnContainer):
             self.predict_image(in_path, out_path, model)
 
         # run segmentation for all images
-        _segment = partial(self.segment_image, model=model)
+        _segment = partial(self.segment_image, model=model, min_size=min_size)
         with futures.ThreadPoolExecutor(n_jobs) as tp:
             list(tqdm(tp.map(_segment, output_files), total=len(output_files)))

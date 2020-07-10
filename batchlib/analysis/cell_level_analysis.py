@@ -424,6 +424,7 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
         return self.folder_to_table_path(self.folder)
 
     def load_per_cell_statistics(self, in_path, subtract_background=True, split_infected_and_control=True):
+
         # if multiple paths are given, concatenate the individual statistics
         if isinstance(in_path, (list, tuple)):
             in_paths = in_path
@@ -439,8 +440,10 @@ class CellLevelAnalysisBase(BatchJobOnContainer):
         with open_file(in_path, 'r') as f:
             serum_keys, serum_table = self.read_table(f, self.serum_key)
             serum_dict = {key: values for key, values in zip(serum_keys, serum_table.T)}
+
             marker_keys, marker_table = self.read_table(f, self.marker_key)
             marker_dict = {key: values for key, values in zip(marker_keys, marker_table.T)}
+
         assert np.all(serum_dict['label_id'] == marker_dict['label_id'])
         per_cell_statistics = {
             'labels': serum_dict['label_id'],

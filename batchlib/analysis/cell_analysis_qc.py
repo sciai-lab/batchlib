@@ -60,7 +60,12 @@ class CellLevelQC(CellLevelAnalysisBase):
         self.nucleus_seg_key = nucleus_seg_key
 
         output_group = cell_seg_key if identifier is None else cell_seg_key + '_' + identifier
-        self.table_out_key = output_group + '/' + serum_key + '_' + table_out_name
+
+        if serum_key is None:
+            self.table_out_key = output_group + '/' + table_out_name
+        else:
+            self.table_out_key = output_group + '/' + serum_key + '_' + table_out_name
+
         super().__init__(cell_seg_key=cell_seg_key,
                          serum_key=serum_key,
                          marker_key=marker_key,
@@ -69,6 +74,7 @@ class CellLevelQC(CellLevelAnalysisBase):
                          output_key=self.table_out_key,
                          output_format='table',
                          identifier=identifier,
+                         validate_cell_classification=False,
                          **super_kwargs)
 
     def check_size_thresholds(self, in_file, seg_key, min_size, max_size,
@@ -86,13 +92,13 @@ class CellLevelQC(CellLevelAnalysisBase):
         if max_size is None:
             outlier_max = np.zeros(n_ids, dtype='bool')
         else:
-            logger.info(f"{self.name}: max size threshold for {seg_key}: {max_size}")
+            logger.debug(f"{self.name}: max size threshold for {seg_key}: {max_size}")
             outlier_max = sizes > max_size
 
         if min_size is None:
             outlier_min = np.zeros(n_ids, dtype='bool')
         else:
-            logger.info(f"{self.name}: min size threshold for {seg_key}: {min_size}")
+            logger.debug(f"{self.name}: min size threshold for {seg_key}: {min_size}")
             outlier_min = sizes < min_size
 
         is_outlier = np.logical_or(outlier_max, outlier_min).astype('uint8')
@@ -121,7 +127,7 @@ class CellLevelQC(CellLevelAnalysisBase):
             raise RuntimeError(f"{self.name}: cell and nucleus ids do not agree")
 
         if ids_nuclei is None:
-            logger.info(f"{self.name}: Did not compute nucleus size thresholds.")
+            logger.debug(f"{self.name}: Did not compute nucleus size thresholds.")
             is_outlier = outliers_cells
             outlier_types = types_cells
         else:

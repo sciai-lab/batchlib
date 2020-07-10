@@ -129,7 +129,7 @@ class InstanceFeatureExtraction(BatchJobOnContainer):
         # all segs have shape H, W
         shape = cell_seg.shape
         for channel in list(channels):
-            assert channel.shape == shape
+            assert channel.shape == shape, f"{channel.shape}, {shape}"
 
         # include background as instance with label 0
         labels = torch.sort(torch.unique(cell_seg))[0]
