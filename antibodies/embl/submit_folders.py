@@ -3,7 +3,7 @@
 import argparse
 import json
 import os
-from subprocess import check_output
+from subprocess import check_output, run
 
 DEFAULT_CONFIG = 'configs/cell_analysis_db.conf'
 DEFAULT_SLACK_CONFIG = 'configs/cell_analysis_db_slack.conf'
@@ -30,7 +30,33 @@ def check_channel_mappings(folder_list):
         assert os.path.exists(os.path.join(folder, 'channel_mapping.json')), f"{folder} does not have a channel mapping"
 
 
-def submit_folders(folder_list, config_file=None, fixed_background=False, tischi_mode=False, mean_and_sum=False):
+def _submit_via_slurm(folder, slurm_file, this_config_file):
+    print("Submitting", folder, "with config file", this_config_file)
+    cmd = ['sbatch', slurm_file, this_config_file, folder]
+    try:
+        output = check_output(cmd).decode('utf8').rstrip('\n')
+    except Exception as e:
+        print("job submission failed with", str(e))
+        raise e
+    print(output, "for input folder", folder)
+
+
+def _run_local(folder, this_config_file):
+    python_bin = "/g/kreshuk/software/miniconda3/envs/antibodies-gpu/bin/python"
+    script = "../cell_analysis_workflow.py"
+    cmd = [python_bin, script,
+           '-c', this_config_file,
+           '--input_folder', folder,
+           '--gpu', '0', '--n_cpus', '8', '--on_cluster', '0']
+    run(cmd)
+
+
+def submit_folders(folder_list,
+                   config_file=None,
+                   fixed_background=False,
+                   tischi_mode=False,
+                   mean_and_sum=False,
+                   submit_slurm=True):
     assert all(os.path.exists(folder) for folder in folder_list), str(folder_list)
     check_channel_mappings(folder_list)
 
@@ -49,14 +75,10 @@ def submit_folders(folder_list, config_file=None, fixed_background=False, tischi
             assert config_file is not None
             this_config_file = config_file
 
-        print("Submitting", folder, "with config file", this_config_file)
-        cmd = ['sbatch', slurm_file, this_config_file, folder]
-        try:
-            output = check_output(cmd).decode('utf8').rstrip('\n')
-        except Exception as e:
-            print("job submission failed with", str(e))
-            raise e
-        print(output, "for input folder", folder)
+        if submit_slurm:
+            _submit_via_slurm(folder, slurm_file, this_config_file)
+        else:
+            _run_local(folder, this_config_file)
 
 
 if __name__ == '__main__':
@@ -68,6 +90,7 @@ if __name__ == '__main__':
     parser.add_argument('--tischi_mode', type=int, default=0, help='recompute stuff for tischi')
     parser.add_argument('--write_to_slack', type=int, default=0, help='post results to slack')
     parser.add_argument('--mean_and_sum', type=int, default=0, help='run the mean and sum workflow')
+    parser.add_argument('--submit_slurm', type=int, default=1, help='submit as a slurm job')
 
     args = parser.parse_args()
     in_file = args.input_file
@@ -89,4 +112,5 @@ if __name__ == '__main__':
     with open(in_file, 'r') as f:
         folder_list = json.load(f)
 
-    submit_folders(folder_list, config_file, fixed_background, tischi_mode, bool(args.mean_and_sum))
+    submit_folders(folder_list, config_file, fixed_background, tischi_mode, bool(args.mean_and_sum),
+                   bool(args.submit_slurm))

@@ -251,12 +251,19 @@ def core_workflow_tasks(config, name, feature_identifier):
     model_root = os.path.join(config.misc_folder, 'models/stardist')
     model_name = '2D_dsb2018'
 
+    # derive barrel corrector automatically for the current plate
     if config.barrel_corrector_folder == 'auto':
         barrel_corrector_folder = get_barrel_corrector_folder(config)
+    # no barrel corrector
+    elif config.barrel_corrector_folder == '':
+        barrel_corrector_folder = None
+    # manually specified barrel corrector
     else:
         barrel_corrector_folder = config.barrel_corrector_folder
-    barrel_corrector_path = get_barrel_corrector(barrel_corrector_folder, config.input_folder)
-    if not os.path.exists(barrel_corrector_path):
+
+    barrel_corrector_path = None if barrel_corrector_folder is None else\
+        get_barrel_corrector(barrel_corrector_folder, config.input_folder)
+    if barrel_corrector_path is not None and not os.path.exists(barrel_corrector_path):
         raise ValueError(f"Invalid barrel corrector path {barrel_corrector_path}")
 
     torch_model_path = os.path.join(config.misc_folder, 'models/torch/fg_and_boundaries_V2.torch')

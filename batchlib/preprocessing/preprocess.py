@@ -55,7 +55,7 @@ def get_barrel_corrector(barrel_corrector_root, input_folder, pattern='*.tiff'):
         if corrector_shape == image_shape:
             return corrector_path
 
-    raise RuntimeError(f"Could not find barrel corrector for image shape {image_shape}")
+    raise RuntimeError(f"Could not find barrel corrector for image shape {image_shape} at {barrel_corrector_root}")
 
 
 class Preprocess(BatchJobOnContainer):
