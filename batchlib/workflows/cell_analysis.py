@@ -12,7 +12,8 @@ from batchlib.analysis.cell_level_analysis import (CellLevelAnalysis,
                                                    DenoiseByWhiteTophat,
                                                    FindInfectedCells)
 from batchlib.analysis.background_extraction import (ExtractBackground,
-                                                     BackgroundFromWells)
+                                                     BackgroundFromWells,
+                                                     BackgroundFromMinWell)
 from batchlib.analysis.cell_analysis_qc import (CellLevelQC, ImageLevelQC, WellLevelQC,
                                                 DEFAULT_CELL_OUTLIER_CRITERIA,
                                                 DEFAULT_IMAGE_OUTLIER_CRITERIA,
@@ -107,10 +108,11 @@ def default_bg_parameters(config, keys):
     # all new plates have H01 and G01 as empty wells for bg estimation
     bg_info = bg_info_dict.get(name, ['H01', 'G01'])
 
-    # the bg-info can have 2 different structures:
+    # the bg-info can have 3 different structures:
     # list: -> list of wells for background estimation
+    # str [='min'] -> estimate from min well
     # dict: -> dict of fixed background values for the channels
-    if isinstance(bg_info, list):
+    if isinstance(bg_info, list) or (isinstance(bg_info, str) and bg_info == 'min'):
         bg_wells = bg_info
         # NOTE: marker background needs to be estimated from the whole plate
         bg_dict = {k: 'plate/backgrounds_min_well' if k.startswith('serum') else 'plate/backgrounds'
@@ -203,15 +205,29 @@ def add_background_estimation(job_list, seg_key, channel_keys, identifier=None):
 
 def add_background_estimation_from_min_well(job_list, config, wells, channel_keys):
     # add the background estimation jobs
-    job_list.append((
-        BackgroundFromWells, {
-            'build': {'well_list': wells,
-                      'output_table': 'plate/backgrounds_min_well',
-                      'seg_key': config.seg_key,
-                      'channel_names': channel_keys},
-            "run": {"force_recompute": None}
-            }
-    ))
+    if isinstance(wells, list):
+        job_list.append((
+            BackgroundFromWells, {
+                'build': {'well_list': wells,
+                          'output_table': 'plate/backgrounds_min_well',
+                          'seg_key': config.seg_key,
+                          'channel_names': channel_keys},
+                "run": {"force_recompute": None}
+                }
+        ))
+    elif isinstance(wells, str) and wells == 'min':
+        job_list.append((
+            BackgroundFromMinWell, {
+                'build': {'bg_table': 'wells/backgrounds',
+                          'output_table': 'plate/backgrounds_min_well',
+                          'channel_names': channel_keys,
+                          'min_background_fraction': 0.1,
+                          'max_background_fraction': 0.9},
+                "run": {"force_recompute": None}
+                }
+        ))
+    else:
+        raise ValueError(f"Invalid background well specified: {wells}")
     return job_list
 
 
