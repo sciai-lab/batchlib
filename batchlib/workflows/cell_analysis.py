@@ -233,14 +233,11 @@ def add_background_estimation_from_min_well(job_list, config, wells, channel_key
 
 def get_barrel_corrector_folder(config):
     barrel_corrector_root = os.path.join(config.misc_folder, 'barrel_correctors')
-    with open(os.path.join(barrel_corrector_root, 'plates_with_old_setup.json')) as f:
-        plates_with_old_setup = json.load(f)
+    with open(os.path.join(barrel_corrector_root, 'plates_to_corrector.json')) as f:
+        plates_to_corector = json.load(f)
 
     plate_name = os.path.split(config.input_folder)[1]
-    if plate_name in plates_with_old_setup:
-        subfolder = 'old_microscope'
-    else:
-        subfolder = 'new_microscope'
+    subfolder = plates_to_corector[plate_name]
 
     barrel_corrector_folder = os.path.join(barrel_corrector_root, subfolder)
     assert os.path.exists(barrel_corrector_folder)
