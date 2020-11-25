@@ -75,9 +75,11 @@ class TorchPrediction(BatchJobOnContainer):
     # load from pickled model or from state dict
     def load_model(self, device):
         if self.model_class is None:
+            logger.info(f"{self.name}: loading serialized model")
             model = torch.load(self.model_path, map_location=device)
         else:
             model = self.model_class(**self.model_kwargs)
+            logger.info(f"{self.name}: instantiating model {self.model_class} with kwargs {self.model_kwargs}")
             state = torch.load(self.model_path, map_location=device)
             if 'model_state_dict' in state:
                 state = state['model_state_dict']

@@ -3,14 +3,14 @@ import unittest
 from shutil import rmtree
 
 
-class TestStardist(unittest.TestCase):
+class TestTorch(unittest.TestCase):
     in_folder = '../../data/test_data/test'
     folder = './out'
 
     def tearDown(self):
         try:
             rmtree(self.folder)
-        except OSError:
+        except OSError as e:
             pass
 
     def prepare(self):
@@ -29,11 +29,11 @@ class TestStardist(unittest.TestCase):
         from batchlib.segmentation.unet import UNet2D
         self.prepare()
 
-        in_key = 'serum'
+        in_key = 'serum_IgG'
         out_key = ['foreground', 'boundaries']
 
         model_path = os.path.join(os.path.split(__file__)[0],
-                                  '../../misc/models/torch/fg_and_boundaries_V1.torch')
+                                  '../../misc/models/torch/fg_and_boundaries_V2.torch')
         model_class = UNet2D
         model_kwargs = {
             'in_channels': 1,
@@ -43,7 +43,7 @@ class TestStardist(unittest.TestCase):
         }
 
         job = TorchPrediction(in_key, out_key, model_path, model_class, model_kwargs)
-        job(self.folder, self.in_folder, gpu_id=gpu_id, batch_size=batch_size,
+        job(self.folder, self.folder, gpu_id=gpu_id, batch_size=batch_size,
             threshold_channels=threshold_channels)
 
     def _test_gpu(self):

@@ -1,0 +1,64 @@
+format_version: 0.3.0
+
+name: UNetCovidIf
+description: A 2d U-Net trained to segment cell boundaries and foreground for a covid antibody IF assay.
+authors:
+    - Constantin Pape;@constantinpape
+    - Adrian Woly;@wolny
+
+cite:
+    - text: "Pape, Constantin et al. Microscopy-based assay for semi-quantitative detection of SARS-CoV-2 specific antibodies in human sera. bioRxiv 2020."
+      url: https://www.biorxiv.org/content/biorxiv/early/2020/10/07/2020.06.15.152587.full.pdf
+
+git_repo: https://github.com/hci-unihd/batchlib/tree/master/misc/models/torch/bioimageio
+tags: [unet2d, pytorch, immunofluorescence, segmentation, covid19]
+license: MIT
+
+documentation: ./unet_covid_if.md
+covers: []
+
+inputs:
+  - name: input
+    data_type: float32
+    data_range: [-inf, inf]
+    axes: bczyx
+    shape: [1, 1, 1, 1024, 1024]  # the xy shape is arbitrary, how do we specify this?
+    preprocessing:
+      name: zero_mean_unit_variance
+      kwargs:
+        mode: per_sample
+        axes: xyz
+
+outputs:
+  - name: probabilities
+    description: Probabilities for foreground (channel 0) and cell boundary (channel 1)
+    axes: bczyx
+    data_type: float32
+    data_range: [-inf, inf]
+    halo: [0, 0, 0, 32, 32]
+    shape:
+        reference_input: input
+        scale: [1, 2, 1, 1, 1]
+        offset: [0, 0, 0, 0, 0]
+
+language: python
+framework: pytorch
+
+source: ./unet.py:UNet2d
+kwargs: in_channels: 1, out_channels: 2
+kwargs:
+  - in_channels: 1
+  - out_channels: 2
+  - f_maps: [32, 64, 128, 256, 512]
+  - testing: True
+dependencies: conda:./environment.yaml
+
+test_inputs:
+  - ./test_input.npy
+test_outputs:
+  - ./test_output.npy
+
+weights:
+  pytorch_state_dict:
+    source: todo
+    sha256: 8d41f7ef62e1c1de4b92583cdb320d0da46df2dcca308ac30516557843014adb

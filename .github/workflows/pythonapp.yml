@@ -16,28 +16,21 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Setup conda
-      uses: s-weigand/setup-conda@v1.0.2
-      with:
-        python-version: 3.7
-        conda-channels: conda-forge 
     - name: Install dependencies
       run: |
-        conda env create -f environment.yaml
-        source activate antibodies
-        pip install -e .
+        $CONDA/bin/conda env create -f environment.yaml
+        $CONDA/envs/antibodies/bin/pip install -e .
     - name: Lint with flake8
       run: |
-        conda install flake8
+        $CONDA/bin/conda install flake8
         # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        $CONDA/bin/flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        $CONDA/bin/flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with unit-test
       run: |
-        source activate antibodies
         # unittest discovery clashes with configargparse
         # python -m unittest discover -v test
         cd test
-        python test_workflows.py
-        python test_base.py
+        $CONDA/envs/antibodies/bin/python test_workflows.py
+        $CONDA/envs/antibodies/bin/python test_base.py
