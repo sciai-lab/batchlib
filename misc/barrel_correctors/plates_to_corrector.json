@@ -101,6 +101,12 @@
   "plateU7rep1_20200519_210009_665": "new_microscope",
   "plateU8rep1_20200519_223701_819": "new_microscope",
   "plateU9rep1_20200520_215725_694": "new_microscope",
+  "scheme1": "old_microscope",
+  "scheme2": "old_microscope",
+  "scheme3": "old_microscope",
+  "scheme4": "old_microscope",
+  "scheme5": "old_microscope",
+  "test": "old_microscope",
   "tiny_test": "old_microscope",
   "titration_plate_20200403_154849": "old_microscope"
 }

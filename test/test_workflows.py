@@ -38,7 +38,10 @@ class BaseTestMixin(ABC):
             # this is necessary on some nfs, but we shouldn't use it as default
             self._unsafe_rm()
         else:
-            rmtree(self.folder)
+            try:
+                rmtree(self.folder)
+            except OSError:
+                pass
 
     def _run_workflow(self, folder=None, input_folder=None, config_name='test_cell_analysis.conf'):
         parser = self.get_parser('./configs', config_name)
