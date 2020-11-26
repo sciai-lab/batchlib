@@ -1,0 +1,8 @@
+channels:
+    - pytorch
+    - conda-forge
+    - defaults
+name:
+    covid-if-dependencies
+dependencies:
+    - pytorch>=1,<2
