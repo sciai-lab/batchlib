@@ -19,8 +19,7 @@ jobs:
     - name: Install dependencies
       run: |
         $CONDA/bin/conda env create -f environment.yaml
-        $CONDA/bin/conda activate antibodies
-        pip install -e .
+        $CONDA/envs/antibodies/bin/pip install -e .
     - name: Lint with flake8
       run: |
         $CONDA/bin/conda install flake8
@@ -30,9 +29,8 @@ jobs:
         $CONDA/bin/flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with unit-test
       run: |
-        $CONDA/bin/conda activate antibodies
         # unittest discovery clashes with configargparse
         # python -m unittest discover -v test
         cd test
-        python test_workflows.py
-        python test_base.py
+        $CONDA/envs/antibodies/bin/python test_workflows.py
+        $CONDA/envs/antibodies/bin/python test_base.py
