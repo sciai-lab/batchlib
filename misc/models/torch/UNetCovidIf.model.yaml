@@ -6,7 +6,6 @@ authors:
     - Constantin Pape;@constantinpape
     - Adrian Woly;@wolny
 
-# we allow for multiple citations. Each citation contains TEXT, DOI and URL. One of DOI or URL needs to be given.
 cite:
     - text: "Pape, Constantin et al. Microscopy-based assay for semi-quantitative detection of SARS-CoV-2 specific antibodies in human sera. bioRxiv 2020."
       url: https://www.biorxiv.org/content/biorxiv/early/2020/10/07/2020.06.15.152587.full.pdf
