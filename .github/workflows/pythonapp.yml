@@ -33,7 +33,7 @@ jobs:
         $CONDA/bin/flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with unit-test
       run: |
-         $CONDA/bin/activate antibodies
+        $CONDA/bin/conda activate antibodies
         # unittest discovery clashes with configargparse
         # python -m unittest discover -v test
         cd test
