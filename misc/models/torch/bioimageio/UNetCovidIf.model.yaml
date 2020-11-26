@@ -16,6 +16,7 @@ license: MIT
 
 documentation: ./unet_covid_if.md
 covers: []
+covers: [cover1.png, cover2.png, cover3.png, cover4.png]
 
 inputs:
   - name: input
@@ -60,5 +61,5 @@ test_outputs:
 
 weights:
   pytorch_state_dict:
-    source: todo
+    source: https://zenodo.org/record/4292545/files/unet-covid-if-v2-weights.torch
     sha256: 8d41f7ef62e1c1de4b92583cdb320d0da46df2dcca308ac30516557843014adb
