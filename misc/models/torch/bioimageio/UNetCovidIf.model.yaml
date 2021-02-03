@@ -46,7 +46,7 @@ language: python
 framework: pytorch
 timestamp: 2020-11-27T10:51:38
 
-source: ./unet.py:UNet2d
+source: ./unet.py::UNet2D
 kwargs:
   in_channels: 1
   out_channels: 2
